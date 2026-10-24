@@ -1,5 +1,6 @@
 // js/dashboard/views/share.js: Share and promote (the live site link, a QR code, tracked campaign links, a printable QR card).
 // Owner: E3
+import { safeEncode } from '../../core/format.js';
 import { html, useState } from '../../vendor/preact-htm.js';
 import {
   Banner, Button, Card, Chip, CopyField, Field, Icon, Input, ListRow, PageHeader, QrCode, Select, copyText, pageHref, pageTarget,
@@ -34,7 +35,7 @@ const clean = (text) => String(text || '').toLowerCase().trim().replace(/\s+/g, 
 
 export function trackedLink({ source, medium, campaign }) {
   const parts = [['utm_source', source], ['utm_medium', medium], ['utm_campaign', campaign]].filter(([, v]) => v);
-  return parts.length ? `${SITE_URL}?${parts.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}` : SITE_URL;
+  return parts.length ? `${SITE_URL}?${parts.map(([k, v]) => `${k}=${safeEncode(v)}`).join('&')}` : SITE_URL;
 }
 
 /** A link as people say it out loud: no http(s):// in front. Display only; hrefs and Copy keep the full address. */

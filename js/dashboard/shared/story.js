@@ -1,6 +1,6 @@
 // js/dashboard/shared/story.js: the enquiry-to-install story of a journey as Timeline items (enquiry, survey, photos, quote, install, paid).
 // Owner: E3
-import { bookingWhen } from '../../core/availability.js';
+import { bookingWhen, isUnscheduled } from '../../core/availability.js';
 import { fmtDayShort, stampDay, stampTime } from '../../core/dates.js';
 import { PAID_METHOD_LABELS, QUOTE_VIA_LABELS } from '../../core/config.js';
 import { gbp } from '../../core/format.js';
@@ -84,7 +84,9 @@ function installItems(items, q, i) {
       { id: 'paid', title: 'Paid', tone: 'upcoming', testid: 'story-paid' });
     return;
   }
-  if (i.status === 'new') {
+  if (i.status === 'new' && isUnscheduled(i)) {
+    items.push({ id: 'install', title: 'Install day to arrange', tone: 'current', testid: 'story-install', detail: 'The customer said which days suit them (see their note). Agree a day, choose it, then confirm it.' });
+  } else if (i.status === 'new') {
     items.push({ id: 'install', title: `Install pencilled in, ${bookingWhen(i)}`, tone: 'current', testid: 'story-install', detail: 'The customer picked this day. Confirm it to lock it in.' });
   } else if (i.status === 'done') {
     items.push({ id: 'install', title: 'Installed', tone: 'done', testid: 'story-install', time: stampText((i.history || []).filter((h) => h.event === 'done').map((h) => h.at).pop() || '') });

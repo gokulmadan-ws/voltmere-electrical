@@ -152,6 +152,67 @@ export function hashHue(name) {
   return sum % 6;
 }
 
+// ---------- hostile text: well-formed, plain, bounded ----------
+
+/**
+ * `text` with every lone surrogate (half of an emoji, left behind by a cut or typed on purpose) replaced by U+FFFD. A lone surrogate makes
+ * encodeURIComponent throw, which would take a whole screen down when it reaches a WhatsApp link.
+ */
+export function wellFormed(text) {
+  const s = String(text === undefined || text === null ? '' : text);
+  let out = null; // built only when something has to change
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d <= 0xdfff) { if (out !== null) out += s[i] + s[i + 1]; i += 1; continue; }
+      if (out === null) out = s.slice(0, i);
+      out += '\uFFFD';
+    } else if (c >= 0xdc00 && c <= 0xdfff) {
+      if (out === null) out = s.slice(0, i);
+      out += '\uFFFD';
+    } else if (out !== null) {
+      out += s[i];
+    }
+  }
+  return out === null ? s : out;
+}
+
+/** `obj[key]` only when `key` is the object's own (a key such as "__proto__" or "constructor" from an address or a payload is not a record), else null. */
+export function own(obj, key) {
+  return obj && typeof obj === 'object' && typeof key === 'string' && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null;
+}
+
+/** encodeURIComponent that cannot throw: a lone surrogate becomes U+FFFD first. */
+export function safeEncode(text) {
+  try {
+    return encodeURIComponent(text);
+  } catch (e) {
+    return encodeURIComponent(wellFormed(text));
+  }
+}
+
+// Control characters, zero-width and bidi override or isolate marks, the line and paragraph separators, the BOM and the object-replacement block.
+const INVISIBLE_CHARS = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u200B-\\u200F\\u2028\\u2029\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\uFFF9-\\uFFFC]', 'g');
+
+/**
+ * Text a customer typed, made safe to keep and to show: well-formed, without control, zero-width or bidi-override characters (an unbalanced
+ * right-to-left override would reorder the rest of the line it is shown in), trimmed, and cut to `max` characters without splitting an emoji.
+ * One line unless `multiline` (then single line breaks stay and long runs of them collapse).
+ */
+export function plainText(value, max = 200, { multiline = false } = {}) {
+  let s = wellFormed(value).replace(/\r\n?/g, '\n').replace(INVISIBLE_CHARS, '');
+  s = multiline ? s.replace(/[ \t\f\v]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{3,}/g, '\n\n') : s.replace(/\s+/g, ' ');
+  s = s.trim();
+  if (s.length > max) {
+    s = s.slice(0, max);
+    const last = s.charCodeAt(s.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) s = s.slice(0, -1); // never leave half an emoji at the cut
+    s = s.trimEnd();
+  }
+  return s;
+}
+
 /** prefix + '_' + 8 random base36 characters. Random, never time-based, so a frozen test clock cannot collide. */
 export function makeId(prefix) {
   let s = '';

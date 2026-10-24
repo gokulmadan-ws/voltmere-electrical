@@ -1,10 +1,12 @@
 // js/dashboard/views/today.js: Today, the command centre (greeting, three numbers, next up, needs you ranked by urgency, quotes to write, diary, tomorrow, pipeline).
 // Owner: E3 (v1 by WP4, enquiry wording by E2); round 2 (ranking, hero + compact rows, calmer order) by DASH
+import { STORAGE_FULL_TEXT } from '../../ui/util.js';
 import { html, useState } from '../../vendor/preact-htm.js';
-import {
-  Avatar, Button, Card, Chip, EmptyState, Icon, PageHeader, Switch,
-  toast, showUndoToast, useNow, useStore
-} from '../../ui/index.js';
+import { Avatar, Card, Chip, EmptyState, Icon, PageHeader } from '../../ui/display.js';
+import { Button } from '../../ui/button.js';
+import { Switch } from '../../ui/form.js';
+import { toast, showUndoToast } from '../../ui/toast.js';
+import { useNow, useStore } from '../../ui/hooks.js';
 import {
   quoteTotal, selectBookingsOn, selectBrand, selectInsights, selectNeedsYou, selectNextOpenDay, selectNextUp, selectPipeline,
   selectQuoteStats, selectSla
@@ -41,7 +43,7 @@ const GCAL = 'google_calendar';
 /** Generic failure rule (8.3) for any mutation reason this screen does not handle itself. */
 function failToast(res) {
   toast({
-    message: res && res.reason === 'not_found' ? 'That booking no longer exists.' : 'That did not work: the diary changed. Please check and try again.',
+    message: res && res.reason === 'not_found' ? 'That booking no longer exists.' : res && res.reason === 'storage_full' ? STORAGE_FULL_TEXT : 'That did not work: the diary changed. Please check and try again.',
     tone: 'danger'
   });
 }
@@ -397,7 +399,7 @@ function Tiles({ insights, quoteStats, sla }) {
     <${Tile} label="Quotes out" value=${gbp(quoteStats.waitingValue)}
       hint=${quoteStats.waitingCount > 0 ? plural(quoteStats.waitingCount, 'quote') : 'None waiting'}
       href=${routeHref('quotes', {}, { f: 'waiting' })} testid="stat-quotes-out" />
-    <${Tile} label=${`Replied in ${sla.replyHours} h`} value=${pct === null ? '—' : `${pct}%`}
+    <${Tile} label=${`Replied in ${sla.replyHours} h`} value=${pct === null ? '–' : `${pct}%`}
       hint=${pct === null ? 'No replies yet' : 'answered in time'} tone=${tone === 'neutral' ? undefined : tone}
       href=${routeHref('insights')} onClick=${go(routeHref('insights'), 'in-h-reply')} testid="stat-replied" />
   </section>`;

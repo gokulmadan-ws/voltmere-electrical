@@ -1,7 +1,7 @@
 // js/booking/booking-sheet.js: BookingSheet, the booking frame: customer mode = the 6-step quote funnel (hash driven), owner mode = phone-job steps.
 // Owner: WP3, rebuilt for the quote funnel by D2, step history, motion and announcements by D3
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
-import { Sheet, Icon, IconButton, useStore, useNow, loadCss, cx } from '../ui/index.js';
+import { Sheet, IconButton, useStore, useNow, loadCss, cx } from '../ui/index.js';
 import { getState } from '../core/store.js';
 import { selectBrand, selectService, selectCustomerByKey, selectBookingByRef } from '../core/selectors.js';
 import { isSlotFree, nextFreeSlots } from '../core/availability.js';
@@ -14,6 +14,7 @@ import {
 } from './nav.js';
 import { loadDraft, saveDraft } from './draft.js';
 import { HelpLine, BrandLogo, PrototypeStrip } from './bk-shared.js';
+import { Glyph } from '../landing/glyphs.js';
 import { ServiceStep } from './service-step.js';
 import { WhenStep, WhenFooter } from './when-step.js';
 import { DetailsStep, DetailsFooter } from './details-step.js';
@@ -100,24 +101,34 @@ function initialForm(ownerMode, intent, route, draft) {
   return f;
 }
 
+/** "Back" on the black bar: a text link with the arrow glyph turned round (never a pill, never an icon button). */
+function BarBack({ onBack }) {
+  return html`<button type="button" class="bk-fn-back" onClick=${onBack} data-testid="booking-back"><${Glyph} name="arrow" size=${20} class="bk-fn-back__a" /><span>Back</span></button>`;
+}
+
+/** "Close" on the black bar: the word, underlined (the same as the lightbox's), a 44px target. */
+function BarClose({ onClose }) {
+  return html`<button type="button" class="bk-fn-close" onClick=${onClose} data-testid="booking-close"><span>Close</span></button>`;
+}
+
 /**
- * The funnel header: Back (steps 2 to 6), HIS logo and Close on one row, then "Step N of 6" (with "About 1 minute" on step 1) and a six-segment
- * progress bar. No prototype strip in here: the sheet is full screen and the page's own strip sits behind it (a quiet note closes each step instead).
- * The bar is near-black in both themes (like the landing header) so his logo picture sits on its own colour. Segment N is fully filled on step N,
- * the same on every step, including the sixth.
+ * The funnel header (LANDING-V5 section 10): a black bar with Back (steps 2 to 6), HIS logo and Close, then on the paper "Step N of 6" in the label voice
+ * (with "About 1 minute" on step 1) and six 2px progress segments in ink. No prototype strip in here: the sheet is full screen and the page's own strip sits
+ * behind it (a quiet note closes each step instead). The bar is near-black in both themes so his logo picture sits on its own colour. Segment N is fully
+ * filled on step N, the same on every step, including the sixth.
  */
 function FunnelHeader({ step, brand, onBack, onClose }) {
-  return html`<div class="bk-header bk-header--fn bk-header--dark">
-    <div class="bk-header__row bk-header__row--fn">
-      ${step > 1
-    ? html`<button type="button" class="bk-fn-back" onClick=${onBack} data-testid="booking-back"><${Icon} name="chevron-left" size=${20} /><span>Back</span></button>`
-    : html`<span class="bk-header__spacer" aria-hidden="true"></span>`}
-      <${BrandLogo} brand=${brand} />
-      <${IconButton} icon="x" label="Close" size="lg" onClick=${onClose} data-testid="booking-close" />
+  return html`<div class="bk-header bk-header--fn">
+    <div class="bk-header__bar bk-header--dark">
+      <div class="bk-header__row bk-header__row--fn">
+        ${step > 1 ? html`<${BarBack} onBack=${onBack} />` : html`<span class="bk-header__spacer" aria-hidden="true"></span>`}
+        <${BrandLogo} brand=${brand} />
+        <${BarClose} onClose=${onClose} />
+      </div>
     </div>
     <div class="bk-header__meta">
       <p class="bk-header__step" data-testid="funnel-step-label">Step <span class="bk-header__num" key=${step}>${step}</span> of ${FUNNEL_TOTAL}</p>
-      ${step === 1 ? html`<p class="bk-header__time" data-testid="funnel-time"><${Icon} name="clock" size=${14} /><span>${FUNNEL_STEP1.time}</span></p>` : null}
+      ${step === 1 ? html`<p class="bk-header__time" data-testid="funnel-time"><span>${FUNNEL_STEP1.time}</span></p>` : null}
     </div>
     <div class="bk-fn-progress" data-testid="booking-progress" role="progressbar" aria-label="Quote progress" aria-valuemin="1" aria-valuemax=${FUNNEL_TOTAL}
       aria-valuenow=${step} aria-valuetext=${`Step ${step} of ${FUNNEL_TOTAL}`}>
@@ -132,13 +143,13 @@ function StepHeader({ step, page, enquiry, brand, onBack, onClose }) {
   const showBack = step !== 'service' && step !== 'confirmation';
   // The customer's enquiry screens (thank-you, Manage) carry the same strip and name as the funnel itself.
   if (enquiry && !page) {
-    return html`<div class="bk-header bk-header--fn bk-header--enquiry bk-header--dark">
-      <div class="bk-header__row bk-header__row--fn">
-        ${showBack
-    ? html`<button type="button" class="bk-fn-back" onClick=${onBack} data-testid="booking-back"><${Icon} name="chevron-left" size=${20} /><span>Back</span></button>`
-    : html`<span class="bk-header__spacer" aria-hidden="true"></span>`}
-        <${BrandLogo} brand=${brand} />
-        <${IconButton} icon="x" label="Close" size="lg" onClick=${onClose} data-testid="booking-close" />
+    return html`<div class="bk-header bk-header--fn bk-header--enquiry">
+      <div class="bk-header__bar bk-header--dark">
+        <div class="bk-header__row bk-header__row--fn">
+          ${showBack ? html`<${BarBack} onBack=${onBack} />` : html`<span class="bk-header__spacer" aria-hidden="true"></span>`}
+          <${BrandLogo} brand=${brand} />
+          <${BarClose} onClose=${onClose} />
+        </div>
       </div>
     </div>`;
   }
@@ -227,13 +238,20 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
 
   // Every funnel step is a history entry (nav.js), so the phone's Back goes one step back. Forward pushes, Back walks the
   // history (the popstate listener below applies the step); with no earlier entry (a restored draft) it moves in place.
+  // `fstepRef` is the step the funnel is on or already moving to, so a second tap that lands before the screen has re-rendered (a double tap, a
+  // triple tap) never pushes a second history entry for the same step. A Back is `history.go` (asynchronous): further taps are ignored until it lands.
+  const moving = useRef(null);
   const setStep = (n) => {
     setBanner(null);
-    if (n === fstep) return;
+    const cur = fstepRef.current;
+    if (n === cur) return;
     if (!inFunnel) { setFstep(n); return; }
-    if (n > fstep) { setDir('fwd'); pushFunnelStep(n); setFstep(n); return; }
+    if (moving.current !== null) return;
+    if (n > cur) { setDir('fwd'); pushFunnelStep(n); fstepRef.current = n; setFstep(n); return; }
     setDir('back');
-    if (!backFunnelSteps(fstep - n)) { replaceFunnelStep(n); setFstep(n); }
+    if (!backFunnelSteps(cur - n)) { replaceFunnelStep(n); fstepRef.current = n; setFstep(n); return; }
+    moving.current = n;
+    setTimeout(() => { if (moving.current === n) moving.current = null; }, 800);
   };
   const fn = { step: fstep, setStep, dir, answers, setAnswer: (key, value) => setAnswers((prev) => ({ ...prev, [key]: value })) };
 
@@ -245,6 +263,7 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
   // A layout effect, so the listener is on before the first paint: a very quick Back after a refresh must not be missed.
   useLayoutEffect(() => {
     const onPop = () => {
+      moving.current = null; // a Back that was walking to a step has landed
       if (!inFunnelRef.current || isUnwinding()) return;
       const s = funnelHistoryStep();
       if (!s || s === fstepRef.current) return;
@@ -400,9 +419,10 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
     : strip
       ? null
       : html`<div class="bk-ribbon"><span class="bk-ribbon__tag">Prototype</span>${fillBtn || html`<span class="bk-ribbon__text">Sample data, nothing is really sent</span>`}</div>`;
-  // The quiet prototype line closes every funnel step (it used to be a strip in the header); the demo shortcut sits just above it on steps 1 and 6.
-  const belowFill = strip && (fillBtn || step === 'funnel')
-    ? html`<div class="bk-demofill-row">${fillBtn}${step === 'funnel' ? html`<${PrototypeStrip} />` : null}</div>` : null;
+  // The quiet prototype line and the demo shortcut close step 1 and step 6 only (steps 2 to 5 end with the phone link and nothing else).
+  const protoStep = step === 'funnel' && (fstep === 1 || fstep === 6);
+  const belowFill = strip && (fillBtn || protoStep)
+    ? html`<div class="bk-demofill-row">${fillBtn}${protoStep ? html`<${PrototypeStrip} />` : null}</div>` : null;
   // The funnel's steps carry their own reassurance row (free quote, credentials, tap to call), so it has no separate help line.
   const showHelp = step === 'funnel' ? false : (!ownerMode && step !== 'confirmation' && step !== 'manage');
 

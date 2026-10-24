@@ -3,12 +3,12 @@
 import { SITE_BASE_URL, makeDefaultBusiness } from './config.js';
 import { nowStamp } from './clock.js';
 import { addDays, diffDays, fmtDayShort, isDayKey, stampDay } from './dates.js';
-import { firstName, gbp, makeId } from './format.js';
+import { firstName, gbp, makeId, safeEncode } from './format.js';
 import { quoteLink } from './handoff.js';
 
 /** SITE_BASE_URL + 'quote.html#q=<id>': the link the customer opens on their phone. */
 export function quoteUrl(quoteId) {
-  return `${SITE_BASE_URL}quote.html#q=${encodeURIComponent(String(quoteId))}`;
+  return `${SITE_BASE_URL}quote.html#q=${safeEncode(String(quoteId))}`;
 }
 
 // ---------- the self-contained customer link (quote.html#q=<id>&d=<payload>) ----------

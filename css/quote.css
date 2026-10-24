@@ -1,688 +1,541 @@
-/* css/quote.css: the customer quote page (q2-*): black hero with his logo, the decision card, itemised lines, the install-day sheet, the confirmation.
-   Owner: Q2. Colours come from tokens.css only (no hex here), except --q2-ok / --q2-ok-text: the success green on the black panel (the dark theme's
-   --ok values, because the light theme's --ok is too dark on black). Mobile first at 375, solid at 320, two columns from 960.
-   Dark is the default look; the hero, the footer and the sticky bar keep the brand's near-black panel in both themes.
-   Motion: transform only (never opacity from 0), so a screenshot at any instant shows every word; prefers-reduced-motion removes it. */
+/* css/quote.css: the customer quote page (q2-*), in the one system the landing page and the funnel use (docs/LANDING-V5.md section 10): light paper, one family (Archivo),
+   a black bar with his logo, a flat paper hero in the display voice, hairline rules instead of boxes, a ruled table for the quote lines, square corners, no shadow, no gradient,
+   no icon tiles, no pills. Red is the one primary button (Choose install day, Accept quote on the last sheet, or Add to calendar once it is accepted) and nothing else: no red
+   text anywhere on this page (field errors aside). The footer takes the black ground and the landing's keyed rows, without the stripes (they are the landing page's finale only).
+   Colours, sizes and spacing come from css/public-tokens.css only (no hex here). css/landing.css (loaded before this file) provides .lp-lbl, .lp-logovoice, .lp-link, .lp-glyph and the
+   prototype strip's skin. Mobile first, solid at 320, two columns from 960. Owner: Q2, rebuilt in the public system by B3 (LANDING-V5 section 10). */
 
-:root {
-  --q2-ease: var(--ease-emphasis, cubic-bezier(0.16, 1, 0.3, 1));
-  --q2-pad: 20px;
-}
-@media (min-width: 480px) { :root { --q2-pad: 24px; } }
+:root { --q2-pad: 24px; --q2-side-w: 380px; --q2-hero-pt: 32px; --q2-lift-body: 360px; --q2-lift-pb: 48px; --q2-gap: 64px; }
+@media (min-width: 720px) { :root { --q2-pad: 32px; --q2-hero-pt: 56px; --q2-gap: 80px; } }
+@media (min-width: 720px) { .q2-grid { padding-top: 56px; } }
+@media (min-width: 1024px) { :root { --q2-pad: 48px; --q2-gap: 96px; } }
 
-.q2-app { min-height: 100vh; min-height: 100dvh; background: var(--bg); color: var(--text); }
+.q2-app { min-height: 100vh; min-height: 100dvh; background: var(--paper); color: var(--ink); font-size: var(--body); }
 .q2-state { display: block; }
-.q2-wrap {
-  width: 100%; max-width: calc(1000px + 2 * var(--gutter)); margin-inline: auto; /* the header, the hero and the cards share one 1000px column */
-  padding-left: max(var(--gutter), var(--safe-left)); padding-right: max(var(--gutter), var(--safe-right));
-}
+.q2-wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-left: max(var(--m), var(--safe-left)); padding-right: max(var(--m), var(--safe-right)); }
 .q2-main { display: block; }
 .q2-main:focus, #q2-main:focus { outline: none; }
-.q2-muted { color: var(--text-2); }
+.q2-muted { color: var(--ink-2); }
 .q2-app p { max-width: none; }
+.q2-stack { display: flex; flex-direction: column; gap: 56px; }
+.q2-stack > * { min-width: 0; }
 
-.q2-skip {
-  position: absolute; left: var(--space-2); top: var(--space-2); z-index: var(--z-toast);
-  padding: var(--space-3) var(--space-4); border-radius: var(--r-md);
-  background: var(--panel); color: var(--panel-text); font-weight: var(--fw-bold); text-decoration: none;
-  transform: translateY(-200%);
+.q2-skip { position: absolute; left: var(--m); top: -80px; z-index: 300; padding: 12px 16px; background: var(--ink); color: var(--paper); font-weight: 600; text-decoration: none; }
+.q2-skip:focus { top: 8px; }
+
+/* ================= shared type voices on this page ================= */
+.q2-label, .q2-meta__k, .q2-lines__head, .q2-lines__sumlabel, .q2-sticky__total span, .q2-soonest__k, .q2-reasons__legend, .q2-prefgroup__legend {
+  margin: 0; font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink);
 }
-.q2-skip:focus { transform: none; }
+/* Title voice (the landing's H3: 20, 24 from 1024): every heading below the total except "What's included" and the label "Accredited and qualified". */
+.q2-h2 { margin: 0 0 16px; max-width: 18em; font: 600 var(--h3)/1.25 var(--f); font-stretch: 104%; letter-spacing: -0.015em; text-wrap: balance; overflow-wrap: break-word; }
+/* Display voice and the landing's H2 size (30, 44, 52): the ONE display heading below the total. */
+.q2-h2--display { margin: 0 0 32px; max-width: 16em; font-family: var(--f-display); font-weight: 650; font-stretch: 108%; font-size: var(--h2); line-height: 1.06; letter-spacing: -0.03em; word-spacing: 0.02em; }
+.u-mono { font-family: var(--f); font-variant-numeric: tabular-nums; }
 
-/* ================= Preview bar (owner opened the link from the dashboard) ================= */
-.q2-preview { background: var(--panel-2); color: var(--panel-text); border-bottom: 1px solid var(--line); }
-.q2-preview__inner { display: flex; align-items: flex-start; gap: 10px; padding-block: 10px; font-size: var(--fs-14); line-height: 1.45; }
-.q2-preview__inner svg { margin-top: 2px; color: var(--panel-accent); }
+/* ================= preview bar (the owner opened the link from the dashboard) and the expired band ================= */
+.q2-preview { background: var(--paper-2); color: var(--ink); border-bottom: 1px solid var(--rule); }
+.q2-preview__inner { display: block; padding-block: 12px; font-size: 14px; line-height: 20px; }
 .q2-preview p { margin: 0; }
+/* The expired row sits inside the decision card, directly above the total, under the card's own 2px ink rule: ink words (the key phrase in 600), a 2px ink rule on its left, a hairline under it. */
+.q2-expiredbar { margin: 0; padding: 14px 0 14px 16px; border-top: 1px solid var(--ink); border-left: 2px solid var(--ink); border-bottom: 1px solid var(--rule); background: none; color: var(--ink); }
+.q2-expiredbar p { margin: 0; font-size: var(--body); line-height: 1.5; }
+.q2-expiredbar strong { color: var(--ink); font-weight: 600; }
 
-/* ================= Expired: a full-width danger band at the very top (orange-red outline, icon and words; never the brand red) ================= */
-.q2-expiredbar { border-block: 1px solid var(--danger); border-bottom-width: 4px; background: var(--danger-tint); color: var(--danger-text); }
-.q2-expiredbar__inner { display: flex; align-items: flex-start; gap: 12px; padding-block: 14px; font-size: var(--fs-15); line-height: 1.5; }
-.q2-expiredbar svg { flex: none; margin-top: 1px; }
-.q2-expiredbar p { margin: 0; }
-.q2-expiredbar strong { font-weight: var(--fw-heavy); }
-
-/* ================= Hero: the black panel ================= */
-.q2-hero {
-  position: relative; isolation: isolate; overflow: hidden;
-  background-color: var(--panel); color: var(--panel-text);
-  padding-bottom: calc(var(--space-7) + 40px);
-  --q2-ok: #4ADE80; --q2-ok-text: #6EE7A0;
-}
-/* The tint and the corner slashes FADE OUT towards the bottom edge (a mask), so they never end in a hard horizontal line: in dark the panel is
-   the page colour, so the last pixels of the hero simply melt into it. */
-.q2-hero::before {
-  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: url('../img/hero-wiring.svg') center top / cover no-repeat;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 96%);
-  mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 96%);
-}
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .q2-hero::before {
-    background:
-      radial-gradient(ellipse 70% 55% at 100% 0%, color-mix(in srgb, var(--brand) 20%, transparent), transparent 70%),
-      radial-gradient(ellipse 60% 40% at 0% 100%, color-mix(in srgb, var(--brand) 12%, transparent), transparent 70%),
-      url('../img/hero-wiring.svg') center top / cover no-repeat;
-  }
-}
-.q2-hero :focus-visible, .q2-footer :focus-visible, .q2-preview :focus-visible { outline-color: var(--focus-on-panel); }
-
-/* The bar: his logo, who the quote is for, and one tap to call. 20px of air above and below. The prototype strip is a sibling ABOVE the panel. */
-.q2-top { padding-top: 20px; padding-bottom: 20px; }
-.q2-top__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; min-width: 0; }
-.q2-brand { display: inline-flex; align-items: center; flex: none; min-height: var(--tap); border-radius: var(--r-md); color: var(--panel-text); text-decoration: none; }
+/* ================= the black bar: his logo, who the quote is for, one tap to call. The prototype strip is a sibling ABOVE it ================= */
+.q2-hero { background: var(--paper); color: var(--ink); }
+.q2-bar { background: var(--black); color: var(--on-black); box-shadow: 0 1px 0 var(--rule-b); }
+:root[data-scope="public"] :is(.q2-bar, .q2-footer, .q2-sheetbar__bar) :focus-visible { outline-color: var(--focus-on-black); }   /* out-weighs landing.css's ring: ink on black would vanish */
+/* A heading, a lead line or the main landmark takes focus from the script (a new screen, a jump link). It is not a control, so it never draws a ring, whichever way the person got there
+   (a keyboard Enter makes :focus-visible match). The selector must out-weigh landing.css's ":root[data-scope=public] :focus-visible". */
+:root[data-scope="public"] :is(h1, h2, h3, p, main)[tabindex="-1"]:focus-visible, :root[data-scope="public"] :is(h1, h2, h3, p, main)[tabindex="-1"]:focus { outline: none; }
+.q2-top { padding-top: 0; padding-bottom: 0; }
+.q2-top__row { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; min-width: 0; height: var(--hdr-h); }
+.q2-brand { display: inline-flex; align-items: center; flex: none; min-height: 44px; color: var(--on-black); text-decoration: none; }
 /* "Quote for Sean": from 480px it sits beside the logo behind a hairline; on narrower phones it stays for screen readers only. */
-.q2-for {
-  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
-  font-size: var(--fs-14); font-weight: var(--fw-medium); line-height: 1.2; color: var(--panel-muted);
-}
+.q2-for { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; font-size: 14px; font-weight: 500; line-height: 20px; color: var(--on-black-2); }
 @media (min-width: 480px) {
-  .q2-for {
-    position: static; flex: 1 1 auto; width: auto; height: auto; min-width: 0; margin: 0 auto 0 0; padding: 4px 0 4px var(--space-3);
-    overflow: hidden; clip-path: none; text-overflow: ellipsis; border-left: 1px solid var(--panel-2);
-  }
+  .q2-for { position: static; flex: 1 1 auto; width: auto; height: auto; min-width: 0; margin: 0 auto 0 0; padding: 4px 0 4px 24px; overflow: hidden; clip-path: none; text-overflow: ellipsis; border-left: 1px solid var(--rule-b); }
 }
 .q2-owner { display: flex; align-items: center; flex: none; min-width: 0; }
-.q2-owner__call {
-  display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 8px;
-  min-height: var(--tap); min-width: var(--tap); padding: 0 16px 0 14px;
-  border: 1.5px solid var(--panel-2); border-radius: var(--r-pill); background: var(--panel-2); color: var(--panel-text);
-  font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: 1; text-decoration: none; white-space: nowrap;
-}
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .q2-owner__call { border-color: color-mix(in srgb, var(--panel-text) 34%, transparent); background: color-mix(in srgb, var(--panel-text) 10%, transparent); }
-}
-.q2-owner__call svg { flex: none; color: var(--panel-text); }
-@media (hover: hover) { .q2-owner__call:hover { background: var(--panel-2); border-color: var(--panel-text); } }
-/* "Call Daniel" from 420; on narrower phones the name stays for screen readers only, so the bar never crowds. */
-@media (max-width: 419px) {
-  .q2-owner__name { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-}
+.q2-owner__call { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; min-width: 44px; color: var(--on-black); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; text-decoration: none; white-space: nowrap; }
+@media (hover: hover) { .q2-owner__call:hover { text-decoration: underline; text-underline-offset: 4px; } }
 
-/* His logo is a 1119x743 picture: the "180 ELECTRICAL" lockup sits in the middle and red/white corner stripes fill the top-left and bottom-right.
-   The wrapper is a WINDOW onto the lockup (overflow hidden, the picture sized and shifted from the crop fractions below, all fractions of the picture) and the
-   picture is blended with `lighten`, so its near-black card disappears into the near-black header or footer: no chip, no box. The remote logo and the local
-   fallback (img/logo-180.png, same layout) share this one crop. Same window as the landing page's (.lp-logo). */
-.q2-logo {
-  --crop-x: 0.215; --crop-y: 0.295; --crop-w: 0.57; --crop-h: 0.42;   /* the window: left, top, width, height */
-  --logo-h: 50px;
-  position: relative; display: block; flex: none; overflow: hidden; line-height: 0;
-  height: var(--logo-h); aspect-ratio: calc(1119 * var(--crop-w) / (743 * var(--crop-h)));
-  background: transparent;
-}
-.q2-logo__img {
-  position: absolute; display: block; max-width: none; height: auto; aspect-ratio: 1119 / 743;
-  width: calc(100% / var(--crop-w));
-  left: calc(var(--crop-x) / var(--crop-w) * -100%); top: calc(var(--crop-y) / var(--crop-h) * -100%);
-  mix-blend-mode: lighten;
-}
-.q2-logo--header { --logo-h: 44px; }
-@media (min-width: 768px) { .q2-logo--header { --logo-h: 48px; } }
+/* His logo is a 1119x743 picture: a WINDOW onto the lockup (the crop of LANDING-V5 4.13), blended with lighten so the picture's near-black card vanishes into the black bar or footer. */
+.q2-logo { --crop-x: 0.2273; --crop-y: 0.3039; --crop-w: 0.5368; --crop-h: 0.3922; --logo-h: 48px;
+  position: relative; display: block; flex: none; overflow: hidden; line-height: 0; height: var(--logo-h); aspect-ratio: calc(1119 * var(--crop-w) / (743 * var(--crop-h))); background: transparent; }
+.q2-logo__img { position: absolute; display: block; max-width: none; height: auto; aspect-ratio: 1119 / 743; width: calc(100% / var(--crop-w));
+  left: calc(var(--crop-x) / var(--crop-w) * -100%); top: calc(var(--crop-y) / var(--crop-h) * -100%); mix-blend-mode: lighten; }
+.q2-logo--header { --logo-h: var(--hdr-logo-h); }
 
-.q2-hero__body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding-top: var(--space-2); min-width: 0; }
-.q2-eyebrow {
-  display: inline-flex; align-items: center; gap: 10px; margin: 0;
-  font-size: var(--fs-17); font-weight: var(--fw-semibold); line-height: 1.3; color: var(--panel-accent);
-}
-/* A small slash before the greeting: the corner slashes of his logo. */
-.q2-eyebrow::before { content: ''; flex: none; width: 22px; height: 2px; background: currentColor; transform: skewX(-40deg); }
+/* ================= the hero: flat paper, the display voice ================= */
+.q2-hero__body { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; padding-top: var(--q2-hero-pt); }
+.q2-eyebrow { display: block; margin: 0; font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
 .q2-title {
-  margin: 0; max-width: 20ch; color: var(--panel-text); text-wrap: balance;
-  font-size: clamp(1.9rem, 7.4vw, 3.1rem); line-height: 1.06; letter-spacing: -0.035em;
-  overflow-wrap: break-word;
+  margin: 0; max-width: 14em; color: var(--ink); text-wrap: balance;
+  font-family: var(--f-display); font-weight: 650; font-stretch: 108%; letter-spacing: -0.03em; word-spacing: 0.02em;
+  font-size: clamp(30px, calc((100vw - 2 * var(--m)) / 11), 72px); line-height: 1.04; overflow-wrap: break-word;
 }
 .q2-title:focus, .q2-title:focus-visible { outline: none; }
-.q2-lead { margin: 0; max-width: 52ch !important; font-size: var(--fs-17); line-height: 1.55; color: var(--panel-muted); }
-@supports (color: color-mix(in srgb, red 50%, blue)) { .q2-lead { color: color-mix(in srgb, var(--panel-text) 82%, transparent); } }
+.q2-lead { margin: 0; max-width: 30em; font-size: 18px; line-height: 27px; color: var(--ink); text-wrap: pretty; }
+@media (min-width: 720px) { .q2-lead { font-size: 20px; line-height: 30px; } .q2-hero__body { gap: 16px; } }
 
-/* The three facts a customer checks first, on one line: the reference, the quote date, the postcode. */
-.q2-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 2px 0 0; padding: 0; list-style: none; font-size: var(--fs-14); line-height: 1.3; }
-.q2-meta li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.q2-meta svg { flex: none; color: var(--panel-muted); }
-.q2-meta__ref { gap: 8px; }
-.q2-meta__k { color: var(--panel-muted); font-weight: var(--fw-medium); }
-.q2-meta__v, .q2-meta strong { min-width: 0; color: var(--panel-text); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
+/* The four facts a customer checks first, as the landing's spec strip: a 1px ink rule, then the reference, the day it was written, where the charger goes in and how long the quote is good.
+   Two by two on a phone, four across where the width allows (720 to 959, and from 1200 when the card sits beside the hero). */
+.q2-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 0; align-self: stretch; margin: 8px 0 0; padding: 0; border-top: 1px solid var(--ink); list-style: none; }
+.q2-meta li { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 6px; align-content: start; min-width: 0; padding: 12px 16px 14px 0; }
+.q2-meta li:nth-child(even) { padding-left: 16px; padding-right: 0; }
+.q2-meta li:nth-child(n+3) { border-top: 1px solid var(--rule); }
+.q2-meta__k { color: var(--ink-2); }
+.q2-meta__v, .q2-meta strong { min-width: 0; color: var(--ink); font-size: 16px; font-weight: 600; line-height: 22px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.q2-meta__vwrap { display: grid; row-gap: 2px; min-width: 0; }
+.q2-meta__note { color: var(--ink-2); font-size: 14px; font-weight: 500; line-height: 20px; }
+.q2-meta__valid.is-urgent .q2-meta__note { color: var(--ink); font-weight: 600; }
+@media (max-width: 359px) {
+  .q2-meta { display: block; }
+  .q2-meta li, .q2-meta li:nth-child(even) { grid-template-columns: 148px minmax(0, 1fr); align-items: baseline; column-gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+  .q2-meta li:nth-child(n+3) { border-top: 0; }
+  .q2-meta__vwrap { row-gap: 0; }
+}
+@media (min-width: 720px) {
+  .q2-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 24px; margin-top: 24px; }
+  .q2-meta li, .q2-meta li:nth-child(even) { row-gap: 8px; padding: 20px 0 24px; }
+  .q2-meta li:nth-child(n+3) { border-top: 0; }
+  .q2-meta__v, .q2-meta strong { font-size: 17px; line-height: 24px; }
+}
+@media (min-width: 960px) and (max-width: 1199px) {
+  .q2-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 0; }
+  .q2-meta li { padding: 20px 24px 24px 0; }
+  .q2-meta li:nth-child(even) { padding: 20px 0 24px 24px; }
+  .q2-meta li:nth-child(n+3) { border-top: 1px solid var(--rule); }
+}
 
-/* The hero copy rises in one piece after another (translate only). */
-@keyframes q2-rise { from { transform: translateY(14px); } to { transform: none; } }
-.q2-hero__body > * { animation: q2-rise 700ms var(--q2-ease) backwards; }
-.q2-hero__body > :nth-child(2) { animation-delay: 50ms; }
-.q2-hero__body > :nth-child(3) { animation-delay: 100ms; }
-.q2-hero__body > :nth-child(4) { animation-delay: 150ms; }
-.q2-hero__body > :nth-child(5) { animation-delay: 200ms; }
+/* Quiet, done and ready heroes: shorter. The page that follows is one left-aligned column. */
+.q2-hero--quiet, .q2-hero--done, .q2-hero--ready { padding-bottom: 56px; }
+.q2-pull { position: relative; padding-bottom: 8px; }
+.q2-pull > * { max-width: 760px; }
 
-/* Quiet, done and ready heroes (no big card overlapping): shorter, and the first card still pulls up over the edge. */
-.q2-hero--quiet, .q2-hero--done, .q2-hero--ready { padding-bottom: calc(var(--space-7) + 8px); }
-.q2-hero--done .q2-hero__body, .q2-hero--ready .q2-hero__body { align-items: center; text-align: center; }
-.q2-hero--done .q2-title { max-width: 16ch; }
-.q2-hero--ready .q2-title { max-width: 18ch; }
-.q2-hero--done .q2-lead, .q2-hero--ready .q2-lead { max-width: 40ch !important; }
-.q2-pull { position: relative; display: flex; flex-direction: column; gap: var(--space-4); margin-top: calc(-1 * var(--space-6)); padding-bottom: var(--space-4); }
-.q2-pull > * { min-width: 0; }
-@media (min-width: 720px) { .q2-pull { max-width: 720px; } }
-
-/* ================= Page grid: the card pulls up over the hero; two columns on wide screens ================= */
-.q2-grid { position: relative; display: flex; flex-direction: column; gap: var(--space-4); margin-top: calc(-1 * (var(--space-7) + 24px)); }
-.q2-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-.q2-body { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+/* ================= page grid: on wide screens the total and Accept stay in view beside the quote ================= */
+.q2-grid { position: relative; display: flex; flex-direction: column; gap: var(--q2-gap); padding-top: 24px; }
+.q2-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.q2-body { display: flex; flex-direction: column; gap: var(--q2-gap); min-width: 0; }
 @media (min-width: 960px) {
-  /* On wide screens the total and Accept card sits beside the heading, in the right half of the hero, and stays in view as the
-     quote scrolls. The hero keeps a fixed height for its copy so the card can be lifted to the top of it. */
-  :root { --q2-lift-body: 210px; --q2-lift-pad: 56px; --q2-side-w: 388px; }
-  .q2-hero { padding-bottom: var(--q2-lift-pad); }
-  .q2-hero--open .q2-hero__body {
-    min-height: var(--q2-lift-body);
-    padding-right: calc(max(var(--gutter), var(--safe-right)) + var(--q2-side-w) + var(--space-6));
-  }
-  .q2-hero--quiet, .q2-hero--done, .q2-hero--ready { padding-bottom: calc(var(--space-8) + 8px); }
-  /* On wide screens the corner slashes stay in the corners instead of stretching across the whole width. */
-  .q2-hero::before { background-size: auto, auto, min(100%, 760px) auto; background-position: 0 0, 0 0, left top; }
-  .q2-grid {
-    display: grid; grid-template-columns: minmax(0, 1fr) var(--q2-side-w); grid-template-areas: "body side";
-    column-gap: var(--space-6); align-items: start; margin-top: 0;
-  }
-  .q2-side { grid-area: side; position: sticky; top: var(--space-5); margin-top: calc(-1 * (var(--q2-lift-body) + var(--q2-lift-pad))); }
-  .q2-body { grid-area: body; padding-top: var(--space-6); }
+  /* The side card is lifted to the top of the hero's copy: the hero body keeps a fixed height (padding included) for it, the card is pulled up by that height less the body's top padding. */
+  .q2-hero--open { padding-bottom: var(--q2-lift-pb); }
+  .q2-hero--open .q2-hero__body { min-height: var(--q2-lift-body); padding-right: calc(max(var(--m), var(--safe-right)) + var(--q2-side-w) + 48px); }
+  .q2-hero--open .q2-meta { margin-top: auto; }
+  .q2-hero--open .q2-title { font-size: clamp(30px, calc((100vw - 2 * var(--m) - var(--q2-side-w) - 48px) / 10.4), 64px); }
+  .q2-grid { display: grid; grid-template-columns: minmax(0, 1fr) var(--q2-side-w); grid-template-areas: "body side"; column-gap: 48px; align-items: start; padding-top: 0; }
+  .q2-side { grid-area: side; position: sticky; top: 24px; margin-top: calc(var(--q2-hero-pt) - var(--q2-lift-body) - var(--q2-lift-pb)); }
+  .q2-body { grid-area: body; }
 }
 
-/* ================= Cards ================= */
-.q2-card {
-  min-width: 0; padding: var(--q2-pad);
-  border: 1.5px solid var(--line); border-radius: var(--r-lg);
-  background: var(--card-bg); color: var(--text); box-shadow: var(--shadow-1);
-}
-.q2-h2 { margin: 0 0 var(--space-3); font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); line-height: 1.2; letter-spacing: -0.02em; }
-.q2-label { margin: 0; font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-2); line-height: 1.3; }
-
-/* Decision card: the total, the charger's name, three facts, then Accept. */
-.q2-decide { display: flex; flex-direction: column; gap: var(--space-3); box-shadow: var(--shadow-3); scroll-margin-top: var(--space-4); }
-.q2-decide__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
-.q2-decide__figure { min-width: 0; }
-.q2-total {
-  margin: 4px 0 0; font-family: var(--font-display); font-weight: var(--fw-heavy);
-  font-size: clamp(2.5rem, 12vw, 3.25rem); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
-}
-.q2-sample {
-  flex: none; margin-top: 2px; padding: 2px 10px; border: 1.5px dashed var(--field-border); border-radius: var(--r-pill);
-  color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); line-height: 1.5; text-transform: uppercase; white-space: nowrap;
-}
-/* The charger's name (the brand the owner chose), one quiet line under the total. No picture and no spec of ours. */
-.q2-product { margin-top: 8px; min-width: 0; }
-.q2-product__name { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-semibold); line-height: 1.3; color: var(--text-2); overflow-wrap: anywhere; }
-.q2-product__spec { margin: 2px 0 0; font-size: var(--fs-14); line-height: 1.4; color: var(--text-3); }
-/* Three facts, each a green tick: all true of the document itself. */
-.q2-sum { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px 0 0; border-top: 1px solid var(--line); list-style: none; }
-.q2-sum li { display: flex; align-items: flex-start; gap: 10px; font-size: var(--fs-15); line-height: 1.4; color: var(--text); }
-.q2-sum svg { flex: none; margin-top: 3px; color: var(--ok-text); }
-.q2-sum__valid { font-weight: var(--fw-semibold); }
-.q2-sum__valid.is-urgent { padding: 8px 12px; border-radius: var(--r-md); background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
-.q2-sum__valid.is-urgent svg { margin-top: 2px; color: var(--status-on-the-way-fg); }
-.q2-valid__left { font-weight: var(--fw-medium); }
-.q2-seeall { align-self: flex-start; gap: 4px; margin-block: -8px; font-size: var(--fs-14); }
-.q2-seeall svg { flex: none; }
-/* An expired quote: the total is muted and smaller, the validity is a plain line, there are no ticks and no Accept. */
-.q2-decide.is-expired { box-shadow: var(--shadow-1); }
-.q2-decide.is-expired .q2-total { color: var(--text-3); font-size: clamp(1.9rem, 9vw, 2.4rem); }
-.q2-decide.is-expired .q2-product__name { color: var(--text-3); }
-/* "Not for me": small, grey and underlined, below the card (never a button in it). */
-.q2-notforme { margin: 0; text-align: center; }
-.q2-notforme__btn { justify-content: center; padding-inline: var(--space-3); font-size: var(--fs-14); font-weight: var(--fw-medium); }
-.q2-valid {
-  display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: var(--r-md);
-  background: var(--surface-2); color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.35;
-}
-.q2-valid svg { flex: none; }
-.q2-valid--soon, .q2-valid--last { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
-.q2-valid--expired { background: var(--danger-tint); color: var(--danger-text); }
-.q2-decide.is-expired .q2-valid--expired { padding: 0; background: none; color: var(--text-2); }
-/* A comfortable quote's validity is a quiet line at the foot of the card (an urgent one keeps its chip above Accept). */
-.q2-valid--quiet { justify-content: center; padding: 0; background: none; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-medium); }
-/* The reassurance that drives a yes, directly under Accept. */
-.q2-accept { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.q2-nopay { display: flex; align-items: flex-start; justify-content: center; gap: 8px; margin: 0; font-size: var(--fs-14); font-weight: var(--fw-medium); line-height: 1.4; color: var(--text-2); }
-.q2-nopay svg { flex: none; margin-top: 1px; color: var(--text-2); }
-.q2-actions { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-.q2-row { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+/* ================= sections: a hairline and a title; the 1px ink rule is kept for the table and the credentials strip, the dashed rule for the idea ================= */
+.q2-card { min-width: 0; padding: 20px 0 0; border: 0; border-top: 1px solid var(--rule); border-radius: 0; background: none; color: var(--ink); box-shadow: none; }
+.q2-lines, .q2-trust, .q2-install { padding-top: 16px; border-top-color: var(--ink); }
+.q2-fine { margin: 0; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.q2-notice { margin: 0; }
+.q2-actions { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.q2-row { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .q2-row > * { flex: 1 1 auto; min-width: 0; }
 .q2-row--even > * { flex: 1 1 200px; }
-.q2-fine { margin: 0; font-size: var(--fs-14); line-height: 1.5; color: var(--text-2); }
-.q2-notice { margin: 0; }
-.q2-card .ui-btn--lg { padding-inline: var(--space-4); }
-.q2-card .ui-btn { min-width: 0; }
-.q2-row .ui-btn { padding-inline: var(--space-4); }
 
-/* Itemised lines */
-.q2-lines { scroll-margin-top: var(--space-4); }
+/* Decision: the total in the display voice, the charger's name, a jump to the table, then the red button. */
+.q2-decide { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; border-top: 2px solid var(--ink); scroll-margin-top: 16px; }
+.q2-decide.is-expired { padding-top: 0; border-top: 0; }
+.q2-decide.is-expired > .q2-expiredbar { margin-bottom: 8px; }
+.q2-decide__figure { min-width: 0; }
+.q2-total { margin: 8px 0 0; font-family: var(--f-display); font-weight: 650; font-stretch: 108%; font-size: clamp(48px, 15vw, 64px); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+/* "Sample price": the dashed prototype signature under the figure (data-proto), never beside it. */
+.q2-sample { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 0 0; border-top: 1px dashed var(--rule-d); color: var(--ink-2); font: 500 13px/16px var(--f); letter-spacing: 0; text-transform: none; }
+.q2-sample .ui-idea-tag__d { display: block; flex: none; width: 7px; height: 7px; border: 1px solid currentColor; transform: rotate(45deg); }
+.q2-product { margin-top: 8px; min-width: 0; }
+.q2-product__name { margin: 0; font-size: var(--body); font-weight: 500; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
+.q2-product__spec { margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.q2-valid__left { font-weight: 400; color: var(--ink-2); }
+.q2-seeall { align-self: flex-start; margin-block: -12px; }
+.q2-seeall .lp-glyph--arrow { transform: rotate(90deg); }
+@media (hover: hover) { .q2-seeall:hover .lp-glyph--arrow { transform: rotate(90deg) translateX(4px); } }
+/* From 960 the table sits beside the card (which stays in view), so there is nothing to jump to. */
+@media (min-width: 960px) { .q2-seeall { display: none; } }
+.q2-decide.is-expired .q2-total { color: var(--ink-3); font-size: clamp(32px, 9vw, 40px); }
+.q2-decide.is-expired .q2-product__name { color: var(--ink-2); }
+.q2-valid { margin: 0; color: var(--ink); font-size: 15px; font-weight: 500; line-height: 22px; }
+.q2-valid--expired { color: var(--ink); font-weight: 600; }
+.q2-valid--quiet { color: var(--ink-2); font-size: 14px; font-weight: 400; }
+.q2-accept { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.q2-nopay { margin: 0; font-size: var(--body); line-height: 1.45; color: var(--ink-2); }
+.q2-notforme { margin: 0; text-align: left; }
+.q2-notforme__btn { padding-inline: 0; justify-content: flex-start; }
+.q2-protonote { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 20px; }
+.q2-protonote strong { color: var(--ink); font-weight: 600; }
+
+/* Itemised lines: a ruled table with a header row, the number, the description and detail, tabular right-aligned figures, and the sum in the display voice. */
+.q2-lines { scroll-margin-top: 16px; }
 .q2-lines .q2-h2:focus, .q2-lines .q2-h2:focus-visible { outline: none; }
+.q2-lines__head { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 12px; padding: 0 0 8px; color: var(--ink-3); }
+.q2-lines__head span:last-child { text-align: right; }
 .q2-lines__list { list-style: none; margin: 0; padding: 0; }
-.q2-line { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 14px 0; border-top: 1px solid var(--line); }
-.q2-line:first-child { border-top: 0; padding-top: 4px; }
-.q2-line__main { flex: 1 1 auto; min-width: 0; }
-.q2-line__label { margin: 0; font-weight: var(--fw-semibold); font-size: var(--fs-16); line-height: 1.35; overflow-wrap: anywhere; }
-.q2-line__detail { margin: 2px 0 0; font-size: var(--fs-14); line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
-.q2-line__amt { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-variant-numeric: tabular-nums; text-align: right; }
-.q2-line__total { font-weight: var(--fw-bold); font-size: var(--fs-16); line-height: 1.35; }
-.q2-line__qty { font-size: var(--fs-14); color: var(--text-2); line-height: 1.3; white-space: nowrap; }
-.q2-lines__sum {
-  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4);
-  margin-top: var(--space-2); padding-top: var(--space-4); border-top: 2px solid var(--text-3);
-}
-.q2-lines__sumlabel { font-size: var(--fs-17); font-weight: var(--fw-bold); }
-.q2-lines__sumvalue { font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.q2-lines--compact { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.q2-line { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; padding: 16px 0; border-top: 1px solid var(--rule); }
+.q2-lines__list > .q2-line:last-child { border-bottom: 1px solid var(--rule); }
+.q2-line__n { color: var(--ink-3); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.q2-line__main { min-width: 0; }
+.q2-line__label { margin: 0; font-weight: 500; font-size: var(--body); line-height: 1.4; overflow-wrap: anywhere; }
+.q2-line__detail { margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--ink-2); overflow-wrap: anywhere; }
+.q2-line__amt { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-variant-numeric: tabular-nums; text-align: right; }
+.q2-line__total { font-weight: 600; font-size: var(--body); line-height: 1.4; }
+.q2-line__qty { font-size: 14px; color: var(--ink-2); line-height: 20px; white-space: nowrap; }
+.q2-lines__sum { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 0; padding-top: 20px; border-top: 0; }
+.q2-lines__sumvalue { font-family: var(--f-display); font-size: clamp(32px, 9vw, 40px); font-weight: 650; font-stretch: 108%; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; }
+.q2-lines__sum { border-top: 2px solid var(--ink); margin-top: -1px; }
+.q2-lines--compact { padding: 0; border: 0; }
 .q2-lines--compact .q2-h2 { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.q2-lines--compact .q2-line:first-child { padding-top: 14px; border-top: 0; }
 
-/* Possible extras: listed apart, quieter, never counted in the total. */
-.q2-extras { margin-top: var(--space-5); padding: var(--space-4); border: 1.5px dashed var(--field-border); border-radius: var(--r-md); background: var(--surface-2); }
-.q2-extras__h { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); line-height: 1.3; letter-spacing: -0.01em; }
-.q2-extras__note { margin: 2px 0 var(--space-2); font-size: var(--fs-14); line-height: 1.45; color: var(--text-2); }
-.q2-extras .q2-line { padding-block: 10px; }
-.q2-extras .q2-line:first-child { padding-top: 6px; border-top: 0; }
-.q2-line--extra .q2-line__label { font-weight: var(--fw-medium); }
-.q2-line--extra .q2-line__total { color: var(--text-2); font-weight: var(--fw-semibold); }
+/* Possible extras: listed apart, never counted in the total. A heading and the same rows. */
+.q2-extras { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--ink); }
+.q2-extras__h { margin: 0; font: 600 var(--h3)/1.25 var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.q2-extras__note { margin: 4px 0 16px; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.q2-line--extra .q2-line__label { font-weight: 400; }
+.q2-line--extra .q2-line__total { color: var(--ink-2); font-weight: 500; }
 
 /* Notes and facts */
-.q2-notes__text { margin: 0; color: var(--text-2); line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
-.q2-facts { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.q2-notes__text + .q2-facts { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--line); }
-.q2-facts li { display: flex; align-items: flex-start; gap: 12px; line-height: 1.5; }
-.q2-facts svg { flex: none; margin-top: 2px; color: var(--text-2); }
-.q2-facts strong { font-weight: var(--fw-bold); }
+.q2-notes__text { margin: 0; color: var(--ink); font-size: var(--body); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; max-width: 40em !important; }
+.q2-facts { display: block; margin: 0; padding: 0; list-style: none; }
+.q2-notes__text + .q2-facts { margin-top: 24px; }
+.q2-facts li { padding: 16px 0; border-top: 1px solid var(--rule); font-size: var(--body); line-height: 1.45; }
+.q2-facts strong { font-weight: 600; }
 
-/* Payment and certificate: sample wording, labelled as such. */
-.q2-terms__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
-.q2-terms__head .q2-h2 { margin: 0; }
-/* The "Idea from us" tag sits under the heading (an idea block: tagged, and hidden under "Only my content"). */
-.q2-terms__head { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+/* Payment and certificate wording is an IDEA from us: the dashed rule, the shared tag directly under it, then the heading. */
+.q2-terms { padding-top: 16px; border-top: 1px dashed var(--rule-d); }
+.q2-terms__head { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 0; }
+.q2-terms__head .q2-h2 { margin: 0 0 16px; }
 .q2-terms__tag { display: inline-flex; max-width: 100%; }
 
-/* Trust badges */
-.q2-badges { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.q2-badge { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); }
-.q2-badge__mark {
-  display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%;
-  background: var(--ok-tint); color: var(--ok-text); box-shadow: inset 0 0 0 1.5px var(--ok);
-}
-.q2-badge__text { min-width: 0; font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
+/* His two credentials as typography (the landing's spec strip): the figure in the logo voice, the descriptor beside it. */
+.q2-badges { display: block; margin: 0; padding: 0; list-style: none; }
+.q2-trust { --q2-fig-col: 128px; }
+@media (min-width: 720px) { .q2-trust { --q2-fig-col: 168px; } }
+@media (min-width: 1024px) { .q2-trust { --q2-fig-col: 208px; } }
+.q2-trust__k { margin: 0 0 16px; }
+.q2-badge { display: grid; grid-template-columns: var(--q2-fig-col) minmax(0, 1fr); align-items: baseline; column-gap: 12px; padding: 16px 0; border-top: 1px solid var(--rule); }
+.q2-badge__fig { font-size: var(--fig); line-height: 1; letter-spacing: -0.02em; }
+.q2-badge__text { min-width: 0; font-size: var(--body); line-height: 1.45; overflow-wrap: anywhere; }
+.q2-badge__fig + .q2-badge__text { grid-column: 2; }
+.q2-badge > .q2-badge__text:only-child { grid-column: 1 / -1; }
 
-/* Steps */
-.q2-steps__list { display: flex; flex-direction: column; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
-.q2-step { position: relative; display: flex; align-items: flex-start; gap: 14px; }
-.q2-step:not(:last-child)::before { content: ''; position: absolute; left: 15px; top: 36px; bottom: -14px; width: 2px; background: var(--line); }
-.q2-step__num {
-  display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%;
-  background: var(--surface); color: var(--text-2); box-shadow: inset 0 0 0 1.5px var(--field-border);
-  font-size: var(--fs-14); font-weight: var(--fw-heavy);
-}
-/* Done is green (the same as the enquiry confirmation); the one step waiting on Daniel is amber, like the "Pencilled in" pill. */
-.q2-step.is-done .q2-step__num { background: var(--ok); color: var(--bg); box-shadow: none; }
-.q2-step.is-done:not(:last-child)::before { background: var(--ok); }
-.q2-step.is-current .q2-step__num { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); box-shadow: inset 0 0 0 1.5px var(--status-on-the-way-fg); }
-.q2-step__title { margin: 4px 0 0; font-weight: var(--fw-bold); line-height: 1.3; }
-.q2-step__text { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.5; }
+/* Steps: the logo-voice numerals, a rule above each row */
+.q2-steps__list { display: block; margin: 0; padding: 0; list-style: none; }
+.q2-step { display: grid; grid-template-columns: 88px minmax(0, 1fr); column-gap: 8px; padding: 20px 0; border-top: 1px solid var(--rule); }
+.q2-step__num { font-size: 44px; line-height: 0.95; letter-spacing: -0.04em; color: var(--ink); }
+.q2-step.is-done .q2-step__num { color: var(--ink-3); }
+.q2-step.is-current { border-top: 2px solid var(--ink); }
+.q2-step__title { margin: 4px 0 0; font: 600 var(--h3)/1.25 var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.q2-step__text { margin: 4px 0 0; color: var(--ink); font-size: var(--body); line-height: 1.45; max-width: 32em; }
 
 /* Contact */
-.q2-contact__intro { margin: 0 0 var(--space-4); color: var(--text-2); line-height: 1.55; }
+.q2-contact__intro { margin: 0 0 24px; color: var(--ink); font-size: var(--body); line-height: 1.5; max-width: 32em; }
 
 /* Lists on the quiet pages */
-.q2-list { display: flex; flex-direction: column; gap: 14px; margin: 0 0 var(--space-4); padding: 0; list-style: none; }
-.q2-list li { display: flex; align-items: flex-start; gap: 12px; line-height: 1.5; color: var(--text-2); }
-.q2-list svg { flex: none; margin-top: 2px; color: var(--text-2); }
-.q2-ref-line { margin: 0 0 var(--space-4); font-size: var(--fs-14); overflow-wrap: anywhere; }
-.q2-demo .q2-muted { margin: 0 0 var(--space-4); }
-.q2-reasonline { margin: 0; font-size: var(--fs-17); line-height: 1.5; overflow-wrap: anywhere; }
+.q2-list { display: block; margin: 24px 0 0; padding: 0; list-style: none; }
+.q2-list li { padding: 14px 0; border-top: 1px solid var(--rule); font-size: var(--body); line-height: 1.45; color: var(--ink); }
+.q2-list li:last-child { border-bottom: 1px solid var(--rule); }
+.q2-ref-line { margin: 16px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.q2-demo { border-top: 1px dashed var(--rule-d); }
+.q2-demo { padding-top: 16px; }
+.q2-demo .q2-muted { margin: 0 0 24px; font-size: var(--body); line-height: 1.5; }
+.q2-help .q2-actions .q2-home { align-self: flex-start; margin-block: -4px 0; }
+.q2-reasonline { margin: 0; font-size: var(--body); line-height: 1.5; overflow-wrap: anywhere; }
 
-/* ================= Footer: finished and quiet, like the landing's: his logo, phone, email, the area, his credentials, a small copyright line ================= */
-.q2-footer {
-  margin-top: var(--space-7); background: var(--panel); color: var(--panel-text); border-top: 1px solid var(--panel-2);
-  padding-block: var(--space-6) calc(var(--space-6) + var(--safe-bottom));
-}
-.q2-footer__inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
-.q2-footer__logo { display: inline-flex; align-items: center; justify-self: start; min-height: var(--tap); border-radius: var(--r-md); text-decoration: none; }
-.q2-footer__logo .q2-logo { --logo-h: 52px; }
-.q2-footer__links { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.q2-footer__links a, .q2-footer__line {
-  display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); overflow-wrap: anywhere;
-  color: var(--panel-text); font-size: var(--fs-15); text-decoration: none;
-}
-.q2-footer__line { color: var(--panel-muted); }
-.q2-footer__links a:hover span { text-decoration: underline; text-underline-offset: 3px; }
-.q2-footer__links svg { flex: none; color: var(--panel-muted); }
-.q2-footer__base { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-4); border-top: 1px solid var(--panel-2); }
-.q2-footer__creds, .q2-footer__copy { margin: 0; font-size: var(--fs-14); line-height: 1.5; color: var(--panel-muted); }
-.q2-footer__copy { font-size: var(--fs-12); }
-.q2-footer__cred { white-space: nowrap; }
-@media (max-width: 479px) { .q2-footer__cred { display: block; } .q2-footer__sep { display: none; } }
-@media (min-width: 768px) {
-  .q2-footer { padding-block: var(--space-7) var(--space-6); }
-  .q2-footer__inner { grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: var(--space-7); row-gap: var(--space-5); }
-  .q2-footer__links { grid-column: 2; grid-row: 1; }
-  .q2-footer__base { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: var(--space-5); padding-top: var(--space-5); }
+/* ================= footer: the black ground and the landing's keyed rows, without the stripes ================= */
+.q2-footer { margin-top: var(--sec-l); background: var(--black); color: var(--on-black); padding-block: 48px calc(48px + var(--safe-bottom)); }
+.q2-footer__inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+.q2-footer__logo { display: block; justify-self: start; line-height: 0; text-decoration: none; }
+.q2-footer__logo .q2-logo { --logo-h: 88px; }
+.q2-footer__list { margin: 0; padding: 0; }
+.q2-footer__list > div { padding: 16px 0; border-top: 1px solid var(--rule-b); }
+.q2-footer__list > div:last-child { border-bottom: 1px solid var(--rule-b); }
+.q2-footer__list dt { font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--on-black-2); }
+.q2-footer__list dd { margin: 6px 0 0; font-size: 20px; line-height: 1.3; font-weight: 500; letter-spacing: -0.01em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.q2-footer__list dd.q2-footer__phone { font-family: var(--f-display); font-stretch: 108%; font-weight: 650; font-size: var(--phone-fs); line-height: 1.1; letter-spacing: -0.03em; }
+.q2-footer__list a { display: inline-flex; align-items: center; min-height: 44px; color: inherit; text-decoration: none; border-bottom: 1px solid transparent; }
+@media (hover: hover) { .q2-footer__list a:hover { border-bottom-color: currentColor; } }
+.q2-footer__legal { margin: 0; font-size: 14px; line-height: 20px; color: var(--on-black-2); }
+@media (min-width: 1024px) {
+  .q2-footer { padding-block: 64px calc(64px + var(--safe-bottom)); }
+  .q2-footer__inner { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+  .q2-footer__logo { grid-column: 1 / 5; }
+  .q2-footer__logo .q2-logo { --logo-h: 112px; }
+  .q2-footer__list { grid-column: 5 / 11; }
+  .q2-footer__list dd { font-size: 24px; }
+  .q2-footer__legal { grid-column: 5 / 11; margin-top: -16px; }
 }
 /* On phones the open page ends with the sticky accept bar floating over its last pixels. */
-.q2-app[data-state="open"] .q2-footer { padding-bottom: calc(var(--h-stickybar) + var(--safe-bottom) + var(--space-6)); }
-@media (min-width: 960px) { .q2-app[data-state="open"] .q2-footer { padding-bottom: var(--space-7); } }
+.q2-app[data-state="open"] .q2-footer { padding-bottom: calc(var(--bar-h) + var(--safe-bottom) + 24px); }
+@media (min-width: 960px) { .q2-app[data-state="open"] .q2-footer { padding-bottom: 64px; } }
 
-/* ================= Sticky accept bar (phones and tablets, once the card's button has scrolled away) ================= */
+/* ================= sticky accept bar (phones and tablets, once the card's button has scrolled away) ================= */
 .q2-sticky {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sticky);
-  padding: 10px max(var(--gutter), var(--safe-right)) calc(10px + var(--safe-bottom)) max(var(--gutter), var(--safe-left));
-  background: var(--surface);  /* OPAQUE: nothing of the page shows through (no translucency, no blur), so no line of copy ghosts behind it */
-  border-top: 1px solid var(--line); box-shadow: var(--shadow-bar);
-  transform: translateY(110%); visibility: hidden;
-  transition: transform var(--dur-base) var(--q2-ease), visibility 0s linear var(--dur-base);
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-bar); padding: 12px max(var(--m), var(--safe-right)) calc(12px + var(--safe-bottom)) max(var(--m), var(--safe-left));
+  background: var(--paper); border-top: 1px solid var(--ink);
+  transform: translateY(105%); visibility: hidden; transition: transform var(--t-slow) ease, visibility 0s linear var(--t-slow);
 }
-.q2-sticky.is-on { transform: none; visibility: visible; transition-delay: 0s; }
-.q2-sticky__inner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); max-width: 640px; margin-inline: auto; }
+.q2-sticky.is-on { transform: none; visibility: visible; transition: transform var(--t-slow) ease; }
+.q2-sticky__inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 640px; margin-inline: auto; }
 .q2-sticky__total { display: flex; flex-direction: column; margin: 0; min-width: 0; line-height: 1.1; }
-.q2-sticky__total span { font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-2); }
-.q2-sticky__total strong { margin-top: 3px; font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: 1.25; }
-.q2-sticky .ui-btn { flex: none; padding-inline: var(--space-5); }
+.q2-sticky__total span { color: var(--ink-2); }
+.q2-sticky__total strong { margin-top: 4px; font-size: 15px; font-weight: 600; line-height: 20px; }
+.q2-sticky .ui-btn { flex: none; }
+@media (max-width: 359px) { .q2-sticky__total { display: none; } .q2-sticky__inner .ui-btn { flex: 1 1 auto; } }
 @media (min-width: 960px) { .q2-sticky { display: none; } }
 
-/* ================= Sheets: install day, confirm, decline ================= */
-.q2-sheet__lead { margin: 0 0 var(--space-4); color: var(--text-2); font-size: var(--fs-16); line-height: 1.5; }
+/* ================= the shared components on this page and in its sheets: the landing's buttons, fields, rows and rules ================= */
+/* buttons: the primary is the landing's red square (label left, arrow right); the rest are outlined ink, or a text link */
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn {
+  min-height: 56px; padding: 14px 24px; border: 0; border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--ink); color: var(--ink);
+  font: 600 16px/1.2 var(--f); letter-spacing: -0.005em; gap: 16px; justify-content: center; text-align: left; transition: background-color var(--t-fast) ease;
+}
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--sm { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn:active { transform: none; background: var(--ink); color: var(--paper); }
+@media (hover: hover) { :is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn:hover { background: var(--ink); color: var(--paper); } }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--primary { background: var(--red); color: var(--cta-ink); box-shadow: none; justify-content: space-between; gap: 24px; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--primary .ui-btn__icon { display: none; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--primary::after {
+  content: ''; flex: none; width: 20px; height: 20px; background: currentColor; transition: transform var(--t-base) ease;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='square'%3E%3Cpath d='M3 10h13M11 4.5 16.5 10 11 15.5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='square'%3E%3Cpath d='M3 10h13M11 4.5 16.5 10 11 15.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--primary.is-loading::after { display: none; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--primary:active { background: var(--red-deep); color: var(--cta-ink); transform: translateY(1px); }
+@media (hover: hover) {
+  :is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--primary:hover { background: var(--red-deep); color: var(--cta-ink); }
+  :is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--primary:hover::after { transform: translateX(4px); }
+}
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--ghost { min-height: 44px; padding: 0 4px; background: none; box-shadow: none; color: var(--ink-2); font-size: 14px; font-weight: 500; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--ghost:active { background: none; color: var(--ink); }
+@media (hover: hover) { :is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn--ghost:hover { background: none; color: var(--ink); } }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn:disabled, :is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn.is-disabled { background: transparent; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--rule); }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-btn__spinner { width: 16px; height: 16px; border-width: 2px; border-radius: 0; }
+.q2-card .ui-btn, .q2-row .ui-btn, .q2-sheet__actions .ui-btn { min-width: 0; }
+.q2-done, .q2-card .q2-done { align-self: flex-start; min-width: 44px; margin-top: -4px; }
+.q2-sticky .ui-btn { padding-inline: 20px; }
+.q2-sticky .ui-btn--primary { gap: 0; justify-content: center; }   /* "Choose install day" has no arrow here: the bar is narrow and the label is long */
+.q2-sticky .ui-btn--primary::after { display: none; }
+/* the text links (See full breakdown, Not for me, Done, Visit 180 Electrical) use the landing's .lp-link: flush left, 44px high, one underline */
+.q2-app .lp-link--quiet { color: var(--ink-2); }
+
+/* fields, banners, disclosures, chips */
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-field { gap: 8px; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-field__label { color: var(--ink); font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-field__error { gap: 0; color: var(--err); font-size: 15px; font-weight: 500; line-height: 20px; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-field__error svg { display: none; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-textarea {
+  min-height: 96px; padding: 14px 16px; border: 1px solid var(--ink); border-radius: 0; background: var(--field); color: var(--ink); font: 400 18px/1.45 var(--f); transition: none;
+}
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-textarea::placeholder { color: var(--ink-3); }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-textarea:focus, :is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-textarea:focus-visible { border-color: var(--ink); outline: 2px solid var(--ink); outline-offset: 0; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-banner {
+  gap: 0; padding: 0 0 0 16px; border: 0; border-left: 2px solid var(--ink); border-radius: 0; background: none; color: var(--ink); font-size: 16px; line-height: 24px;
+}
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-banner--danger { border-left-width: 4px; }
+:is(.q2-app, [data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-banner__icon { display: none; }
+.q2-disclosure.ui-disclosure { border: 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); border-radius: 0; background: none; }
+.q2-disclosure .ui-disclosure__summary { min-height: 56px; padding: 0; border-radius: 0; color: var(--ink); font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.q2-disclosure .ui-disclosure__meta { color: var(--ink-2); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.q2-disclosure .ui-disclosure__chev { color: var(--ink); transition: none; }
+.q2-disclosure .ui-disclosure__body { padding: 0 0 20px; color: var(--ink); font-size: 16px; line-height: 24px; animation: none; }
+
+/* ================= sheets: square, the 1px ink edge (--shadow-2) from 768, the full width on a phone ================= */
+:is([data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]).ui-sheet { border-radius: 0; background: var(--paper); color: var(--ink); }
+:is([data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-sheet__handle { display: none; }
+/* The head of every quote sheet is js/quote/parts.js SheetBar, the funnel's chrome: a black bar (his logo, "Close" as an underlined word), then "STEP 1 OF 2" and the title on the paper. */
+.q2-sheetbar { background: var(--paper); }
+.q2-sheetbar__bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 0 24px; background: var(--black); color: var(--on-black); box-shadow: 0 1px 0 var(--rule-b); }
+.q2-sheetbar .q2-logo--header { --logo-h: 40px; }
+.q2-sheetbar__logo { display: block; line-height: 0; }
+.q2-sheetbar__close { display: inline-flex; align-items: center; justify-content: flex-end; min-width: 44px; min-height: 44px; margin-right: 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--on-black); font: 600 14px/1 var(--f); letter-spacing: -0.005em; cursor: pointer; }
+.q2-sheetbar__close span { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.q2-sheetbar__head { padding: 24px 24px 16px; border-bottom: 1px solid var(--rule); }
+.q2-sheetbar__step { margin: 0 0 8px; }
+.q2-sheetbar__title { margin: 0; font-family: var(--f-display); font-size: 28px; font-weight: 650; font-stretch: 108%; letter-spacing: -0.03em; line-height: 1.1; text-wrap: balance; }
+:is([data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-sheet__body { background: var(--paper); padding: 24px 24px 24px; }
+:is([data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-sheet__footer { background: var(--paper); border-top: 1px solid var(--ink); padding: 12px 24px calc(12px + var(--safe-bottom)); }
+:is([data-testid="q2-accept-sheet"], [data-testid="q2-decline-sheet"], [data-testid="q2-days-sheet"]) .ui-icon-btn { border-radius: 0; color: var(--ink); }
+.q2-sheet__lead { margin: 0 0 24px; color: var(--ink); font-size: var(--body); line-height: 1.5; }
 .q2-sheet__lead:focus, .q2-sheet__lead:focus-visible, .q2-sheet__h:focus, .q2-sheet__h:focus-visible { outline: none; }
-.q2-sheet__h { margin: 0 0 var(--space-3); font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: -0.01em; }
-.q2-sheet__small { margin: var(--space-4) 0 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.5; }
-.q2-sheet__foot { display: flex; flex-direction: column; gap: var(--space-2); }
-.q2-sheet__sum { margin: 0; min-height: 1.4em; text-align: center; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.4; }
-.q2-sheet__actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); }
+.q2-sheet__h { margin: 0 0 16px; font: 600 var(--h3)/1.25 var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.q2-sheet__small { margin: 24px 0 0; color: var(--ink-2); font-size: 14px; line-height: 20px; }
+.q2-sheet__foot { display: flex; flex-direction: column; gap: 8px; }
+.q2-sheet__sum { margin: 0; min-height: 1.4em; text-align: left; color: var(--ink-2); font-size: 14px; font-weight: 500; line-height: 20px; }
+.q2-sheet__actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
 .q2-sheet__actions--even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .q2-sheet__actions--stack { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 479px) { .q2-sheet__actions--even { grid-template-columns: minmax(0, 1fr); } }
-.q2-sheet__actions .ui-btn { min-width: 0; padding-inline: var(--space-4); }
-.q2-sheet__field { margin-bottom: var(--space-4); }
-/* On the narrowest phones the Back button keeps only its arrow, so "Accept quote" stays on one line (its name stays for screen readers). */
+.q2-sheet__field { margin-bottom: 24px; }
+.q2-problem { margin-bottom: 24px; }
 @media (max-width: 359px) {
   .q2-back { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .q2-sheet__actions .ui-btn:first-child { padding-inline: var(--space-3); }
+  .q2-sheet__actions .ui-btn:first-child { padding-inline: 16px; }
 }
-.q2-problem { margin-bottom: var(--space-4); }
-.q2-alts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
-.q2-alt {
-  display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 6px 14px;
-  border: 1.5px solid var(--field-border); border-radius: var(--r-pill); background: var(--surface); color: var(--text);
-  font-size: var(--fs-15); font-weight: var(--fw-semibold); line-height: 1.25; text-align: left; cursor: pointer;
-}
-.q2-alt svg { flex: none; color: var(--text-2); }
-.q2-alt:active { background: var(--surface-2); }
+.q2-alts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.q2-alt { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 16px; border: 0; border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--ink); color: var(--ink); font: 600 15px/1.25 var(--f); text-align: left; cursor: pointer; }
+@media (hover: hover) { .q2-alt:hover { background: var(--ink); color: var(--paper); } }
+.q2-alt:active { background: var(--ink); color: var(--paper); }
 
-/* The install-day sheet: the list scrolls under a soft fade above the footer, and anything scrolled into view (a focused day) stops short of it. */
-[data-testid="q2-accept-sheet"] .ui-sheet__body { scroll-padding-bottom: 96px; padding-bottom: var(--space-6); }
-[data-testid="q2-accept-sheet"] .ui-sheet__footer { position: relative; }
-[data-testid="q2-accept-sheet"] .ui-sheet__footer::before {
-  content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; pointer-events: none;
-  background: linear-gradient(to top, var(--surface), transparent);
-}
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  [data-testid="q2-accept-sheet"] .ui-sheet__footer::before { background: linear-gradient(to top, var(--surface), color-mix(in srgb, var(--surface) 0%, transparent)); }
-}
+/* "Soonest available": a ruled row (ink rule above, hairline below), one tap to choose the first free half-day (ink when chosen, never red) */
+.q2-soonest { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 64px; margin: 0 0 32px; padding: 12px 0; border: 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); border-radius: 0; background: transparent; box-shadow: none; color: var(--ink); text-align: left; cursor: pointer; transition: none; }
+.q2-soonest__text { display: flex; flex: 1 1 auto; flex-direction: column; gap: 4px; min-width: 0; }
+.q2-soonest__k { color: var(--ink-2); }
+.q2-soonest__v { font-size: var(--body); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.q2-soonest__go { display: inline-flex; align-items: center; flex: none; gap: 8px; font-size: 15px; font-weight: 600; color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.q2-soonest.is-selected { border-top-width: 2px; padding-top: 11px; }
+.q2-soonest.is-selected .q2-soonest__go { text-decoration: none; }
+.q2-soonest.is-selected .q2-soonest__go::before { content: ''; width: 10px; height: 10px; background: currentColor; }
+@media (hover: hover) { .q2-soonest:not(.is-selected):hover .q2-soonest__go { text-decoration-thickness: 2px; } }
 
-/* "Soonest available": one tap to choose the first free half-day. */
-.q2-soonest {
-  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; margin: 0 0 var(--space-4); padding: 10px 14px;
-  border: 1.5px solid var(--field-border); border-radius: var(--r-lg); background: var(--surface); color: var(--text);
-  text-align: left; cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
-}
-.q2-soonest__icon { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); color: var(--text); }
-.q2-soonest__text { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
-.q2-soonest__k { font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-2); line-height: 1.3; }
-.q2-soonest__v { font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
-.q2-soonest__go { flex: none; font-size: var(--fs-15); font-weight: var(--fw-bold); color: var(--text); }
-.q2-soonest.is-selected { border-color: var(--cta); background: var(--cta-soft); box-shadow: inset 0 0 0 1px var(--cta); }
-.q2-soonest.is-selected .q2-soonest__icon { background: var(--cta); color: var(--cta-ink); }
-@media (hover: hover) { .q2-soonest:not(.is-selected):hover { background: var(--surface-2); } }
-
-/* The days: one horizontal strip of chips with the month written where it changes. It bleeds to the sheet's edges and fades out there. */
-.q2-strip {
-  position: relative; display: flex; align-items: stretch; gap: 8px;
-  margin: 0 calc(-1 * var(--space-5)) var(--space-3); padding: 4px var(--space-5) 8px;
-  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 28px), transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 28px), transparent 100%);
-}
+/* The days: a horizontal strip of square segments (weekday, the date in the logo voice, AM and PM marks), each month named above its own days (it sticks to the left edge while they scroll). */
+.q2-strip { position: relative; display: flex; align-items: flex-start; gap: 24px; margin: 0 -24px 24px; padding: 0 24px 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .q2-strip::-webkit-scrollbar { display: none; }
-.q2-strip__month {
-  flex: none; align-self: center; writing-mode: vertical-rl; transform: rotate(180deg);
-  font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-2);
-}
-.q2-chip {
-  position: relative; display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  width: 64px; min-height: 88px; padding: 8px 4px;
-  border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
-  cursor: pointer; scroll-snap-align: center;
-  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
-}
-.q2-chip:active { transform: translateY(1px); }
+.q2-strip__group { display: flex; flex: none; flex-direction: column; gap: 8px; }
+.q2-strip__month { position: sticky; left: 0; align-self: flex-start; margin: 0; font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.q2-strip__days { display: flex; }
+.q2-strip__days > .q2-chip:first-child { margin-left: 0; }
+.q2-chip { position: relative; display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 68px; min-height: 96px; padding: 8px 4px; border: 0; border-radius: 0; background: var(--field); box-shadow: inset 0 0 0 1px var(--ink); color: var(--ink); cursor: pointer; scroll-snap-align: center; margin-left: -1px; transition: none; }
 .q2-chip__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.q2-chip__dow { font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); line-height: 1.2; }
-.q2-chip__num { font-family: var(--font-display); font-size: 1.5rem; font-weight: var(--fw-heavy); letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
-/* AM and PM marks: a solid green mark is free, a crossed-out grey one is booked (words as well as colour). */
-.q2-chip__halves { display: flex; gap: 3px; margin-top: 4px; }
-.q2-chip__half {
-  display: block; min-width: 25px; padding: 1px 3px; border: 1px solid transparent; border-radius: 6px;
-  font-size: var(--fs-12); font-style: normal; font-weight: var(--fw-bold); line-height: 1.3; text-align: center;
-}
-.q2-chip__half.is-free { background: var(--ok-tint); color: var(--ok-text); border-color: var(--ok); }
-.q2-chip__half.is-booked { color: var(--text-3); text-decoration: line-through; text-decoration-thickness: 1.5px; border-style: dashed; border-color: var(--line); }
-.q2-chip.is-viewed { border-color: var(--cta); background: var(--cta-soft); box-shadow: inset 0 0 0 1px var(--cta); }
-.q2-chip.is-picked::after { content: ''; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--cta); }
-.q2-chip:has(.q2-chip__input:focus-visible) { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
-@media (hover: hover) { .q2-chip:not(.is-viewed):hover { background: var(--surface-2); } }
+.q2-chip__dow { font: 600 12px/16px var(--f); font-stretch: 125%; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.q2-chip__num { font-size: 1.5rem; letter-spacing: -0.03em; line-height: 1.05; }
+.q2-chip__halves { display: flex; gap: 4px; margin-top: 4px; }
+.q2-chip__half { display: block; min-width: 24px; padding: 0; border: 0; border-radius: 0; background: none; font: 600 12px/16px var(--f); font-style: normal; text-align: center; }
+.q2-chip__half.is-free { color: var(--ink); }
+.q2-chip__half.is-booked { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.q2-chip.is-viewed { background: var(--ink); color: var(--paper); box-shadow: inset 0 0 0 1px var(--ink); }
+.q2-chip.is-viewed .q2-chip__dow, .q2-chip.is-viewed .q2-chip__half, .q2-chip.is-viewed .q2-chip__half.is-free { color: var(--paper); }
+.q2-chip.is-viewed .q2-chip__half.is-booked { color: var(--paper); opacity: 0.6; }
+.q2-chip.is-picked::after { content: ''; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; background: currentColor; }
+.q2-chip:has(.q2-chip__input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 3px; z-index: 1; }
+@media (hover: hover) { .q2-chip:not(.is-viewed):hover { background: var(--paper-2); } }
 
-/* "1 Choose a day" / "2 Choose morning or afternoon": the two things to pick, in order, in neutral ink (red stays for what is chosen). */
-.q2-pickstep { display: flex; align-items: center; gap: 10px; margin: 0 0 var(--space-2); font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: 1.3; }
-.q2-pickstep__n {
-  display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%;
-  background: var(--text); color: var(--bg); font-size: var(--fs-12); font-weight: var(--fw-heavy); line-height: 1;
-}
-.q2-slots__hint {
-  margin: var(--space-2) 0 0; padding: 14px 16px; border: 1.5px dashed var(--field-border); border-radius: var(--r-md);
-  color: var(--text-2); font-size: var(--fs-15); line-height: 1.45; text-align: center;
-}
+/* "Choose a day" and "Choose morning or afternoon": label-voice lines (no numerals), and the plain Free / Booked key beside the first. */
+.q2-pickhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin: 0 0 12px; }
+.q2-pickstep { margin: 0; }
+.q2-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; color: var(--ink-2); font: 500 13px/16px var(--f); }
+.q2-key__item { display: inline-flex; align-items: center; gap: 6px; }
 
-/* The two halves of the chosen day: full-width buttons, a taken half shown as "Booked" (never an empty gap). */
-.q2-slots { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
-.q2-day__head { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: -0.01em; line-height: 1.3; color: var(--text); }
-.q2-day__opts { display: flex; flex-direction: column; gap: var(--space-2); }
-.q2-slot {
-  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; padding: 10px 16px;
-  border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text); cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
-}
-.q2-slot:active { transform: translateY(1px); }
+/* The two halves of the chosen day: ruled radio rows with a filled square marker, a taken half shown as "Booked" (never an empty gap). */
+.q2-slots { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.q2-slots > .q2-pickstep { margin: 0; }
+.q2-day__head { margin: 0; font: 600 var(--h3)/1.25 var(--f); font-stretch: 104%; letter-spacing: -0.015em; color: var(--ink); }
+.q2-day__opts { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--ink); }
+.q2-slot { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; background: none; color: var(--ink); cursor: pointer; transition: none; }
+.q2-slot::after { content: ''; position: absolute; inset: -1px -12px; border: 2px solid transparent; pointer-events: none; }
 .q2-slot__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .q2-slot__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.q2-slot__part { font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.25; }
-.q2-slot__arrive { font-size: var(--fs-14); color: var(--text-2); line-height: 1.3; }
-.q2-slot__tick {
-  display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 1.5px solid var(--field-border); border-radius: 50%;
-  background: transparent; color: transparent;
-  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-.q2-slot.is-selected { border-color: var(--cta); background: var(--cta-soft); box-shadow: inset 0 0 0 1px var(--cta); }
-.q2-slot.is-selected .q2-slot__tick { border-color: var(--cta); background: var(--cta); color: var(--cta-ink); }
-.q2-slot.is-taken { border-style: dashed; background: var(--surface-2); cursor: not-allowed; }
-.q2-slot.is-taken .q2-slot__arrive { font-weight: var(--fw-semibold); letter-spacing: 0.02em; }
+.q2-slot__part { font: 600 19px/24px var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.q2-slot__arrive { font-size: 14px; color: var(--ink-2); line-height: 20px; }
+.q2-slot__tick, .q2-reason__tick { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 1px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); transition: none; }
+.q2-slot__tick::after, .q2-reason__tick::after { content: ''; width: 12px; height: 12px; background: currentColor; opacity: 0; }
+.q2-slot.is-selected::after { border-color: var(--ink); }
+.q2-slot.is-selected .q2-slot__tick::after, .q2-reason.is-selected .q2-reason__tick::after { opacity: 1; }
+.q2-slot.is-taken { background: none; cursor: not-allowed; }
 .q2-slot.is-taken .q2-slot__input { cursor: not-allowed; }
 .q2-slot.is-taken .q2-slot__tick { display: none; }
-.q2-slot.is-taken .q2-slot__part, .q2-slot.is-taken .q2-slot__arrive { color: var(--text-2); }
-.q2-slot:has(.q2-slot__input:focus-visible), .q2-reason:has(.q2-reason__input:focus-visible) {
-  outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset);
-}
-@media (hover: hover) { .q2-slot:not(.is-taken):not(.is-selected):hover { background: var(--surface-2); } }
+.q2-slot.is-taken .q2-slot__part, .q2-slot.is-taken .q2-slot__arrive { color: var(--ink-3); }
+.q2-slot:has(.q2-slot__input:focus-visible), .q2-reason:has(.q2-reason__input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-.q2-empty { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-5) 0; text-align: center; }
-.q2-empty > svg { color: var(--text-3); }
-.q2-empty__title { margin: var(--space-2) 0 0; font-size: var(--fs-17); font-weight: var(--fw-bold); }
-.q2-empty__text { margin: 0 0 var(--space-3); max-width: 38ch !important; color: var(--text-2); }
+.q2-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 24px 0; text-align: left; }
+.q2-empty__title { margin: 0; font: 600 20px/25px var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.q2-empty__text { margin: 0 0 16px; max-width: 38ch !important; color: var(--ink); }
 .q2-empty .q2-row { width: 100%; }
 
-/* Confirm step: the day on one line, the window under it, Change below the text, then the figures, the agreement and Accept right under it. */
-.q2-confirm__slot { display: flex; align-items: flex-start; gap: 14px; padding: 14px; border: 1.5px solid var(--cta); border-radius: var(--r-lg); background: var(--cta-soft); }
+/* Confirm step: the day (the date in the logo voice), the window, Change as a text link, then the figures as ruled rows and the agreement. */
+.q2-confirm__slot { display: flex; align-items: flex-start; gap: 20px; padding: 16px 0; border: 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); border-radius: 0; background: none; }
 .q2-confirm__when { flex: 1 1 auto; min-width: 0; }
-.q2-confirm__day { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); line-height: 1.25; }
-.q2-confirm__part { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.4; }
-.q2-changebtn {
-  display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); margin: 4px 0 -8px -10px; padding: 0 10px;
-  border: 0; border-radius: var(--r-pill); background: none; color: var(--text); font-size: var(--fs-15); font-weight: var(--fw-bold); cursor: pointer;
-}
-.q2-changebtn svg { flex: none; color: var(--text-2); }
-.q2-changebtn span { text-decoration: underline; text-decoration-thickness: 1px; text-decoration-color: var(--text-3); text-underline-offset: 4px; }
-.q2-confirm__rows, .q2-kv { display: flex; flex-direction: column; margin: var(--space-3) 0 0; }
-.q2-kv { margin: 0; }
-.q2-confirm__rows > div, .q2-kv > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); padding: 10px 0; border-top: 1px solid var(--line); }
-.q2-kv > div { padding: 12px 0; }
-.q2-confirm__rows dt, .q2-kv dt { color: var(--text-2); }
-.q2-confirm__rows dd, .q2-kv dd { margin: 0; min-width: 0; font-weight: var(--fw-semibold); text-align: right; overflow-wrap: anywhere; }
-.q2-confirm__sum dd, .q2-kv__sum dd { font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
-.q2-confirm__fine { margin: var(--space-3) 0 var(--space-4); color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
-.q2-confirm__fine + .q2-sheet__actions, .q2-problem + .q2-sheet__actions { margin-top: var(--space-2); }
+.q2-confirm__day { margin: 0; font: 600 20px/25px var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.q2-confirm__part { margin: 2px 0 0; color: var(--ink-2); font-size: 15px; line-height: 22px; }
+.q2-changebtn { display: inline-flex; align-items: center; min-height: 44px; margin: 4px 0 -8px 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; }
+.q2-changebtn span { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.q2-confirm__rows, .q2-kv { display: flex; flex-direction: column; margin: 0; }
+.q2-confirm__rows > div, .q2-kv > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.q2-confirm__rows dt, .q2-kv dt { color: var(--ink-2); }
+.q2-confirm__rows dd, .q2-kv dd { margin: 0; min-width: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.q2-confirm__sum dd, .q2-kv__sum dd { font-family: var(--f-display); font-stretch: 108%; font-size: 24px; font-weight: 650; letter-spacing: -0.03em; }
+.q2-confirm__fine { margin: 16px 0 24px; color: var(--ink-2); font-size: 14px; line-height: 20px; }
+.q2-confirm__fine + .q2-sheet__actions, .q2-problem + .q2-sheet__actions { margin-top: 8px; }
 
-/* Decline reasons */
-.q2-reasons { min-width: 0; margin: 0 0 var(--space-4); padding: 0; border: 0; }
-.q2-reasons__legend { margin-bottom: var(--space-3); font-size: var(--fs-15); font-weight: var(--fw-bold); }
-.q2-reasons__list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.q2-reason {
-  position: relative; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 16px;
-  border: 1.5px solid var(--field-border); border-radius: var(--r-pill); background: var(--surface); color: var(--text);
-  font-size: var(--fs-16); font-weight: var(--fw-semibold); line-height: 1.2; cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
+/* Decline reasons: ruled rows with a square tick-box look, one answer */
+.q2-reasons { min-width: 0; margin: 0 0 24px; padding: 0; border: 0; }
+.q2-reasons__legend { margin-bottom: 12px; padding: 0; }
+.q2-reasons__list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--ink); }
+.q2-reason { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; background: none; color: var(--ink); font-size: 17px; font-weight: 500; line-height: 24px; cursor: pointer; transition: none; }
+.q2-reason::after { content: ''; position: absolute; inset: -1px -12px; border: 2px solid transparent; pointer-events: none; }
 .q2-reason__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.q2-reason.is-selected { background: var(--cta); border-color: var(--cta); color: var(--cta-ink); font-weight: var(--fw-bold); }
+.q2-reason.is-selected { background: none; color: var(--ink); font-weight: 600; }
+.q2-reason.is-selected::after { border-color: var(--ink); }
 
-/* ================= Date box and status ================= */
-.q2-datebox {
-  display: inline-flex; flex-direction: column; align-items: center; flex: none; width: 66px; overflow: hidden;
-  border: 1.5px solid var(--line); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-1);
-  line-height: 1;
-}
-.q2-datebox__mon { width: 100%; padding: 4px 0; background: var(--text); color: var(--bg); font-size: var(--fs-12); font-weight: var(--fw-heavy); letter-spacing: 0.08em; text-align: center; text-transform: uppercase; }
-.q2-datebox__day { padding-top: 6px; font-family: var(--font-display); font-size: 1.75rem; font-weight: var(--fw-heavy); letter-spacing: -0.03em; }
-.q2-datebox__dow { padding: 3px 0 7px; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-semibold); letter-spacing: 0.04em; text-transform: uppercase; }
-.q2-status {
-  display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 4px 12px 4px 8px; border-radius: var(--r-pill);
-  font-size: var(--fs-14); font-weight: var(--fw-bold); line-height: 1.3;
-}
-.q2-status--wait { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
-.q2-status--ok { background: var(--status-confirmed-bg); color: var(--status-confirmed-fg); }
-.q2-status--done { background: var(--status-done-bg); color: var(--status-done-fg); }
-.q2-status--warn { background: var(--danger-tint); color: var(--danger-text); }
+/* ================= date and status ================= */
+.q2-datebox { display: inline-flex; flex-direction: column; align-items: flex-start; flex: none; width: auto; min-width: 56px; border: 0; border-radius: 0; background: none; box-shadow: none; line-height: 1; }
+.q2-datebox__mon, .q2-datebox__dow { width: auto; padding: 0; background: none; color: var(--ink-2); font: 600 12px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-align: left; text-transform: uppercase; }
+.q2-datebox__day { padding: 4px 0; font-size: 2rem; letter-spacing: -0.04em; line-height: 1; }
+/* The status of the install day: ONE plain line, sentence case, no underline, no pill, never red ("To be confirmed" in ink-2; Confirmed, On the way, Installed, Cancelled in ink 600). */
+.q2-status { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ink-2); font: 500 15px/22px var(--f); letter-spacing: 0; text-transform: none; }
+.q2-status--ok, .q2-status--done, .q2-status--warn { color: var(--ink); font-weight: 600; }
+.q2-status svg { display: none; }
 
-/* ================= Accepted: ring and tick, install card ================= */
-.q2-mark {
-  display: grid; place-items: center; width: 88px; height: 88px; margin-bottom: var(--space-2); border-radius: 50%;
-  background: var(--panel-2); animation: q2-pop 640ms var(--q2-ease) both;
-}
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .q2-mark {
-    background: color-mix(in srgb, var(--q2-ok) 16%, transparent);
-    box-shadow: 0 0 0 10px color-mix(in srgb, var(--q2-ok) 8%, transparent), 0 0 48px color-mix(in srgb, var(--q2-ok) 30%, transparent);
-  }
-}
-.q2-mark svg { display: block; overflow: visible; }
-/* Success is green, as on the enquiry confirmation: the ring, the tick and the "Quote accepted" line. */
-.q2-hero--done .q2-eyebrow { color: var(--q2-ok-text); }
-.q2-mark__ring { fill: none; stroke: var(--q2-ok); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 264; transform: rotate(-90deg); transform-origin: 48px 48px; animation: q2-draw 760ms var(--ease-in-out) both; }
-.q2-mark__check { fill: none; stroke: var(--q2-ok); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; animation: q2-draw-check 440ms 520ms var(--ease-out) both; }
-@keyframes q2-draw { from { stroke-dashoffset: 264; } to { stroke-dashoffset: 0; } }
-@keyframes q2-draw-check { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
-@keyframes q2-pop { from { transform: scale(0.72); } to { transform: none; } }
-
-.q2-install { display: flex; flex-direction: column; gap: var(--space-4); }
-.q2-install__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.q2-install__when { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.q2-install__day { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); line-height: 1.2; letter-spacing: -0.02em; }
-.q2-install__part { margin: 3px 0 0; color: var(--text-2); line-height: 1.45; }
-.q2-install__saved { margin: 0; color: var(--ok-text); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
-/* One filled button (Add to calendar); Call and WhatsApp as a compact pair with one-line labels; Done as a plain text button. */
-.q2-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); min-width: 0; }
-.q2-pair .ui-btn { min-width: 0; padding-inline: var(--space-3); white-space: nowrap; }
-.q2-done { align-self: center; min-width: 140px; }
+/* ================= accepted: the install day, references ================= */
+.q2-install { display: flex; flex-direction: column; gap: 24px; }
+.q2-install__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.q2-install__when { display: flex; align-items: center; gap: 24px; min-width: 0; }
+.q2-install__day { margin: 0; font: 600 24px/30px var(--f); letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+.q2-install__part { margin: 4px 0 0; color: var(--ink-2); font-size: var(--body); line-height: 1.45; }
+.q2-install__saved { margin: 0; color: var(--ink); font-size: 14px; font-weight: 500; }
+.q2-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.q2-pair .ui-btn { min-width: 0; padding-inline: 16px; }
 .q2-disclosure { margin: 0; }
-.q2-disclosure .ui-disclosure__body { padding-inline: var(--q2-pad); }
-.q2-simnote {
-  display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px;
-  border: 1.5px dashed var(--field-border); border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2);
-  font-size: var(--fs-14); line-height: 1.5;
-}
-.q2-simnote svg { flex: none; margin-top: 2px; }
-.q2-simnote strong { color: var(--text); }
+.q2-simnote { margin: 0; padding: 16px 0 0; border-top: 1px dashed var(--rule-d); color: var(--ink-2); font-size: 14px; line-height: 20px; }
+.q2-simnote strong { color: var(--ink); }
 
-/* ================= Link mode (v4): the quote opened from a link on a phone that never held it ================= */
-/* Prototype: sample prices, one quiet line at the foot of the decision card (only where the link says its prices are samples). */
-.q2-protonote { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-medium); line-height: 1.4; }
-.q2-protonote svg { flex: none; }
-.q2-protonote strong { color: var(--text); font-weight: var(--fw-bold); }
-
-/* "Which days suit you?": the days as checkboxes and the time of day as radios, drawn as 48px chips. */
-.q2-prefgroup { min-width: 0; margin: 0 0 var(--space-4); padding: 0; border: 0; }
-.q2-prefgroup__legend { margin-bottom: var(--space-3); padding: 0; font-size: var(--fs-15); font-weight: var(--fw-bold); }
-.q2-prefs { display: grid; gap: 8px; }
+/* ================= link mode: the quote opened from a link on a phone that never held it ================= */
+.q2-prefgroup { min-width: 0; margin: 0 0 24px; padding: 0; border: 0; }
+.q2-prefgroup__legend { margin-bottom: 12px; padding: 0; }
+.q2-prefs { display: grid; gap: 0; border-top: 1px solid var(--ink); border-left: 1px solid var(--ink); }
 .q2-prefs--days { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .q2-prefs--parts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 359px) { .q2-prefs--days { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.q2-pref {
-  position: relative; display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 2px;
-  border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
-  font-size: var(--fs-15); font-weight: var(--fw-semibold); line-height: 1.2; text-align: center; white-space: nowrap; cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
-}
-.q2-pref:active { transform: translateY(1px); }
+.q2-pref { position: relative; display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 2px; border: 0; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink); border-radius: 0; background: var(--field); color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.2; text-align: center; white-space: nowrap; cursor: pointer; transition: none; }
 .q2-pref__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.q2-pref.is-selected { background: var(--cta); border-color: var(--cta); color: var(--cta-ink); font-weight: var(--fw-bold); }
-.q2-pref:has(.q2-pref__input:focus-visible) { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
-@media (hover: hover) { .q2-pref:not(.is-selected):hover { background: var(--surface-2); } }
-/* What the message will say, so the customer sees the effect of each tap. */
-.q2-prefsum { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-15); line-height: 1.45; }
-.q2-prefsum svg { flex: none; margin-top: 1px; color: var(--text-2); }
-.q2-prefsum strong { color: var(--text); font-weight: var(--fw-bold); }
-
-/* After the tap: the message that is ready in WhatsApp (never "sent": the customer taps send there). */
-.q2-hero--ready { --q2-ok: var(--panel-accent); --q2-ok-text: var(--panel-accent); }
-.q2-mark--ready { color: var(--panel-accent); }
-.q2-ready { display: flex; flex-direction: column; gap: var(--space-4); }
-.q2-ready__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px var(--space-3); }
-.q2-ready__quote { margin: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
-.q2-bubble { padding: 12px 14px 14px; border-radius: var(--r-md); border-top-right-radius: 4px; background: var(--bubble-out-bg); color: var(--bubble-out-fg); }
-.q2-bubble__text { margin: 0; font-size: var(--fs-16); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
-.q2-bubble__link { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: var(--fs-15); font-weight: var(--fw-semibold); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
-.q2-copynote { min-height: 0; margin: 0; color: var(--ok-text); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.45; text-align: center; }
+.q2-pref.is-selected { background: var(--ink); color: var(--paper); }
+.q2-pref:has(.q2-pref__input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 3px; z-index: 1; }
+@media (hover: hover) { .q2-pref:not(.is-selected):hover { background: var(--paper-2); } }
+.q2-prefsum { display: block; margin: 0; padding: 16px 0 0; border-top: 1px solid var(--rule); border-radius: 0; background: none; color: var(--ink-2); font-size: 15px; line-height: 22px; }
+.q2-prefsum strong { color: var(--ink); font-weight: 600; }
+.q2-ready { display: flex; flex-direction: column; gap: 24px; }
+.q2-ready__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.q2-ready__quote { margin: 0; color: var(--ink-2); font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.q2-bubble { padding: 16px 0 0; border-radius: 0; border-top: 1px solid var(--rule); background: none; color: var(--ink); }
+.q2-bubble__text { margin: 0; font-size: 17px; line-height: 26px; white-space: pre-line; overflow-wrap: anywhere; }
+.q2-bubble__link { display: block; margin: 12px 0 0; font-size: 15px; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.q2-copynote { min-height: 0; margin: 0; color: var(--ink); font-size: 14px; font-weight: 500; line-height: 20px; text-align: left; }
 .q2-copynote:empty { display: none; }
-.q2-copynote.is-fail { color: var(--danger-text); }
+.q2-copynote.is-fail { color: var(--ink); font-weight: 600; }
 .q2-fulltextbox { margin: 0; }
-.q2-fulltext {
-  display: block; width: 100%; padding: 12px; border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
-  font-family: var(--font-mono); font-size: var(--fs-14); line-height: 1.5; resize: none; overflow-wrap: anywhere; user-select: all;
-}
-.q2-fulltext:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+.q2-fulltext { display: block; width: 100%; padding: 12px; border: 1px solid var(--ink); border-radius: 0; background: var(--field); color: var(--ink); font-family: var(--f); font-size: 14px; line-height: 1.5; resize: none; overflow-wrap: anywhere; user-select: all; }
+.q2-fulltext:focus-visible { outline: 2px solid var(--ink); outline-offset: 0; }
 .q2-change .ui-btn { min-width: 0; }
 
-/* ================= Reduced motion: no entrance, no drawing, no slide ================= */
+/* ================= reduced motion, forced colours, print ================= */
 @media (prefers-reduced-motion: reduce) {
-  .q2-hero__body > *, .q2-mark, .q2-mark__ring, .q2-mark__check { animation: none; }
-  .q2-sticky, .q2-slot, .q2-slot__tick, .q2-reason, .q2-chip, .q2-soonest, .q2-pref { transition: none; }
+  .q2-sticky { transition: none; }
 }
-
-/* ================= Forced colours ================= */
 @media (forced-colors: active) {
-  .q2-card, .q2-slot, .q2-reason, .q2-chip, .q2-soonest, .q2-pref, .q2-datebox, .q2-badge { border: 1.5px solid CanvasText; }
-  .q2-slot.is-selected, .q2-reason.is-selected, .q2-chip.is-viewed, .q2-soonest.is-selected, .q2-pref.is-selected { outline: 3px solid Highlight; }
+  .q2-slot::after, .q2-reason::after { border-color: CanvasText; }
+  .q2-slot.is-selected::after, .q2-reason.is-selected::after { border-color: Highlight; }
+  .q2-chip, .q2-pref, .q2-soonest { border: 1px solid CanvasText; }
+  .q2-chip.is-viewed, .q2-pref.is-selected, .q2-soonest.is-selected { outline: 3px solid Highlight; }
 }
-
-/* ================= Print: the quote on paper, no buttons ================= */
 @media print {
   .q2-sticky, .q2-skip, .q2-actions, .q2-contact, .ui-notice--public, .q2-expiredbar, .q2-preview, .q2-notforme, .q2-owner__call, .q2-seeall, .q2-nopay { display: none !important; }
-  .q2-app, .q2-hero, .q2-footer { background: none !important; color: inherit !important; }
-  .q2-hero, .q2-footer { border-radius: 0; }
-  .q2-hero::before { display: none; }
-  .q2-title, .q2-lead, .q2-eyebrow, .q2-meta__k, .q2-meta__v, .q2-meta strong, .q2-brand, .q2-for, .q2-footer__area, .q2-footer a { color: inherit !important; }
-  .q2-card { box-shadow: none; break-inside: avoid; }
-  .q2-grid { margin-top: var(--space-4); display: block; }
-  .q2-side { margin-top: 0; position: static; }
-  .q2-body { padding-top: 0; }
+  .q2-app, .q2-hero, .q2-footer, .q2-bar { background: none !important; color: inherit !important; box-shadow: none; }
+  .q2-title, .q2-lead, .q2-eyebrow, .q2-meta__k, .q2-meta__v, .q2-meta strong, .q2-brand, .q2-for, .q2-footer__area, .q2-footer a, .q2-footer__list dt, .q2-footer__legal { color: inherit !important; }
+  .q2-card { break-inside: avoid; }
+  .q2-grid { display: block; padding-top: 24px; }
+  .q2-side { position: static; margin-top: 0; }
 }

@@ -7,7 +7,9 @@ import { isValidPostcode, normalisePostcode } from './format.js';
 // v3 = quotes, pipeline, SLA, lead sources, simulated connections, utm, photos (docs/V3-API.md). The storage key keeps its v1 name on
 // purpose (other pages and tests read it); a stored v1 or v2 state is migrated in store.js. `utm` is a sessionStorage key.
 export const SCHEMA_VERSION = 3;
-export const STORAGE_KEYS = { state: 'vm_state_v1', theme: 'vm_theme', draft: 'vm_draft_v1', bootFail: 'vm_boot_fail', utm: 'vm_utm' };
+// How long each piece of the business text may be (settings.business): it is printed in headers, buttons, messages and the browser tab.
+export const BUSINESS_TEXT_MAX = { name: 60, shortName: 24, descriptor: 40, ownerFirstName: 20, ownerFullName: 60, tagline: 160, email: 120, areaName: 60, areaText: 120, schemeLine: 160, insuranceLine: 160, address: 200, phone: 30 };
+export const STORAGE_KEYS = { state: 'vm_state_v1', theme: 'vm_theme', draft: 'vm_draft_v1', bootFail: 'vm_boot_fail', utm: 'vm_utm', backup: 'vm_state_backup' };
 // The folder holding index.html, with a trailing slash (works under /<repo>/ and at a domain root).
 export const SITE_BASE_URL = new URL('../../', import.meta.url).href;
 
@@ -140,12 +142,12 @@ export const ENQUIRY_STEPS = [
     ]
   },
   {
-    key: 'permission', step: 5, title: "Do you own the property, or have the owner's permission?",
+    key: 'permission', step: 5, title: 'Can you authorise installation work at the property?',
     note: "Not sure yet? That's fine. We will help you work out what is needed.",
     options: [
       { value: 'yes', label: 'Yes' },
-      { value: 'landlord', label: 'I rent or lease and need permission' },
-      { value: 'unsure', label: 'Not sure' }
+      { value: 'landlord', label: 'I need landlord or freeholder approval' },
+      { value: 'unsure', label: "I'm not sure" }
     ]
   }
 ];
@@ -242,7 +244,7 @@ export const PLACEHOLDERS = {
   nextFree: 'Next free visit, e.g. Tomorrow, 8–10am',
   nextFreeLine: 'Next free visit sentence',
   finalLine: 'Payment sentence on completion (no charge for a free visit)',
-  certLine: 'Paperwork sentence: certificate for EV installs and certificate jobs, written quote for the survey visit',
+  certLine: 'Paperwork sentence: "Your written quote follows shortly." after a survey visit, empty for other jobs (his site promises no certificate)',
   jobLink: 'Dashboard link to the booking',
   manageLink: 'Customer link to manage the booking',
   reviewLink: 'Sample review link',
@@ -329,6 +331,8 @@ export const DEFAULT_TEMPLATES = {
 // The accepted install a WhatsApp acceptance makes has no day yet (the customer has no copy of the owner's diary and only said which
 // days suit). buildMessage uses these instead of the two defaults above unless the owner customised a template.
 export const DEFAULT_UNSCHEDULED_TEMPLATES = {
+  // The first day given to an install that had none (the owner agreed it with the customer, so "moved from a time to be arranged" would read oddly).
+  customer_rescheduled: "Hi {customerFirst}, it's {ownerFirst} from {business}. I can do your {service} on {newWhen} at {line1}. Does that day suit you? Reply here or call {ownerPhone}. Ref {ref}",
   customer_quote_accepted: 'Hi {customerFirst}, thanks for accepting your quote ({quoteTotal}). I will be in touch shortly to agree your installation day. Quote {quoteId}',
   owner_quote_accepted: [
     '*Quote accepted {quoteId}*',

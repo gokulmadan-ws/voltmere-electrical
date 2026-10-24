@@ -1,7 +1,9 @@
 // js/dashboard/shared/sla.js: reply-promise helpers (waiting test, countdown text) and the SlaChip shown on enquiries.
 // Owner: E3
 import { html } from '../../vendor/preact-htm.js';
-import { Icon, cx, loadCss } from '../../ui/index.js';
+import { Icon } from '../../ui/display.js';
+import { cx } from '../../ui/util.js';
+import { loadCss } from '../../ui/load-css.js';
 import { SLA_DUE_SOON_MINUTES } from '../../core/config.js';
 import { addMinutes, minutesBetween } from '../../core/dates.js';
 

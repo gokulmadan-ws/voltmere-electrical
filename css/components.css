@@ -295,6 +295,7 @@
   padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
   color: var(--text-2); font-family: var(--font-body); font-size: var(--fs-15); font-weight: var(--fw-semibold); line-height: 1.3;
   text-decoration: underline; text-decoration-thickness: 1px; text-decoration-color: var(--text-3); text-underline-offset: 4px;
+  max-width: 100%; overflow-wrap: anywhere; /* a customer's own long word (a name, an address) wraps instead of pushing the page wide */
 }
 @media (hover: hover) { .ui-link:hover, .ui-link--quiet:hover { color: var(--text); text-decoration-color: currentColor; } }
 .ui-link--inline { display: inline; min-height: 0; min-width: 0; font-size: inherit; font-weight: inherit; line-height: inherit; color: inherit; text-decoration-color: currentColor; }
@@ -716,7 +717,8 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4);
   padding: var(--space-5); text-align: center;
 }
-.ui-fatal__text { font-size: var(--fs-17); font-weight: var(--fw-semibold); }
+.ui-fatal__text { font-size: var(--fs-17); font-weight: var(--fw-semibold); max-width: 32rem; }
+.ui-fatal .ui-btn { max-width: 100%; white-space: normal; }
 
 /* =====================================================================================================
    V3 KIT (B3). Contract: docs/V3-UI.md. Wizard, CopyField, CodeBlock, StatusDot, ConnectionBadge, Tabs, Timeline,
@@ -751,7 +753,7 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
 .ui-sim--compact .ui-sim__more { white-space: nowrap; }
 .ui-wizard__steps { display: none; margin: 0; padding: 0; list-style: none; }
 .ui-wizard__step { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-3); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
-.ui-wizard__step-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-wizard__step-title { min-width: 0; line-height: 1.2; overflow-wrap: anywhere; text-wrap: balance; } /* wraps: six-step wizards used to cut "Verify your number" with an ellipsis */
 .ui-wizard__mark {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   width: 24px; height: 24px; border: 1.5px solid var(--field-border); border-radius: 50%;
@@ -824,8 +826,9 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
   .ui-wizard__steps { display: none; }
   .ui-wizard__panel { gap: 2px; padding-top: 6px; padding-bottom: var(--space-4); }
   .ui-wizard__heading {
-    font-family: var(--font-display); font-size: 1.75rem; font-weight: var(--fw-heavy); line-height: 1.1; letter-spacing: var(--tracking-tight);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    /* The step title wraps (it used to be one line cut with an ellipsis, which clipped descenders and the tail of "Choose your web address" on a 320px phone);
+       the compact top bar above stays sticky, this heading scrolls with the panel. */
+    font-family: var(--font-display); font-size: 1.75rem; font-weight: var(--fw-heavy); line-height: 1.15; letter-spacing: var(--tracking-tight);
   }
   .ui-wizard__hint { font-size: var(--fs-14); line-height: 1.3; }
   .ui-wizard__content { margin-top: 6px; }

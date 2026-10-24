@@ -1111,7 +1111,7 @@ async function round1(browser) {
   await gotoDash(page, '#/bookings/bk_seed_11', 503);
   await page.waitForSelector(T('detail-pencilled'));
   const banner = await text(page, T('detail-pencilled'));
-  check('detail: the banner talks to Daniel ("You\'ll confirm within 24 h. Conor has been told it\'s provisional.")', /You'll confirm within 24 h\. Conor has been told it's provisional\./.test(banner), banner);
+  check('detail: the banner talks to Daniel ("You\'ll confirm within 24 h. Conor has been told you will confirm it.")', /You'll confirm within 24 h\. Conor has been told you will confirm it\./.test(banner), banner);
   await gotoDash(page, '#/bookings/bk_seed_16', 504);
   await page.waitForSelector(T('detail-quote-card'));
   check('detail: the empty quote card says it is the live version where they open it on their phone', /In the live version they open it on their phone, accept and pick an install day\./.test(await text(page, T('detail-quote-card'))), await text(page, T('detail-quote-card')));

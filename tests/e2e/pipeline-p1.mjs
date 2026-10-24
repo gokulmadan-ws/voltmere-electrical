@@ -619,7 +619,7 @@ async function adSpend(browser) {
   for (let i = 0; i < 4; i += 1) { await page.click(T('p1-month-prev')); await sleep(60); }
   await until(page, () => /May 2026/.test(document.querySelector('[data-testid="p1-month-label"]').textContent));
   check('ads: a month with no spend says so', /No ad spend recorded for May/.test(await text(page, T('p1-ads'))), await text(page, `${T('p1-ads')} .in-spend`));
-  check('ads: and shows honest blanks, not £0', (await val('p1-cost-enquiry')) === '—No figure yet' || /^—/.test(await val('p1-cost-enquiry')), await val('p1-cost-enquiry'));
+  check('ads: and shows honest blanks, not £0', (await val('p1-cost-enquiry')) === '–No figure yet' || /^–/.test(await val('p1-cost-enquiry')), await val('p1-cost-enquiry'));
   check('ads: the blank tells him what to do', /Add what you spent below/.test(await text(page, T('p1-cost-enquiry'))), await text(page, T('p1-cost-enquiry')));
 
   // Enter spend for that month: Save, costs appear (no enquiries that month, so still a blank with a different reason), Undo.

@@ -1,0 +1,135 @@
+/* css/public-tokens.css: tokens for the PUBLIC pages (landing, funnel sheet, quote page). Loaded AFTER css/tokens.css on index.html and quote.html only
+   (never on dashboard.html). Everything is scoped to <html data-scope="public">, so the owner dashboard keeps its dark look untouched.
+   The only place on the public pages that may hold a hex colour (plus img/). Owner: B1.
+
+   Default look = LIGHT paper. Dark is an opt-in (Prototype tools > Appearance) and is the SAME system with the paper and ink swapped:
+   header, closing band and footer stay #0B0B0C in both, because that is the ground of his logo.
+
+   Rules for the dark blocks (same contract as tokens.css): the dark values appear TWICE, byte-identical: once under :root[data-theme="dark"], once under the
+   prefers-color-scheme block that serves an explicit "Auto". With no saved choice the page is Light, never Auto.
+
+   Contrast (WCAG, computed): ink on paper 18.0:1, ink-2 6.8:1, ink-3 4.9:1 (on paper or field only: 4.5:1 on paper-2, so never on paper-2 or paper-3), white on red 4.87:1
+   (16px/600 or larger only), white on red-deep 7.2:1, err on paper 6.6:1, on-black on black 18.0:1, on-black-2 9.4:1;
+   dark: ink on paper 17.0:1, ink-2 9.0:1, ink-3 6.4:1, err on paper 8.1:1. */
+
+/* ================= colour, light (the default) ================= */
+:root[data-scope="public"] {
+  color-scheme: light;
+  /* surfaces */
+  --paper: #F5F5F4;          /* his near-white: the page canvas, the only large surface */
+  --paper-2: #ECECEA;        /* the prototype strip, the popover rows, the open FAQ hover; nothing else */
+  --paper-3: #E3E3E0;        /* a photo box before its picture arrives, or when it never does (flat, no pattern) */
+  --field: #FFFFFF;          /* input fill: the one place pure white appears on the light theme */
+  /* ink */
+  --ink: #0B0B0C;            /* his near-black: all text that matters, section rules, input borders, selected segment, slider thumb */
+  --ink-2: #55555A;          /* captions, notes, units, table captions, tag text, the footer legal line. NEVER body paragraphs */
+  --ink-3: #6B6B70;          /* table headers, line numbers, blank amount cells. 4.9:1: never body copy */
+  --rule: rgba(11, 11, 12, 0.16);     /* inner hairlines (rows, tables, FAQ) */
+  --rule-d: rgba(11, 11, 12, 0.42);   /* the dashed top rule that marks a prototype idea */
+  /* brand */
+  --red: #E11414;            /* his red. Button fill, FAQ open marker, nav underline, step 01 rule, the logo stripes: see LANDING-V5.md 2.1 */
+  --red-deep: #B00E12;       /* his hover red: button hover and pressed */
+  --err: #B00E12;            /* field error text and border (6.6:1 on paper). Never used for anything else */
+  /* black: header, closing band, footer. Equal to the logo picture's own ground, so mix-blend-mode: lighten leaves no box */
+  --black: #0B0B0C;
+  --on-black: #F5F5F4;
+  --on-black-2: rgba(245, 245, 244, 0.72);
+  --rule-b: rgba(245, 245, 244, 0.20);
+  --focus: var(--ink);       /* 2px ring, 3px offset */
+  --focus-on-black: #F5F5F4;
+  --selection-bg: var(--ink); --selection-fg: var(--paper);
+}
+
+/* ================= colour, dark (opt-in) ================= */
+:root[data-scope="public"][data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #131315; --paper-2: #1B1B1E; --paper-3: #232327; --field: #1B1B1E;
+  --ink: #F5F5F4; --ink-2: #B4B4B8; --ink-3: #97979B;
+  --rule: rgba(245, 245, 244, 0.16); --rule-d: rgba(245, 245, 244, 0.44);
+  --err: #FF8A80;
+  --red-deep: #B00E12;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-scope="public"]:not([data-theme="light"]):not([data-theme="dark"]) {
+    color-scheme: dark;
+    --paper: #131315; --paper-2: #1B1B1E; --paper-3: #232327; --field: #1B1B1E;
+    --ink: #F5F5F4; --ink-2: #B4B4B8; --ink-3: #97979B;
+    --rule: rgba(245, 245, 244, 0.16); --rule-d: rgba(245, 245, 244, 0.44);
+    --err: #FF8A80;
+    --red-deep: #B00E12;
+  }
+}
+
+/* ================= type, space, shape (same in both themes) ================= */
+:root[data-scope="public"] {
+  --f: 'Archivo', 'Archivo Fallback', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --f-display: 'Archivo', 'Archivo Fallback Display', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  /* layout */
+  --m: 24px;                 /* page margin: 24 (<720), 32 (720-1023), 48 (1024+) */
+  --wrap: 1280px;            /* container max width, margins included */
+  --hdr-h: 64px;             /* header bar: 64 (<1024), 72 (1024+) */
+  --hdr-logo-h: 48px;        /* the lockup window in the header: 48 (<1024), 56 (1024+) */
+  --sec: 72px;               /* space above a section: 72 / 96 / 128 */
+  --sec-l: 96px;             /* the roomier gap (before Why, About, How it works, Area): 96 / 128 / 160 */
+  --cut: 40px;               /* the 45 degree cut on two photographs: 40 / 56 / 88 */
+  --sl: 128px;               /* the logo stripes in the closing composition: 128 / 176 / 232 */
+  --bleed: max(0px, calc((100vw - var(--wrap)) / 2));   /* how far a bleed photo runs past the container on a very wide screen */
+  --bar-h: 80px;             /* sticky mobile bar height, without the safe-area inset */
+
+  /* type scale (390 values here; 720 and 1024 steps below). Display = width 108, weight 650, tracking -0.03em */
+  --h1: clamp(26px, calc((100vw - 2 * var(--m)) / 10.4), 92px);
+  --h2: 30px;
+  --h2-s: 30px;              /* compact H2: the About column and the gallery cell at 1024+ (44px) */
+  --h3: 20px;
+  --h3-idea: 26px;
+  --statement: 20px;
+  --lede: 18px;
+  --body: 17px;
+  --fig: 26px;               /* credential figures (Level 3, 2391) */
+  --brand-fs: 20px;          /* ZAPPI, OHME, SYNC */
+  --step-n: 56px;            /* step numerals */
+  --phone-fs: 32px;          /* footer phone */
+  --final-h: 40px;           /* closing H2 */
+
+  /* shape: everything is square. Hairlines are 1px, emphasis is 2px. */
+  --hair: 1px; --bold: 2px;
+  --z-header: 20; --z-bar: 30; --z-pop: 40; --z-lightbox: 120;   /* the funnel sheet and scrim keep their own 100/110 layers */
+
+  /* motion */
+  --t-fast: 150ms; --t-base: 200ms; --t-slow: 250ms; --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@media (min-width: 720px) {
+  :root[data-scope="public"] {
+    --m: 32px; --cut: 56px; --sec: 96px; --sec-l: 128px; --sl: 176px;
+    --h2: 44px; --h2-s: 44px; --h3-idea: 32px; --statement: 22px; --lede: 20px;
+    --fig: 34px; --brand-fs: 28px; --phone-fs: 40px; --final-h: 64px;
+  }
+}
+@media (min-width: 1024px) {
+  :root[data-scope="public"] {
+    --m: 48px; --hdr-h: 72px; --hdr-logo-h: 56px; --cut: 88px; --sec: 128px; --sec-l: 160px; --sl: 232px;
+    --h2: 52px; --h3: 24px; --body: 18px; --fig: 40px; --brand-fs: 32px; --step-n: 104px; --phone-fs: 48px;
+    --final-h: clamp(56px, calc((100vw - 2 * var(--m)) * 0.0775), 88px);
+  }
+}
+
+/* ================= legacy tokens, remapped: the funnel sheet, the quote page and every shared ui-* component pick the new look up from here =================
+   (css/tokens.css names stay; on the public pages they now point at the palette above. See LANDING-V5.md section 10.) */
+:root[data-scope="public"] {
+  --bg: var(--paper); --surface: var(--field); --surface-2: var(--paper-2); --line: var(--rule); --field-border: var(--ink); --card-bg: var(--field);
+  --scrim: rgba(11, 11, 12, 0.72);
+  --text: var(--ink); --text-2: var(--ink-2); --text-3: var(--ink-3); --link: var(--ink);
+  --focus-on-panel: var(--focus-on-black);
+  --brand: #E11414; --brand-dark: #B00E12; --cta: var(--red); --cta-ink: #FFFFFF; --cta-press: var(--red-deep); --cta-soft: var(--paper-2); --cta-text: var(--ink);
+  --panel: var(--black); --panel-2: #1B1B1E; --panel-text: var(--on-black); --panel-muted: var(--on-black-2); --panel-accent: var(--on-black);
+  --danger: var(--err); --danger-ink: #FFFFFF; --danger-tint: var(--paper-2); --danger-text: var(--err);
+  --font-display: var(--f-display); --font-body: var(--f);
+  --r-xs: 0; --r-sm: 0; --r-md: 0; --r-lg: 0; --r-xl: 0; --r-2xl: 0; --r-pill: 0;
+  --shadow-1: none; --shadow-2: 0 0 0 1px var(--ink); --shadow-3: 0 0 0 1px var(--ink); --shadow-bar: none; --shadow-brand: none;
+  --h-btn: 56px; --h-btn-lg: 56px; --h-input: 56px; --tap: 44px;
+  --container: var(--wrap); --gutter: var(--m);
+  --z-sticky: var(--z-header); --z-tabbar: var(--z-bar);
+  --lp-bar: var(--bar-h);
+}
+:root[data-scope="public"][data-theme="dark"] { --scrim: rgba(0, 0, 0, 0.8); --panel-2: #1B1B1E; }

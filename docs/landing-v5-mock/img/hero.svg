@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 720" width="1080" height="720" preserveAspectRatio="xMidYMid slice"><defs><pattern id="pave" width="56" height="28" patternUnits="userSpaceOnUse"><rect width="56" height="28" fill="#928F8A"/><rect x="1" y="1" width="26" height="12" fill="#9A9792"/><rect x="29" y="1" width="26" height="12" fill="#8B8883"/><rect x="15" y="15" width="26" height="12" fill="#9A9792"/><rect x="-13" y="15" width="26" height="12" fill="#8B8883"/><rect x="43" y="15" width="26" height="12" fill="#8B8883"/></pattern></defs>
+<rect width="1080" height="720" fill="#CFD2D1"/>
+<rect x="600" y="0" width="480" height="330" fill="#C3C8C9"/>
+<rect x="600" y="300" width="480" height="230" fill="#76836E"/>
+<rect x="600" y="300" width="480" height="40" fill="#6B7863"/>
+<rect x="0" y="0" width="620" height="530" fill="#A68B6C"/><rect x="0" y="0" width="3" height="520" fill="#86694D"/><rect x="40" y="0" width="3" height="520" fill="#86694D"/><rect x="43" y="0" width="37" height="520" fill="#000" opacity=".045"/><rect x="80" y="0" width="3" height="520" fill="#86694D"/><rect x="120" y="0" width="3" height="520" fill="#86694D"/><rect x="123" y="0" width="37" height="520" fill="#000" opacity=".045"/><rect x="160" y="0" width="3" height="520" fill="#86694D"/><rect x="200" y="0" width="3" height="520" fill="#86694D"/><rect x="203" y="0" width="37" height="520" fill="#000" opacity=".045"/><rect x="240" y="0" width="3" height="520" fill="#86694D"/><rect x="280" y="0" width="3" height="520" fill="#86694D"/><rect x="283" y="0" width="37" height="520" fill="#000" opacity=".045"/><rect x="320" y="0" width="3" height="520" fill="#86694D"/><rect x="360" y="0" width="3" height="520" fill="#86694D"/><rect x="363" y="0" width="37" height="520" fill="#000" opacity=".045"/><rect x="400" y="0" width="3" height="520" fill="#86694D"/><rect x="440" y="0" width="3" height="520" fill="#86694D"/><rect x="443" y="0" width="37" height="520" fill="#000" opacity=".045"/><rect x="480" y="0" width="3" height="520" fill="#86694D"/><rect x="520" y="0" width="3" height="520" fill="#86694D"/><rect x="523" y="0" width="37" height="520" fill="#000" opacity=".045"/><rect x="560" y="0" width="3" height="520" fill="#86694D"/><rect x="600" y="0" width="3" height="520" fill="#86694D"/><rect x="603" y="0" width="37" height="520" fill="#000" opacity=".045"/>
+<rect x="0" y="0" width="620" height="40" fill="#2D2E30"/>
+<rect x="0" y="520" width="1080" height="200" fill="url(#pave)"/>
+<rect x="0" y="516" width="1080" height="10" fill="#7B7873"/>
+<ellipse cx="830" cy="566" rx="270" ry="20" fill="#000" opacity=".22"/>
+<path d="M560 524 L560 446 Q566 424 604 418 L704 412 Q742 342 802 334 L930 334 Q992 342 1022 412 L1062 430 Q1080 442 1080 474 L1080 524 Z" fill="#F2F2EF"/>
+<path d="M722 414 Q754 354 804 348 L924 348 Q970 354 998 414 Z" fill="#2E3438"/>
+<rect x="858" y="348" width="8" height="66" fill="#F2F2EF"/>
+<rect x="560" y="494" width="520" height="14" fill="#DADAD6"/>
+<circle cx="660" cy="524" r="58" fill="#18181A"/><circle cx="660" cy="524" r="30" fill="#8E8E90"/>
+<circle cx="990" cy="524" r="58" fill="#18181A"/><circle cx="990" cy="524" r="30" fill="#8E8E90"/>
+<rect x="476" y="262" width="100" height="176" rx="12" fill="#121214"/>
+<rect x="494" y="286" width="64" height="5" fill="#35353A"/>
+<circle cx="526" cy="344" r="16" fill="#1d1d20"/>
+<path d="M470 352 C 440 372 452 392 478 402" stroke="#0e0e10" stroke-width="8" fill="none" stroke-linecap="round"/>
+<rect x="290" y="440" width="36" height="184" fill="#2A2B2D"/><rect x="338" y="440" width="36" height="184" fill="#323335"/>
+<ellipse cx="304" cy="628" rx="30" ry="9" fill="#151516"/><ellipse cx="362" cy="628" rx="30" ry="9" fill="#151516"/>
+<path d="M258 304 Q258 282 288 278 L374 278 Q404 282 404 304 L410 456 L254 456 Z" fill="#5F6440"/>
+<rect x="318" y="262" width="26" height="22" fill="#B98F74"/>
+<circle cx="331" cy="238" r="35" fill="#C8A184"/>
+<path d="M296 232 Q298 196 332 196 Q366 198 366 230 Q350 214 330 216 Q310 216 296 232 Z" fill="#3A2E27"/>
+<path d="M392 304 L452 330" stroke="#5F6440" stroke-width="32" stroke-linecap="round"/>
+<circle cx="462" cy="336" r="15" fill="#C8A184"/>
+
+
+
+</svg>

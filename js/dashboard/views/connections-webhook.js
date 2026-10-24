@@ -1,6 +1,7 @@
 // js/dashboard/views/connections-webhook.js: "Keep your Facebook funnel" (#/connections/webhook): send the instructions to his agency, try a test enquiry,
 // and (folded away, for the agency) the address, the secret, the field mapping and an example enquiry.
 // Owner: K1 (connections hub, domain, webhook, tracking); round 2 (T13): leads with the one thing he does, plain words, the technical bits collapsed
+import { safeEncode } from '../../core/format.js';
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import {
   Banner, Button, CodeBlock, ConfirmDialog, ConnectionBadge, CopyField, DataTable, Disclosure, Icon, PageHeader, RealBuildNote, Sheet, SimBanner, Switch,
@@ -96,7 +97,7 @@ export default function WebhookView() {
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const message = useMemo(() => agencyMessage({ owner: brand.ownerFirst, url: hook.url, secret: hook.secret, payload }), [brand.ownerFirst, hook.url, hook.secret, payload]);
-  const waHref = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const waHref = `https://wa.me/?text=${safeEncode(message)}`;
   const mailHref = mailtoLink('', 'Please add a webhook to our Facebook funnel', message);
   const copyMessage = async () => {
     const ok = await copyText(message);

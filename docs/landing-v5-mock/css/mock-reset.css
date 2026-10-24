@@ -1,0 +1,13 @@
+/* MOCK ONLY. Production already has these resets in css/base.css. Kept so the mock stands alone. */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+h1, h2, h3, h4, p, ul, ol, figure, dl, dd, table { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+img { display: block; max-width: 100%; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; border-radius: 0; }
+a { color: inherit; }
+input { font: inherit; color: inherit; border-radius: 0; }
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+[hidden] { display: none !important; }

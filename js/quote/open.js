@@ -1,9 +1,9 @@
 // js/quote/open.js: the quote as the customer first sees it (sent, viewed, or expired): hero, decision card, itemised lines and possible extras, notes, sample terms, trust, steps, contact.
 // Owner: Q2 (customer quote page)
 import { html, useEffect, useState } from '../vendor/preact-htm.js';
-import { Banner } from '../ui/index.js';
+import { Banner } from '../ui/display.js';
 import {
-  ContactCard, DecisionCard, DeclineLink, ExpiredBanner, Footer, Hero, LinesCard, MetaRow, NotesCard, PreviewStrip, StepsCard, StickyBar, TermsCard, TrustCard
+  ContactCard, DecisionCard, DeclineLink, Footer, Hero, LinesCard, MetaRow, NotesCard, PreviewStrip, StepsCard, StickyBar, TermsCard, TrustCard
 } from './parts.js';
 import { AcceptFlow } from './accept.js';
 import { DeclineFlow } from './decline.js';
@@ -29,11 +29,10 @@ function useOutOfView(selector, active) {
 
 /** What happens next, for a quote opened from a link: the reply is a WhatsApp message the customer sends (see js/quote/reply.js). */
 function linkSteps(brand) {
-  const owner = brand.ownerFirst;
   return [
-    { title: 'Choose the days that suit you', text: 'Tap Accept quote, then pick the days and the time of day that usually work for you.' },
-    { title: 'Send your reply on WhatsApp', text: `WhatsApp opens with your message to ${owner} written for you. You tap send.` },
-    { title: `${owner} confirms your day`, text: `${owner} agrees the exact day with you by WhatsApp or phone.` }
+    { title: 'Choose the days that suit you', text: 'Tap Choose install day, then pick the days and the time of day that usually work for you.' },
+    { title: 'Send your reply on WhatsApp', text: 'WhatsApp opens with your message to us written for you. You tap send.' },
+    { title: 'We confirm your day', text: 'We agree the exact day with you by WhatsApp or phone.' }
   ];
 }
 
@@ -60,8 +59,7 @@ export function OpenView({ d, state, brand, preview, onReply }) {
   return html`
     <div class="q2-state" data-testid="q2-open">
       ${preview ? html`<${PreviewStrip} />` : null}
-      <${Hero} brand=${brand} variant="open" who=${d.customerFirst} eyebrow=${`Hi ${d.customerFirst},`} title="Your EV charger installation quote"
-        banner=${expired ? html`<${ExpiredBanner} d=${d} brand=${brand} />` : null}>
+      <${Hero} brand=${brand} variant="open" who=${d.customerFirst} eyebrow=${`Hi ${d.customerFirst},`} title="Your EV charger installation quote">
         <${MetaRow} d=${d} postcode=${installPostcode(d, state)} />
       <//>
       <main class="q2-main" id="q2-main" tabindex="-1">

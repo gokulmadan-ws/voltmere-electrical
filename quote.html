@@ -1,43 +1,87 @@
 <!doctype html>
 <!-- quote.html: customer quote page entry (head boilerplate, #app, boot module). Opens as quote.html#q=<id> (this browser's own copy) or quote.html#d=<payload> (v4: the quote travels in the link). Owner: Q2, link mode by Q4 -->
-<html lang="en-GB">
+<html lang="en-GB" data-scope="public" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Your quote · 180 Electrical</title>
   <meta name="description" content="Your home EV charger installation quote from 180 Electrical, Northern Ireland. Prototype with sample data.">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#0B0B0C">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-  <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- His two photo hosts (the only off-site origins, images only): open the connections while the scripts load. -->
+  <link rel="preconnect" href="https://perspective.imgix.net">
+  <link rel="preconnect" href="https://images.unsplash.com">
+  <link rel="preload" href="fonts/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- modulepreload:begin (generated: node scripts/modulepreload.mjs) -->
   <link rel="modulepreload" href="js/vendor/preact-htm.js">
-  <link rel="modulepreload" href="js/ui/index.js">
+  <link rel="modulepreload" href="js/ui/icons.js">
+  <link rel="modulepreload" href="js/core/clock.js">
+  <link rel="modulepreload" href="js/ui/util.js">
+  <link rel="modulepreload" href="js/core/format.js">
+  <link rel="modulepreload" href="js/ui/display.js">
+  <link rel="modulepreload" href="js/ui/button.js">
+  <link rel="modulepreload" href="js/core/config.js">
+  <link rel="modulepreload" href="js/ui/reset.js">
+  <link rel="modulepreload" href="js/core/dates.js">
+  <link rel="modulepreload" href="js/core/availability.js">
+  <link rel="modulepreload" href="js/core/utm.js">
+  <link rel="modulepreload" href="js/core/handoff.js">
+  <link rel="modulepreload" href="js/core/quotes.js">
+  <link rel="modulepreload" href="js/core/messages.js">
+  <link rel="modulepreload" href="js/core/connections.js">
+  <link rel="modulepreload" href="js/core/pipeline.js">
+  <link rel="modulepreload" href="js/core/selectors.js">
+  <link rel="modulepreload" href="js/core/seed.js">
+  <link rel="modulepreload" href="js/core/photos.js">
+  <link rel="modulepreload" href="js/core/repair.js">
   <link rel="modulepreload" href="js/core/store.js">
+  <link rel="modulepreload" href="js/ui/form.js">
+  <link rel="modulepreload" href="js/ui/hooks.js">
+  <link rel="modulepreload" href="js/ui/theme.js">
+  <link rel="modulepreload" href="js/ui/toast.js">
+  <link rel="modulepreload" href="js/ui/clean.js">
+  <link rel="modulepreload" href="js/ui/boot.js">
+  <link rel="modulepreload" href="js/ui/ideas.js">
+  <link rel="modulepreload" href="js/quote/route.js">
+  <link rel="modulepreload" href="js/quote/linked.js">
+  <link rel="modulepreload" href="js/landing/glyphs.js">
+  <link rel="modulepreload" href="js/ui/notice.js">
+  <link rel="modulepreload" href="js/landing/idea.js">
+  <link rel="modulepreload" href="js/quote/media.js">
+  <link rel="modulepreload" href="js/quote/format.js">
+  <link rel="modulepreload" href="js/quote/parts.js">
+  <link rel="modulepreload" href="js/ui/sheet.js">
+  <link rel="modulepreload" href="js/quote/accept.js">
+  <link rel="modulepreload" href="js/quote/decline.js">
+  <link rel="modulepreload" href="js/ui/sim.js">
+  <link rel="modulepreload" href="js/ui/storage-note.js">
+  <link rel="modulepreload" href="js/quote/reply.js">
+  <link rel="modulepreload" href="js/quote/open.js">
+  <link rel="modulepreload" href="js/core/ics.js">
+  <link rel="modulepreload" href="js/quote/install-ics.js">
+  <link rel="modulepreload" href="js/quote/confirmed.js">
+  <link rel="modulepreload" href="js/quote/states.js">
+  <link rel="modulepreload" href="js/quote/page.js">
   <link rel="modulepreload" href="js/quote/app.js">
+  <!-- modulepreload:end -->
   <link rel="stylesheet" href="css/fonts.css">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/public-tokens.css"> <!-- AFTER tokens.css (LANDING-V5 3.3 and 8.1) -->
+  <link rel="stylesheet" href="css/landing.css"> <!-- the shared primitives and the prototype strip skin (LANDING-V5 4.11); css/quote.css below may override -->
   <link rel="stylesheet" href="css/quote.css">
   <script>
     (function () {
-      var t = 'dark';
-      try { var s = localStorage.getItem('vm_theme'); if (s === 'light' || s === 'dark' || s === 'auto') t = s; } catch (e) {}
-      var c = '#0B0B0C';
-      if (t === 'auto') {
-        var dark = true;
-        try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
-        c = dark ? '#0B0B0C' : '#F6F5F3';
-      } else {
-        document.documentElement.setAttribute('data-theme', t);
-        if (t === 'light') c = '#F6F5F3';
-      }
-      var m = document.querySelectorAll('meta[name="theme-color"]');
-      for (var i = 0; i < m.length; i++) m[i].setAttribute('content', c);
+      // Same as index.html: the public pages are LIGHT unless Prototype tools > Appearance saved a choice under vm_theme_public; theme-color stays #0B0B0C (the header is black).
+      var t = 'light';
+      try { var s = localStorage.getItem('vm_theme_public'); if (s === 'light' || s === 'dark' || s === 'auto') t = s; } catch (e) {}
+      if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
 </head>

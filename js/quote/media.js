@@ -2,7 +2,7 @@
 // Owner: Q2 (customer quote page)
 import { html, useState } from '../vendor/preact-htm.js';
 import { imageUrl } from '../core/config.js';
-import { cx } from '../ui/index.js';
+import { cx } from '../ui/util.js';
 
 // The earlier crop of his logo, used when the logo address cannot be reached.
 export const LOGO_FALLBACK = 'img/logo-180.png';

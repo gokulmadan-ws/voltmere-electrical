@@ -1,22 +1,29 @@
 // js/dashboard/shared/job-actions.js: state-driven job primary action, Needs-you buttons, Mark paid and the ETA / complete / paid / cancel / reschedule sheets.
 // Owner: E3 (v1 by WP5, enquiry and quote flow by E2)
+import { STORAGE_FULL_TEXT } from '../../ui/util.js';
 import { html, useState, useRef } from '../../vendor/preact-htm.js';
-import {
-  Button, IconButton, Chip, Icon, Segmented, Stepper, Switch, Sheet, WhatsAppBubble,
-  toast, showUndoToast, useBrand, useMediaQuery, useStore, cx, loadCss
-} from '../../ui/index.js';
+import { Button, IconButton } from '../../ui/button.js';
+import { Chip, Icon } from '../../ui/display.js';
+import { Segmented, Stepper, Switch } from '../../ui/form.js';
+import { Sheet } from '../../ui/sheet.js';
+import { WhatsAppBubble } from '../../ui/whatsapp.js';
+import { SimBanner } from '../../ui/sim.js';
+import { toast, showUndoToast } from '../../ui/toast.js';
+import { useBrand, useMediaQuery, useStore } from '../../ui/hooks.js';
+import { cx } from '../../ui/util.js';
+import { loadCss } from '../../ui/load-css.js';
 import {
   getState, confirmBooking, acceptEmergency, declineBooking, markOnTheWay, completeBooking, markPaid, markUnpaid,
   cancelBooking, rescheduleBooking, sendPaymentNudge, sendReviewRequest
 } from '../../core/store.js';
 import { buildMessage, telLink, smsLink, mailtoLink, mapsLink, waLink } from '../../core/messages.js';
-import { getDaySlots, getDayStatus, bookingWhen } from '../../core/availability.js';
+import { getDaySlots, getDayStatus, bookingWhen, isUnscheduled } from '../../core/availability.js';
 import { todayKey } from '../../core/clock.js';
 import { addDays, makeStamp, fmtDayLong, weekdayOf, DAY_SHORT, MONTH_SHORT, stampDay, parseDayKey } from '../../core/dates.js';
 import { WINDOWS, PROMISES, PAID_METHODS, PAID_METHOD_LABELS, CANCEL_REASONS } from '../../core/config.js';
 import { firstName, gbp } from '../../core/format.js';
 import { customerKeyOf } from '../../core/selectors.js';
-import { routeHref } from '../router.js';
+import { navigate, routeHref } from '../router.js';
 import { isEnquiry, isPencilled, isQuotedInstall, quoteProgress } from './enquiry.js';
 
 // The sheets render outside #app, so their styles must be on the page whichever view imported this file.
@@ -146,7 +153,9 @@ function secondaryActionsFor(b) {
 function failToast(res) {
   const message = res && res.reason === 'not_found'
     ? 'That booking no longer exists.'
-    : 'That did not work: the diary changed. Please check and try again.';
+    : res && res.reason === 'unscheduled' ? 'This one has no day yet. Choose a day first (More actions, then Reschedule), then confirm it.'
+      : res && res.reason === 'storage_full' ? STORAGE_FULL_TEXT
+        : 'That did not work: the diary changed. Please check and try again.';
   toast({ message, tone: 'danger' });
 }
 
@@ -174,10 +183,14 @@ function useTapGuard() {
   };
 }
 
-const doConfirm = (b) => finish(confirmBooking(b.id), isEnquiry(b)
-  ? `Survey visit confirmed. ${firstOf(b)} has been told (simulated).`
-  : isQuotedInstall(b) ? `Install day confirmed. ${firstOf(b)} has been told (simulated).`
-    : `Confirmed. ${firstOf(b)} has been told (simulated).`);
+// A booking with no day yet (an install accepted through a WhatsApp link, or a survey the diary had no room for) cannot be confirmed: its page opens so a day can be chosen first.
+const doConfirm = (b) => {
+  if (isUnscheduled(b) && !b.urgent && b.status === 'new') { navigate(routeHref('bookings', { id: b.id })); return false; }
+  return finish(confirmBooking(b.id), isEnquiry(b)
+    ? `Survey visit confirmed. ${firstOf(b)} has been told (simulated).`
+    : isQuotedInstall(b) ? `Install day confirmed. ${firstOf(b)} has been told (simulated).`
+      : `Confirmed. ${firstOf(b)} has been told (simulated).`);
+};
 const doAccept = (b, eta) => finish(acceptEmergency(b.id, eta), `Accepted. ${firstOf(b)} has been told you're on your way (simulated).`);
 const doDecline = (b) => finish(declineBooking(b.id), `Declined. ${firstOf(b)} has been told (simulated).`);
 const doReview = (b) => finish(sendReviewRequest(b.id), 'Review request logged (simulated).');
@@ -238,8 +251,8 @@ function CompleteSheet({ booking, onClose }) {
     // A free survey visit has nothing to collect and no review to ask for; the written quote is the next step.
     const paid = survey ? true : method !== 'none';
     const res = completeBooking(booking.id, { finalPrice: survey ? 0 : price, paid, paidMethod: paid ? (survey ? 'cash' : method) : null, sendReview: survey ? false : review });
-    finish(res, survey ? `Survey done. Next: send ${firstOf(booking)} the quote.` : paid ? 'Job done. Marked paid.' : `Job done. ${gbp(price)} to collect.`);
-    onClose();
+    const ok = finish(res, survey ? `Survey done. Next: send ${firstOf(booking)} the quote.` : paid ? 'Job done. Marked paid.' : `Job done. ${gbp(price)} to collect.`);
+    if (ok || !res || res.reason !== 'storage_full') onClose(); // a full browser keeps the sheet open: nothing was saved, and what was chosen is still here
   });
   const footer = html`<${Button} variant="primary" size="lg" block icon="check-check" onClick=${submit} data-testid="complete-submit">${survey ? 'Survey done' : install ? 'Install done' : 'Complete job'}<//>`;
   if (survey) {
@@ -280,6 +293,8 @@ function PaidSheet({ booking, onClose }) {
     <div class="ja-stack">
       <p class="ja-lead">${firstOf(booking)} owes ${gbp(booking.finalPrice === null || booking.finalPrice === undefined ? booking.quotedPrice : booking.finalPrice)} for ${booking.serviceName}.</p>
       <${Segmented} options=${methods} value=${method} onChange=${setMethod} ariaLabel="How they paid" />
+      <${SimBanner} compact data-testid="paid-sim-note" />
+      <p class="ja-lead">This only records how they paid. No card, bank or payment link is connected, and nothing is charged.</p>
     </div>
   <//>`;
 }
@@ -291,8 +306,8 @@ function CancelSheet({ booking, onClose }) {
   const reason = (CANCEL_REASONS.find((r) => r.id === reasonId) || CANCEL_REASONS[0]).label;
   const submit = () => guard(() => {
     const res = cancelBooking(booking.id, 'owner', { reason, notify });
-    finish(res, booking.urgent ? 'Cancelled.' : 'Cancelled. The window is free again.');
-    onClose();
+    const ok = finish(res, booking.urgent ? 'Cancelled.' : 'Cancelled. The window is free again.');
+    if (ok || !res || res.reason !== 'storage_full') onClose();
   });
   const footer = html`<div class="ja-actions">
     <${Button} variant="danger" size="lg" block icon="ban" onClick=${submit} data-testid="cancel-submit">Cancel booking<//>
@@ -337,6 +352,7 @@ function RescheduleSheet({ booking, onClose }) {
   const daySlots = date ? slotsOn(date).filter((s) => s.state !== 'closed') : [];
   const picked = windowId === null ? null : daySlots.find((s) => s.windowId === windowId) || null;
   const oldWhen = bookingWhen(booking);
+  const firstDay = isUnscheduled(booking); // an install or survey that has no day yet is being given one, not moved
   const newWhen = picked ? bookingWhen({ ...booking, start: makeStamp(date, WINDOWS[windowId].start) }) : '';
 
   const submit = () => guard(() => {
@@ -347,12 +363,12 @@ function RescheduleSheet({ booking, onClose }) {
       setWindowId(null);
       return;
     }
-    const ok = finish(res, res && res.ok ? `Moved to ${bookingWhen(res.booking)}.` : '');
-    if (ok || (res && res.reason !== 'invalid')) onClose();
+    const ok = finish(res, res && res.ok ? `${firstDay ? 'Day set:' : 'Moved to'} ${bookingWhen(res.booking)}.` : '');
+    if (ok || (res && res.reason !== 'invalid' && res.reason !== 'storage_full')) onClose();
   });
 
-  const footer = html`<${Button} variant="primary" size="lg" block icon="calendar-check" disabled=${!picked} onClick=${submit} data-testid="reschedule-submit">Move booking<//>`;
-  return html`<${Sheet} open title="Move to another time" testid="reschedule-sheet" onClose=${onClose} footer=${footer}
+  const footer = html`<${Button} variant="primary" size="lg" block icon="calendar-check" disabled=${!picked} onClick=${submit} data-testid="reschedule-submit">${firstDay ? 'Set this day' : 'Move booking'}<//>`;
+  return html`<${Sheet} open title=${firstDay ? 'Choose a day' : 'Move to another time'} testid="reschedule-sheet" onClose=${onClose} footer=${footer}
     description=${`Now: ${oldWhen}`}>
     <div class="ja-stack">
       <div class="ja-block">
@@ -452,7 +468,10 @@ export function JobActionBar({ booking, variant = 'card' }) {
   const runPrimary = () => guard(() => {
     if (!primary) return;
     switch (primary.id) {
-      case 'confirm': case 'confirm_survey': case 'confirm_install': doConfirm(booking); break;
+      case 'confirm': case 'confirm_survey': case 'confirm_install':
+        if (isUnscheduled(booking)) open('reschedule'); // no day yet: choose one first, then confirm
+        else doConfirm(booking);
+        break;
       case 'confirm_install_linked': if (progress.install) doConfirm(progress.install); break;
       case 'accept': doAccept(booking, eta); break;
       case 'on_my_way': open('eta'); break;

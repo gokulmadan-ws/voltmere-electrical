@@ -1,5 +1,5 @@
 // tests/e2e/handoff-f4.mjs: the cross-device loop from both ends, in REAL headless Chromium with two (or more) SEPARATE browser contexts that share no storage:
-// the customer's phone (the funnel confirmation and its "Send my enquiry to Daniel on WhatsApp" card) and Daniel's phone (the dashboard Import screen).
+// the customer's phone (the funnel confirmation and its "Send my enquiry on WhatsApp" button) and Daniel's phone (the dashboard Import screen).
 // The wa.me link is READ from the page and never followed (requests to wa.me are aborted); the dashboard link inside it is then opened in Daniel's context.
 // Covers: the card, the link, the import screen for enquiries / accepted / declined quotes, idempotency, two customers with the same ref, the quote not on this
 // phone, a changed total, undo, hostile and damaged payloads, the paste fallback, #import= while the app is open, layout at 320/375/1280 in both themes, axe,
@@ -233,14 +233,14 @@ await section('1. customer phone: the WhatsApp send card and the real wa.me link
   });
   const { page } = A;
   check('the confirmation shows the WhatsApp send card', (await tid(page, 'wa-send-card').count()) === 1 && (await attr(page, 'wa-send-card', 'data-state')) === 'ready');
-  check('the primary button reads "Send my enquiry to Daniel on WhatsApp"', (await txt(page, 'wa-send')) === 'Send my enquiry to Daniel on WhatsApp', await txt(page, 'wa-send'));
+  check('the primary button reads "Send my enquiry on WhatsApp", under the headline "Send your enquiry to 180 Electrical." (no thank-you before the tap)', (await txt(page, 'wa-send')) === 'Send my enquiry on WhatsApp' && (await txt(page, 'confirmation-title')) === 'Send your enquiry to 180 Electrical.' && (await tid(page, 'confirmation-lead').count()) === 0, await txt(page, 'wa-send') + ' | ' + await txt(page, 'confirmation-title'));
   check('the button is a real https://wa.me/447885496800 link with the message in ?text=', A.href.startsWith('https://wa.me/447885496800?text='), A.href.slice(0, 80));
   check('it opens in a new tab without giving the tab access to this page', (await attr(page, 'wa-send', 'target')) === '_blank' && /noopener/.test((await attr(page, 'wa-send', 'rel')) || ''));
   check('the text says who, the ref, mobile, email, postcode, the five answers and the note in plain words',
     /^Hi Daniel, it's Aoife Ní Bhriain\./.test(A.text) && /Ref: EL-\d+/.test(A.text) && A.text.includes('Mobile: 07700 900231') && A.text.includes('Email: aoife@example.com') && A.text.includes('Postcode: BT9 6QP')
     && A.text.includes('Parking: Private driveway') && A.text.includes('Timing: As soon as possible') && A.text.includes('Permission to install: Yes') && A.text.includes('Anything else: Charger by the side gate'), A.text);
   check('the dashboard import link is on its own LAST line and carries the data in the fragment', A.link.startsWith(`${BASE}/dashboard.html#import=`) && A.link.length > 400 && A.link.length < 1100 && !/\s/.test(A.link), String(A.link.length));
-  check('the one-line note is data-proto (the live site does this through the webhook) and the card itself stays clean; the button is not data-proto, so it works in a clean preview',
+  check('the one-line note lives in the dashed PROTOTYPE block, is data-proto (the live site does this through the webhook), and the card itself stays clean; the button is not data-proto, so it works in a clean preview',
     (await attr(page, 'wa-send-note', 'data-proto')) !== null && (await attr(page, 'wa-send', 'data-proto')) === null && (await attr(page, 'wa-send-card', 'data-proto')) === null
     && (await txt(page, 'wa-send-note')) === "In your live site this happens automatically through your funnel's webhook.", await txt(page, 'wa-send-note'));
   const box = await tid(page, 'wa-send').boundingBox();
@@ -252,12 +252,12 @@ await section('1. customer phone: the WhatsApp send card and the real wa.me link
   const demo = await tid(page, 'demo-toggle').count();
   if (demo) { await tid(page, 'demo-toggle').click(); await tid(page, 'demo-panel').waitFor({ timeout: WAIT }); }
   const sub = await page.locator('.bk-demo__sub').first().innerText().catch(() => '');
-  check('the DEMO panel does not contradict the card: it no longer says nothing was sent', demo === 1 && !/Nothing was really sent/.test(sub) && /only gets your enquiry when you send the WhatsApp message/.test(sub), sub);
+  check('the DEMO panel does not contradict the card: it no longer says nothing was sent', demo === 1 && !/Nothing was really sent/.test(sub) && /only gets the enquiry when the customer sends the WhatsApp message/.test(sub), sub);
   const [popup] = await Promise.all([A.ctx.waitForEvent('page', { timeout: WAIT }), tid(page, 'wa-send').click()]);
   await popup.close().catch(() => {});
   check('tapping it opens WhatsApp in a new tab (the request to wa.me is aborted here, never followed)', waRequests.some((u) => u.startsWith('https://wa.me/447885496800?text=')), String(waRequests.length));
   check('the card then says "Opened in WhatsApp", with a calm "Open WhatsApp again" and never claims it was delivered',
-    (await until(async () => (await attr(page, 'wa-send-card', 'data-state')) === 'opened')) && (await txt(page, 'wa-send-title')) === 'Opened in WhatsApp' && (await txt(page, 'wa-send-again')) === 'Open WhatsApp again' && !/delivered|has been sent/i.test(await txt(page, 'wa-send-text')), await txt(page, 'wa-send-text'));
+    (await until(async () => (await attr(page, 'wa-send-card', 'data-state')) === 'opened')) && ((await tid(page, 'wa-send-title').textContent()) || '').trim() === 'Opened in WhatsApp' && (await txt(page, 'confirmation-title')) === 'Thanks, your enquiry has been received.' && (await txt(page, 'wa-send-again')) === 'Open WhatsApp again' && !/delivered|has been sent/i.test(await txt(page, 'wa-send-text')), await txt(page, 'wa-send-text'));
   check('the opened link is the same address', (await attr(page, 'wa-send-again', 'href')) === A.href);
   const remembered = await page.evaluate(() => { try { return JSON.parse(localStorage.getItem('vm_handoff_v1')); } catch (e) { return null; } });
   check('this browser remembers that it opened WhatsApp for the ref (vm_handoff_v1)', remembered && remembered.items && Object.keys(remembered.items).some((k) => k.startsWith('enq:EL-')), JSON.stringify(remembered));

@@ -2,6 +2,7 @@
 // Owner: B3 (was WP2)
 import { useEffect, useState } from '../vendor/preact-htm.js';
 import { ROUTES, DEFAULT_ROUTE, routeMeta } from './routes.js';
+import { safeEncode } from '../core/format.js';
 
 const TODAY = ROUTES.find((r) => r.name === 'today');
 
@@ -64,7 +65,7 @@ function isKnownHash(hash) {
 export function routeHref(name, params = {}, query = {}) {
   const route = ROUTES.find((r) => r.name === name) || TODAY;
   const path = segmentsOf(route.pattern)
-    .map((s) => (s.literal !== undefined ? s.literal : (params[s.param] === undefined || params[s.param] === null || params[s.param] === '' ? null : encodeURIComponent(params[s.param]))))
+    .map((s) => (s.literal !== undefined ? s.literal : (params[s.param] === undefined || params[s.param] === null || params[s.param] === '' ? null : safeEncode(params[s.param]))))
     .filter((s) => s !== null)
     .join('/');
   const qs = new URLSearchParams();

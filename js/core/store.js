@@ -1,7 +1,7 @@
 // js/core/store.js: the persisted store (localStorage with memory fallback), every mutation, cross-tab sync and undo
 // Owner: WP1 (v1), A3 (v3 additions: quotes, connections, marketing, photos, storage guard)
 import {
-  AD_CHANNELS, DEFAULT_IMAGES, DEFAULT_QUOTE_NOTES, EMERGENCY_REASONS, HALF_DAY_STARTS, IMAGE_KEYS, KIND_LABELS, PAID_METHODS, PROMISES, QUOTE_VIA, SCHEMA_VERSION,
+  AD_CHANNELS, BUSINESS_TEXT_MAX, DEFAULT_IMAGES, DEFAULT_QUOTE_NOTES, EMERGENCY_REASONS, HALF_DAY_STARTS, IMAGE_KEYS, KIND_LABELS, PAID_METHODS, PROMISES, QUOTE_VIA, SCHEMA_VERSION,
   LEGACY_QUOTE_NOTES, SOURCES, STORAGE_KEYS, WHATSAPP_DEMO_CODE, WHATSAPP_TEMPLATE_KINDS, WINDOWS,
   chargerItemId, makeChargerItem, makeDefaultBusiness, makeDefaultConnections, makeDefaultQuoteItems, makeDefaultSettings, normaliseAnswers
 } from './config.js';
@@ -9,7 +9,7 @@ import { now, nowStamp, nowStampSec, todayKey } from './clock.js';
 import { addDays, addMinutes, isDayKey, makeStamp, stampDay } from './dates.js';
 import { bookingWindowIds, bookingWhenArrival, isSlotFree, isUnscheduled, nextFreeSlot, nextFreeSlots, occupiedBy } from './availability.js';
 import {
-  makeId, normaliseDemoPhone, normalisePhone, normalisePostcode, postcodeZone,
+  makeId as freshId, normaliseDemoPhone, normalisePhone, normalisePostcode, own, plainText, postcodeZone,
   validateLine1, validateName, validatePhone, validatePostcode
 } from './format.js';
 import { alertHeading, buildMessage, buildSystemMessage, messageIsScheduled, reminderSendAt } from './messages.js';
@@ -22,6 +22,7 @@ import {
 } from './connections.js';
 import { PHOTO_LIMITS, normalisePhotos, validatePhoto } from './photos.js';
 import { normaliseUtm } from './utm.js';
+import { repairState } from './repair.js';
 
 // ---------- module state ----------
 
@@ -37,6 +38,34 @@ const MAX_TOKENS = 20;
 // v2 -> v3 adds quotes, the pipeline settings and the simulated connections (see migrateV2).
 const MIGRATIONS = { 1: (old) => migrateV1(old), 2: (old) => migrateV2(old) };
 const settleTimers = new Set(); // real-time timers that finish a simulated delay (cleared by initStore({ force }))
+
+// ---------- cross-tab lineage: every write names itself in meta.writes, and a write another tab overwrote is replayed ----------
+// localStorage is shared by every tab of this browser, but a tab can read a stale copy for a few milliseconds after another tab wrote, and a tab running a
+// synchronous burst reads nothing new at all. Two tabs can therefore each save a state that lacks the other's change, and the last save would win.
+// So each write appends a random id to meta.writes (the last WRITES_KEPT of them travel with the state). A tab keeps the mutations it made, and when
+// it reads back a state whose journal does not hold one of them it knows that write was overwritten, and runs the same mutation again on top of the
+// state it just read. That re-runs the rules (the next free ref, the next free window, the next message number) against the real latest state, so
+// nothing is lost and nothing double-books. The ids a mutation generated are reused, so a booking keeps its id.
+const WRITES_KEPT = 200;
+const PENDING_MAX = 60;
+let pending = []; // [{ id, rev, fn, ids }] this tab's writes not yet seen in a state read back from storage, oldest first
+let idTape = null; // while a mutation runs: { record: [[prefix, id]], replay: [[prefix, id]] }
+
+/** makeId, but a mutation that is run again gets the ids it generated the first time (when they are still free). */
+function makeId(prefix) {
+  if (idTape) {
+    const next = idTape.replay[0];
+    if (next && next[0] === prefix) {
+      idTape.replay.shift();
+      idTape.record.push(next);
+      return next[1];
+    }
+    const id = freshId(prefix);
+    idTape.record.push([prefix, id]);
+    return id;
+  }
+  return freshId(prefix);
+}
 
 const fail = (reason, extra = {}) => ({ ok: false, reason, ...extra });
 
@@ -195,21 +224,41 @@ function refreshQuoteContent(st) {
   return st;
 }
 
-/** Parse + migrate + validate. Returns a State or null (garbage, newer schema, missing migration). */
+let lastRepairs = 0; // how many entries or fields the last parseState had to drop or fix (0 for a clean save)
+
+/**
+ * Parse + migrate + validate + repair. Returns a State or null (garbage, newer schema, missing migration, an outline that is wrong).
+ * Nothing in here may throw: a save that cannot be read is the same as no save, and initStore re-seeds.
+ */
 function parseState(raw) {
-  let parsed;
+  lastRepairs = 0;
   try {
-    parsed = JSON.parse(raw);
+    let parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !Number.isInteger(parsed.v) || parsed.v > SCHEMA_VERSION) return null;
+    while (parsed.v < SCHEMA_VERSION) {
+      const step = MIGRATIONS[parsed.v];
+      if (!step) return null;
+      parsed = step(parsed);
+    }
+    if (!looksValid(parsed)) return null;
+    // right outline: make sure every entry the screens read is usable (drops what cannot be shown, never touches a clean state)
+    const { state: repaired, changes } = repairState(parsed, { today: todayKey() });
+    lastRepairs = changes;
+    return refreshQuoteContent(repaired);
   } catch (e) {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object' || !Number.isInteger(parsed.v) || parsed.v > SCHEMA_VERSION) return null;
-  while (parsed.v < SCHEMA_VERSION) {
-    const step = MIGRATIONS[parsed.v];
-    if (!step) return null;
-    parsed = step(parsed);
+}
+
+// A save that could not be used is replaced by a fresh seed; a copy of it is kept aside (best effort, small ones only) so nothing is lost for good.
+const BAD_COPY_MAX = 400000;
+function keepBadCopy(s, raw) {
+  if (!s || typeof raw !== 'string' || !raw || raw.length > BAD_COPY_MAX) return;
+  try {
+    s.setItem(STORAGE_KEYS.backup, raw);
+  } catch (e) {
+    // no room for a copy: the fresh start matters more
   }
-  return looksValid(parsed) ? refreshQuoteContent(parsed) : null;
 }
 
 function isQuotaError(e) {
@@ -339,6 +388,7 @@ function installListeners() {
 export function initStore(opts = {}) {
   if (state && !opts.force) return state;
   tokens.clear();
+  pending = [];
   for (const t of settleTimers) clearTimeout(t);
   settleTimers.clear();
   const candidate = opts.storage || defaultStorage();
@@ -347,6 +397,7 @@ export function initStore(opts = {}) {
 
   let loaded = null;
   let raw = null;
+  let repairs = 0;
   if (candidate) {
     try {
       raw = candidate.getItem(STORAGE_KEYS.state);
@@ -354,19 +405,28 @@ export function initStore(opts = {}) {
       raw = null;
     }
     loaded = raw ? parseState(raw) : null;
+    repairs = loaded ? lastRepairs : 0;
+    if (raw && (!loaded || repairs > 0)) keepBadCopy(storage, raw);
   }
 
-  let next;
+  let next = null;
   let dirty = false;
   if (loaded) {
-    if (loaded.seededFor !== todayKey()) {
-      next = rollover(loaded);
-      dirty = true;
-    } else {
-      next = loaded;
-      lastRaw = raw;
+    try {
+      if (loaded.seededFor !== todayKey()) {
+        next = rollover(loaded);
+        dirty = true;
+      } else {
+        next = loaded;
+        lastRaw = raw;
+        dirty = repairs > 0; // what was repaired is saved, so the next load starts clean
+      }
+    } catch (e) {
+      next = null; // a save that got through every check and still cannot be rolled over: start fresh rather than fail
+      keepBadCopy(storage, raw);
     }
-  } else {
+  }
+  if (!next) {
     next = freshState(readTheme(candidate));
     dirty = true;
   }
@@ -403,6 +463,54 @@ export function subscribe(fn) {
   };
 }
 
+/**
+ * Run `fn` on a copy of `base` the way mutate does, on behalf of an earlier write of this tab. Returns the new state, or null when the mutation is
+ * refused or has nothing left to do on this base (a window another tab took meanwhile, a quote already accepted): such a write is dropped.
+ */
+function replayOnto(base, entry) {
+  const draft = clone(base);
+  idTape = { record: [], replay: entry.ids.map((x) => x.slice()) };
+  let result = null;
+  try {
+    result = entry.fn(draft, base);
+  } catch (e) {
+    result = null;
+  } finally {
+    idTape = null;
+  }
+  if (!result || result.ok === false || result.__noop) return null;
+  draft.meta.rev = base.meta.rev + 1;
+  draft.meta.writes = [...(Array.isArray(base.meta.writes) ? base.meta.writes : []), entry.id].slice(-WRITES_KEPT);
+  return draft;
+}
+
+/**
+ * `remote` is a state another tab saved. If this tab has writes of its own that it does not hold (the other tab saved from a stale read and overwrote
+ * them), run them again on top of it and save the result. Returns the state this tab should now show.
+ */
+function reconcile(remote) {
+  if (pending.length === 0) return remote;
+  // A state with no journal at all (a fresh seed after the data was cleared, or a save by a build that does not keep one) cannot say what it holds: take it as it is.
+  if (!Array.isArray(remote.meta.writes)) { pending = []; return remote; }
+  const held = new Set(remote.meta.writes);
+  // A write so old that the journal has moved past it is taken as held (a duplicate booking would be worse than the vanishingly rare lost one).
+  pending = pending.filter((p) => remote.meta.rev - p.rev < WRITES_KEPT);
+  // A write the remote state holds is NOT forgotten: a state that held it can itself be overwritten by a third save made from a stale read, and only
+  // this tab can redo this tab's write. It is redone whenever a state read back lacks its id.
+  const missing = pending.filter((p) => !held.has(p.id));
+  if (missing.length === 0) return remote;
+  let base = remote;
+  const refused = new Set();
+  for (const entry of missing) {
+    const next = replayOnto(base, entry);
+    if (next) base = next; else refused.add(entry);
+  }
+  pending = pending.filter((p) => !refused.has(p)); // a write that is refused on the latest state (its window went) is dropped, not retried forever
+  if (base === remote) return remote;
+  if (writeState(base) === 'full') lastRaw = JSON.stringify(remote); // no room to save the merge: keep it in memory, the next write tries again
+  return base;
+}
+
 /** Re-read storage; true when another tab changed the state (compares the raw string, not just meta.rev). */
 export function syncFromStorage() {
   if (!state || mode !== 'local' || !storage) return false;
@@ -413,11 +521,11 @@ export function syncFromStorage() {
     return false;
   }
   if (raw === null || raw === undefined || raw === lastRaw) return false;
-  const next = parseState(raw);
-  if (!next) return false; // somebody wrote garbage: keep what we have
+  const remote = parseState(raw);
+  if (!remote) return false; // somebody wrote garbage: keep what we have
   lastRaw = raw;
   const prev = state;
-  state = deepFreeze(next);
+  state = deepFreeze(reconcile(remote));
   notify(prev);
   return true;
 }
@@ -437,12 +545,26 @@ function mutate(fn) {
   syncFromStorage();
   const prev = state;
   const draft = clone(prev);
-  const result = fn(draft, prev);
+  idTape = { record: [], replay: [] };
+  let result;
+  let ids;
+  try {
+    result = fn(draft, prev);
+  } finally {
+    ids = idTape.record;
+    idTape = null;
+  }
   if (!result || result.ok === false) return result;
   const { __noop: skipWrite, touched, afterCommit, ...rest } = result;
   if (skipWrite) return rest;
   draft.meta.rev += 1;
+  const writeId = freshId('w');
+  draft.meta.writes = [...(Array.isArray(prev.meta.writes) ? prev.meta.writes : []), writeId].slice(-WRITES_KEPT);
   if (writeState(draft) === 'full') return fail('storage_full');
+  if (mode === 'local') {
+    pending.push({ id: writeId, rev: draft.meta.rev, fn, ids });
+    if (pending.length > PENDING_MAX) pending.splice(0, pending.length - PENDING_MAX);
+  }
   const token = touched ? makeToken(prev, draft, touched) : null;
   state = deepFreeze(draft);
   if (touched) rest.undoToken = token;
@@ -541,8 +663,9 @@ function createBookingIn(draft, input, internal = {}) {
   const asOwner = !!d.asOwner;
   const cust = d.customer || {};
   const addr = d.address || {};
-  const name = String(cust.name === undefined || cust.name === null ? '' : cust.name).trim().slice(0, 60);
-  const notes = String(d.notes === undefined || d.notes === null ? '' : d.notes).trim().slice(0, internal.notesMax || 300);
+  // Customer text is plain, well-formed and bounded before it is kept (no control or bidi-override characters, no half an emoji at a cut).
+  const name = plainText(cust.name, 60);
+  const notes = plainText(d.notes, internal.notesMax || 300, { multiline: true });
   const serviceId = urgent ? 'emergency' : d.serviceId;
   const service = settings.services.find((s) => s.id === serviceId) || null;
   // The free survey is an enquiry: only the postcode is required, it is never auto-confirmed, and with `pencil: true` and no
@@ -637,8 +760,8 @@ function createBookingIn(draft, input, internal = {}) {
     emergencyReasons: reasons,
     etaMinutes: null,
     etaAt: null,
-    customer: { name, phone: normalisePhone(cust.phone), email: String(cust.email === undefined || cust.email === null ? '' : cust.email).trim() },
-    address: { line1: String(addr.line1 === undefined || addr.line1 === null ? '' : addr.line1).trim(), postcode: normalisePostcode(addr.postcode) },
+    customer: { name, phone: normalisePhone(cust.phone), email: plainText(cust.email, 120) },
+    address: { line1: plainText(addr.line1, 120), postcode: normalisePostcode(addr.postcode) },
     notes,
     internalNotes: '',
     source,
@@ -1094,6 +1217,10 @@ const LEAD_CHOICES = [60, 90, 120, 180, 240];
 const AHEAD_CHOICES = [7, 14, 21, 28];
 const REQUIRED_BUSINESS = ['name', 'shortName', 'ownerFirstName'];
 const TEXT_BUSINESS = ['descriptor', 'ownerFullName', 'tagline', 'email', 'areaName', 'areaText', 'schemeLine', 'insuranceLine'];
+// A 10,000 character business name must be refused with a plain sentence, never kept (the limits are in config.js, repair.js cuts old saves to them).
+const BUSINESS_MAX = BUSINESS_TEXT_MAX;
+const tooLong = (key) => `Keep this under ${BUSINESS_MAX[key]} characters.`;
+const BUSINESS_LIST_MAX = { items: 200, itemLength: 60 };
 const IMAGE_OK = /^(https:\/\/\S+|(?![a-z][a-z0-9+.-]*:)\S+)$/i; // https URLs and relative paths only
 // A photo picked on the owner's phone is stored as a downscaled JPEG data URL (Settings > Website photos); kept small so localStorage has room for all seven.
 const IMAGE_DATA_OK = /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i;
@@ -1122,9 +1249,10 @@ export function updateSettings(patch = {}) {
     if (biz && typeof biz === 'object') {
       for (const key of REQUIRED_BUSINESS) {
         if (!(key in biz)) continue;
-        const text = String(biz[key] === null || biz[key] === undefined ? '' : biz[key]).trim();
-        if (text) nextBiz[key] = text;
-        else errors[key] = "This can't be empty.";
+        const text = plainText(biz[key], 10000);
+        if (!text) errors[key] = "This can't be empty.";
+        else if (text.length > BUSINESS_MAX[key]) errors[key] = tooLong(key);
+        else nextBiz[key] = text;
       }
       if ('phone' in biz) {
         const phone = normalisePhone(biz.phone);
@@ -1132,14 +1260,20 @@ export function updateSettings(patch = {}) {
         else errors.phone = 'Enter a UK mobile like 07700 900412';
       }
       for (const key of TEXT_BUSINESS) {
-        if (key in biz) nextBiz[key] = String(biz[key] === null || biz[key] === undefined ? '' : biz[key]).trim();
+        if (!(key in biz)) continue;
+        const text = plainText(biz[key], 10000);
+        if (text.length > BUSINESS_MAX[key]) errors[key] = tooLong(key);
+        else nextBiz[key] = text;
       }
       for (const key of ['towns', 'coveredOutward', 'edgeOutward', 'credentials', 'brands']) {
-        if (Array.isArray(biz[key])) nextBiz[key] = biz[key].map((t) => String(t).trim()).filter(Boolean);
+        if (!Array.isArray(biz[key])) continue;
+        const list = biz[key].map((t) => plainText(t, 10000)).filter(Boolean);
+        if (list.length > BUSINESS_LIST_MAX.items || list.some((t) => t.length > BUSINESS_LIST_MAX.itemLength)) errors[key] = `Keep each entry under ${BUSINESS_LIST_MAX.itemLength} characters, and the list under ${BUSINESS_LIST_MAX.items} entries.`;
+        else nextBiz[key] = list;
       }
       if ('address' in biz) {
-        const address = String(biz.address === null || biz.address === undefined ? '' : biz.address).trim();
-        if (address.length > 200) errors.address = 'Keep the address under 200 characters.';
+        const address = plainText(biz.address, 10000);
+        if (address.length > BUSINESS_MAX.address) errors.address = 'Keep the address under 200 characters.';
         else nextBiz.address = address;
       }
       if (biz.images && typeof biz.images === 'object') {
@@ -1300,8 +1434,8 @@ export function resetDemo({ keepSettings = true } = {}) {
     draft.meta.messagesSeenSeq = top;
     draft.meta.simCursor = 0;
     syncCalendarBlocks(draft);
-    tokens.clear();
-    return { ok: true };
+    // The undo list is forgotten only once the reset is really saved: a write the browser refuses must leave it (and everything else) as it was.
+    return { ok: true, afterCommit: () => tokens.clear() };
   });
 }
 
@@ -1342,7 +1476,7 @@ export function simulateIncomingBooking({ kind = 'standard' } = {}) {
 
 // ---------- quotes (v3) ----------
 
-const quoteOf = (draft, id) => (draft.quotes && draft.quotes[id]) || null;
+const quoteOf = (draft, id) => own(draft.quotes, id);
 
 // A person's first change to a demo quote makes it theirs: a day rollover keeps it.
 const adopt = (quote) => {
@@ -1593,7 +1727,7 @@ export function declineQuote(id, { reason = '', by = 'customer' } = {}) {
     if (quote.status !== 'sent' && quote.status !== 'viewed') return fail('bad_transition');
     const enquiry = liveBooking(draft, quote.bookingId);
     if (!enquiry) return fail('not_found');
-    const why = String(reason === null || reason === undefined ? '' : reason).trim().slice(0, 200);
+    const why = plainText(reason, 200);
     const message = declineIn(draft, quote, enquiry, { reason: why, by });
     return { ok: true, quote, message, touched: { quotes: [id], bookings: [enquiry.id], messages: [message.id] } };
   });
@@ -1718,7 +1852,7 @@ export function importQuoteDecision(input, { force = false } = {}) {
         ...(verdict.bookingId ? { bookingId: verdict.bookingId } : {})
       });
     }
-    const quote = draft.quotes[d.quoteId];
+    const quote = own(draft.quotes, d.quoteId);
     if (verdict.state === 'done') {
       return noop({
         ok: true, existed: true, kind: d.kind, quote: prev.quotes[d.quoteId],
@@ -1915,7 +2049,7 @@ export function connectGoogle(service, { account } = {}) {
   return mutate((draft) => {
     if (service !== 'calendar' && service !== 'email') return fail('invalid', { errors: { service: 'Choose calendar or email.' } });
     const text = String(account === undefined || account === null ? '' : account).trim();
-    if (!isValidEmail(text)) return fail('invalid', { errors: { account: 'Enter the Google account, like daniel@gmail.com' } });
+    if (!isValidEmail(text)) return fail('invalid', { errors: { account: 'Enter the Google account, like name@gmail.com' } });
     const c = draft.settings.connections[service];
     c.status = 'connected';
     c.account = text;

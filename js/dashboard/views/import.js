@@ -307,20 +307,21 @@ function ImportScreen({ encoded }) {
   const hours = replyHoursOf(state);
   const first = data.firstName || data.customerFirst;
 
+  const handled = useRef(false); // a tap that lands before the screen re-renders (a double or triple tap) must not run the import again
   const apply = (force) => {
-    if (busy) return;
+    if (busy || handled.current) return;
     setBusy(true);
     setProblem('');
     let res;
     try { res = importHandoff(parsed, force ? { force: true } : {}); } catch (err) { res = { ok: false, reason: 'failed' }; }
     setBusy(false);
-    if (res && res.ok) setFinished({ kind, res });
+    if (res && res.ok) { handled.current = true; setFinished({ kind, res }); }
     else setProblem((res && res.message) || failureMessage(res, 'That did not work. Nothing was changed. Please try again.'));
   };
   const takeBack = () => {
     const token = finished && finished.res && finished.res.undoToken;
     const out = token ? undo(token) : { ok: false };
-    if (out.ok) { setFinished(null); toast({ message: 'Taken back.' }); } else toast({ message: 'Too late to undo.' });
+    if (out.ok) { handled.current = false; setFinished(null); toast({ message: 'Taken back.' }); } else toast({ message: 'Too late to undo.' });
   };
 
   if (finished) {

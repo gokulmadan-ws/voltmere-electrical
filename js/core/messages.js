@@ -6,7 +6,7 @@ import {
 import { nowStamp } from './clock.js';
 import { addDays, addMinutes, fmtClock, fmtDayShort, makeStamp, stampDay } from './dates.js';
 import { bookingWindowIds, bookingWhenArrival, isUnscheduled, nextFreeSlot } from './availability.js';
-import { addressLine, firstName, gbp, outwardCode, postcodeZone, toWaDigits } from './format.js';
+import { addressLine, firstName, gbp, outwardCode, postcodeZone, safeEncode, toWaDigits } from './format.js';
 import { latestQuoteFor, quoteShareUrl, quoteTotal, quoteUrl } from './quotes.js';
 import {
   buildAcceptancePayload, buildDeclinePayload, buildEnquiryPayload, acceptanceWhatsAppText, dashboardImportLink, declineWhatsAppText, encodePayload,
@@ -16,11 +16,12 @@ import {
 // The defaults live in config.js (one definition); messages.js re-exports them because 8.1 lists them here.
 export { DEFAULT_TEMPLATES, KIND_LABELS, PLACEHOLDERS, quoteShareUrl, quoteUrl };
 
-// The paperwork sentence per service: a certificate for certificate jobs, a written quote after a quote visit.
+// The paperwork sentence per service: a written quote after a quote visit. His site says nothing about certificates or paperwork, so the default
+// messages promise none (the owner can add his own wording in Settings).
 const PAPERWORK_LINES = {
-  eicr: 'Your certificate follows today.',
-  consumer: 'Your certificate follows today.',
-  ev: 'Your installation certificate follows today.',
+  eicr: '',
+  consumer: '',
+  ev: '',
   ev_quote: 'Your written quote follows shortly.'
 };
 
@@ -240,6 +241,8 @@ function templateFor(kind, booking, state, extra) {
   const custom = state.settings.templates && state.settings.templates[kind];
   if (custom) return custom;
   if (DEFAULT_UNSCHEDULED_TEMPLATES[kind] && isUnscheduled(extra.installBooking || booking)) return DEFAULT_UNSCHEDULED_TEMPLATES[kind];
+  // A booking that is being given its first day (bookingWhenArrival says 'To be arranged' for it) is not "moved from" anything.
+  if (kind === 'customer_rescheduled' && extra && extra.oldWhen === 'To be arranged') return DEFAULT_UNSCHEDULED_TEMPLATES.customer_rescheduled;
   return DEFAULT_TEMPLATES[kind];
 }
 
@@ -368,11 +371,11 @@ export function bubbleActions(message, booking, nowStampStr) {
 // ---------- links: the ONLY place wa.me, tel:, sms:, mailto: and maps URLs are built ----------
 
 export function waShareLink(text) {
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/?text=${safeEncode(text)}`;
 }
 
 export function waLink(phone, text, demoPhoneDigits = '') {
-  return `https://wa.me/${demoPhoneDigits || toWaDigits(phone)}?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/${demoPhoneDigits || toWaDigits(phone)}?text=${safeEncode(text)}`;
 }
 
 export function telLink(phone) {
@@ -384,13 +387,13 @@ export function smsLink(phone) {
 }
 
 export function mailtoLink(email, subject = '', body = '') {
-  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return `mailto:${email}?subject=${safeEncode(subject)}&body=${safeEncode(body)}`;
 }
 
 export function mapsLink(line1, postcode) {
   // An urgent request may have no street: search the postcode alone rather than ', BT9 6QP'.
   const query = [line1, postcode].filter(Boolean).join(', ');
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${safeEncode(query)}`;
 }
 
 // ---------- v4: the handoff links (the customer or the owner taps send in their own WhatsApp; docs/V4-API.md) ----------
@@ -412,17 +415,44 @@ function handoffFor(kind, payload, textFor, state) {
   return { ok: true, kind, payload, encoded, link, text, url: ownerWhatsAppUrl(state, text), chars: encoded.length };
 }
 
+// A wa.me link carries the whole message in its address, and an address over about 2,000 characters is cut or refused by some phones, browsers and
+// messengers. A customer's own words are the only part of a handoff that can be long (and each accented, emoji or combining character costs up to nine
+// characters once encoded), so when the link would be too long the notes are cut back (never the link at the end of the message).
+export const WA_URL_BUDGET = 1950;
+const cutText = (text, keep) => Array.from(String(text || '')).slice(0, Math.max(0, keep)).join('').trim();
+
+/** Build with the notes at full length, then at a half, a quarter... until the wa.me URL fits (or the notes are gone). */
+function fitHandoff(build, notes) {
+  const full = String(notes === undefined || notes === null ? '' : notes);
+  let out = build(full);
+  let keep = Array.from(full).length;
+  while (out.ok && out.url.length > WA_URL_BUDGET && keep > 0) {
+    keep = Math.floor(keep / 2);
+    out = build(cutText(full, keep));
+  }
+  return out;
+}
+
 /** The customer's "Send my enquiry to Daniel on WhatsApp": { ok, kind: 'enq', payload, encoded, link, text, url, chars } for a stored enquiry booking. */
 export function enquiryHandoff(booking, state) {
-  return handoffFor('enq', buildEnquiryPayload(booking), (link, business) => enquiryWhatsAppText(booking, { link, business }), state);
+  return fitHandoff((notes) => {
+    const b = notes === (booking && booking.notes) ? booking : { ...booking, notes };
+    return handoffFor('enq', buildEnquiryPayload(b), (link, business) => enquiryWhatsAppText(b, { link, business }), state);
+  }, booking && booking.notes);
 }
 
 /** The customer's "Accept quote" message to Daniel. `quote` is a stored Quote or the data of parseQuoteLink. */
 export function acceptanceHandoff(input, state) {
-  return handoffFor('acc', buildAcceptancePayload(input), (link, business) => acceptanceWhatsAppText(input, { link, business }), state);
+  return fitHandoff((note) => {
+    const i = note === (input && input.note) ? input : { ...input, note };
+    return handoffFor('acc', buildAcceptancePayload(i), (link, business) => acceptanceWhatsAppText(i, { link, business }), state);
+  }, input && input.note);
 }
 
 /** The customer's "Not for me" message to Daniel. */
 export function declineHandoff(input, state) {
-  return handoffFor('dec', buildDeclinePayload(input), (link, business) => declineWhatsAppText(input, { link, business }), state);
+  return fitHandoff((note) => {
+    const i = note === (input && input.note) ? input : { ...input, note };
+    return handoffFor('dec', buildDeclinePayload(i), (link, business) => declineWhatsAppText(i, { link, business }), state);
+  }, input && input.note);
 }

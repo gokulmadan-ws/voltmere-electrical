@@ -2,6 +2,7 @@
 // Owner: WP3, funnel history steps by D3
 import { useEffect, useState } from '../vendor/preact-htm.js';
 import { prefillFunnelPostcode } from './draft.js';
+import { safeEncode } from '../core/format.js';
 
 // Customer bookable services (the emergency path has its own hash). An unknown id falls back to '#book' (11.1).
 // 'ev_quote' is the website enquiry: the 6-step quote funnel. The others open the classic When / Details flow.
@@ -43,8 +44,8 @@ export function parseBookHash(hash) {
 
 /** opts: { serviceId, date, windowId } | { emergency: true } | { bookedRef } | { manageRef } | {} -> '#book/fault/2026-10-24/0' (a postcode in opts is ignored here) */
 export function bookHref(opts = {}) {
-  if (opts.bookedRef) return `#booked/${encodeURIComponent(opts.bookedRef)}`;
-  if (opts.manageRef) return `#manage/${encodeURIComponent(opts.manageRef)}`;
+  if (opts.bookedRef) return `#booked/${safeEncode(opts.bookedRef)}`;
+  if (opts.manageRef) return `#manage/${safeEncode(opts.manageRef)}`;
   if (opts.emergency) return '#book/emergency';
   if (!opts.serviceId) return '#book';
   let href = `#book/${opts.serviceId}`;

@@ -2,7 +2,9 @@
 // (from this browser's store, or from the share link's own copy when this browser never saw it).
 // Owner: Q2 (customer quote page)
 import { html, useErrorBoundary } from '../vendor/preact-htm.js';
-import { Button, bootApp } from '../ui/index.js';
+import { Button } from '../ui/button.js';
+import { ResetDataButton } from '../ui/reset.js';
+import { bootApp } from '../ui/boot.js';
 import { initIdeasMode } from '../ui/ideas.js';
 import { makeDefaultSettings } from '../core/config.js';
 import { getState } from '../core/store.js';
@@ -26,6 +28,7 @@ function QuoteApp() {
     return html`<div class="ui-fatal" role="alert" data-testid="q2-error">
       <p class="ui-fatal__text">Something went wrong showing your quote. Reload the page, or call ${fallbackPhone()}.</p>
       <${Button} variant="primary" onClick=${() => location.reload()}>Reload<//>
+      <${ResetDataButton} />
     </div>`;
   }
   return html`<${QuotePage} />`;

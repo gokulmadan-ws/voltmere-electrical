@@ -1,0 +1,260 @@
+/* css/landing.css: the landing page's FOUNDATION and its bookends (B1): base type, buttons, links, rules, tag, the prototype strip and popover, header, hero,
+   the spec strip (his three ticks and his two credentials), the sticky mobile bar, the closing composition (final call to action + footer) and the photo/logo primitives.
+   Every section between the hero and the closing band lives in css/landing-sections.css (B2).
+   Colours, sizes and spacing come from css/public-tokens.css only (no hex here except the white label on red). Mobile first; breakpoints 720, 1024, 1200.
+   Direction: Swiss editorial, light. One family (Archivo), one grid (12 columns), one rule weight (1px; 2px for emphasis), one accent (red = "your move" or "open"),
+   one graphic device (the 45 degree cut), square corners, no shadows, no gradients except the logo stripes. */
+
+/* ================= page frame ================= */
+:root[data-scope="public"] { scroll-padding-top: 16px; }
+@media (min-width: 720px) { :root[data-scope="public"] { scroll-padding-top: calc(var(--hdr-h) + 16px); } }
+@media (max-width: 719px) { :root[data-scope="public"] { scroll-padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom, 0px) + 12px); } }
+@media (prefers-reduced-motion: no-preference) { :root[data-scope="public"] { scroll-behavior: smooth; } }
+:root[data-scope="public"] body {
+  background: var(--paper); color: var(--ink);
+  font: 400 var(--body)/1.5 var(--f); font-variant-numeric: lining-nums; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+:root[data-scope="public"] ::selection { background: var(--selection-bg); color: var(--selection-fg); }
+:root[data-scope="public"] :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.lp-header :focus-visible, .lp-final :focus-visible, .lp-footer :focus-visible, .lp-lb :focus-visible { outline-color: var(--focus-on-black); }
+@media (prefers-reduced-motion: reduce) { :root[data-scope="public"] *, :root[data-scope="public"] *::before, :root[data-scope="public"] *::after { transition: none !important; animation: none !important; } }
+html[data-clean] [data-proto] { display: none !important; }
+
+.lp-wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--m); }
+.lp-main { display: block; }
+.lp-main:focus { outline: none; }
+.lp-nowrap { white-space: nowrap; }
+.lp-skip { position: absolute; left: var(--m); top: -80px; z-index: 300; background: var(--ink); color: var(--paper); padding: 12px 16px; font-weight: 600; text-decoration: none; }
+.lp-skip:focus { top: 8px; }
+.u-sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* ================= type voices ================= */
+/* The label voice: Archivo at its extended width, as in the ELECTRICAL wordmark. Used for eyebrows, hanging labels, table headers, form labels, footer keys. */
+.lp-lbl { margin: 0; font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
+.lp-small { font-size: 14px; line-height: 20px; color: var(--ink-2); }
+/* Display voice: H1, H2 and the closing H2. Width 108, weight 650, tracking -0.03em. */
+.lp-display { font-family: var(--f-display); font-weight: 650; font-stretch: 108%; letter-spacing: -0.03em; word-spacing: 0.02em; text-wrap: balance; }
+/* Logo voice: the bold italic extended of "180 ELECTRICAL". Used ONLY for the step numerals, the two credential figures and the three brand names. */
+.lp-logovoice { font-style: italic; font-weight: 800; font-stretch: 125%; font-variant-numeric: tabular-nums lining-nums; }
+
+/* ================= glyphs ================= */
+.lp-glyph { display: block; flex: none; }
+
+/* ================= buttons and links ================= */
+/* Primary: the only red fill. Always his exact words. 56px, square, label left and arrow right. Hover red-deep + arrow 4px; press 1px down. */
+.lp-btn {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 24px; height: 56px; padding: 0 24px; border: 0; border-radius: 0;
+  background: var(--red); color: #FFFFFF; font: 600 16px/1 var(--f); letter-spacing: -0.005em; text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--t-fast) ease;
+}
+.lp-btn .lp-glyph { transition: transform var(--t-base) ease; }
+@media (hover: hover) { .lp-btn:hover { background: var(--red-deep); } .lp-btn:hover .lp-glyph--arrow { transform: translateX(4px); } }
+.lp-btn:active { background: var(--red-deep); transform: translateY(1px); }
+.lp-btn--sm { height: 44px; padding: 0 16px; gap: 12px; font-size: 14px; }
+.lp-btn--xl { height: 64px; padding: 0 32px; font-size: 18px; }
+.lp-btn--block { display: flex; width: 100%; }
+@media (max-width: 359px) { .lp-btn--xl { padding: 0 16px; gap: 12px; font-size: 16px; } .lp-btn--lg { padding: 0 16px; gap: 12px; } }
+@media (forced-colors: active) { .lp-btn { border: 1px solid ButtonText; } .lp-pm::before, .lp-pm::after { background: CanvasText; } }
+/* Secondary: outlined ink. Used for the sticky bar's Call only. */
+.lp-btn--outline { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+@media (hover: hover) { .lp-btn--outline:hover { background: var(--ink); color: var(--paper); } }
+.lp-btn--outline:active { background: var(--ink); color: var(--paper); }
+/* Text link: ink, 600, a 1px underline that also runs under the trailing arrow, a 44px hit area. */
+.lp-link { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 12px 0; border: 0; background: none; color: var(--ink); font: 600 16px/20px var(--f); text-decoration: none; cursor: pointer; }
+.lp-link::after { content: ''; position: absolute; left: 0; right: 0; bottom: 9px; height: 1px; background: currentColor; }
+.lp-link .lp-glyph { transition: transform var(--t-base) ease; }
+@media (hover: hover) { .lp-link:hover .lp-glyph--arrow { transform: translateX(4px); } }
+.lp-link--quiet { min-width: 44px; justify-content: center; font-weight: 500; font-size: 14px; color: var(--ink-2); }
+@media (hover: hover) { .lp-link--quiet:hover { color: var(--ink); } }
+.lp-link--quiet:disabled { opacity: 0.4; cursor: default; }
+
+/* ================= the idea tag (shared: landing, funnel confirmation, quote page) ================= */
+:root[data-scope="public"] .ui-idea-tag {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 0; border: 0; border-radius: 0; background: none;
+  font: 500 13px/16px var(--f); letter-spacing: 0; text-transform: none; color: var(--ink-2);
+}
+:root[data-scope="public"] .ui-idea-tag__d { display: block; flex: none; width: 7px; height: 7px; border: 1px solid currentColor; transform: rotate(45deg); }
+
+/* ================= the cut: the logo's corner stripes as geometry. Exactly two photographs, always top-left or bottom-right, never filled ================= */
+.lp-cut-tl { clip-path: polygon(var(--cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--cut)); }
+.lp-cut-br { clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%); }
+
+/* ================= photo and logo primitives (media.js) ================= */
+.lp-photo { position: relative; display: block; overflow: hidden; width: 100%; background: var(--paper-3); }
+.lp-photo__img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: cover; }
+.lp-photo.has-zoom .lp-photo__img { transform: scale(var(--zoom, 1)); }
+.lp-photo__ph { position: absolute; inset: 0; background: var(--paper-3); }          /* a photo that cannot load: the box keeps its shape, flat tone, nothing drawn on it */
+/* His logo picture (1119x743, near-black ground): a WINDOW onto the "180 ELECTRICAL" lockup, blended with lighten so the ground vanishes into the black bar. */
+.lp-logo { --cx: 0.2273; --cy: 0.3039; --cw: 0.5368; --ch: 0.3922; --logo-h: 48px;
+  position: relative; display: block; flex: none; overflow: hidden; line-height: 0; height: var(--logo-h); aspect-ratio: calc(1119 * var(--cw) / (743 * var(--ch))); }
+.lp-logo__img { position: absolute; display: block; max-width: none; height: auto; aspect-ratio: 1119 / 743; width: calc(100% / var(--cw));
+  left: calc(var(--cx) / var(--cw) * -100%); top: calc(var(--cy) / var(--ch) * -100%); mix-blend-mode: lighten; }
+
+/* ================= prototype strip + tools popover (js/ui/notice.js, js/ui/ideas.js: same DOM, re-skinned; removed in production) ================= */
+:root[data-scope="public"] .ui-notice--public { position: relative; z-index: var(--z-pop); background: var(--paper-2); border-bottom: 1px solid var(--rule); color: var(--ink-2); font-size: 12px; line-height: 16px; }
+:root[data-scope="public"] .ui-notice__inner { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; max-width: var(--wrap); margin-inline: auto; padding-inline: 16px; }
+@media (min-width: 720px) { :root[data-scope="public"] .ui-notice__inner { padding-inline: var(--m); } }
+:root[data-scope="public"] .ui-tools__btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink); font: 500 12px/16px var(--f); cursor: pointer; }
+:root[data-scope="public"] .ui-tools__pill { display: inline-flex; align-items: center; gap: 6px; height: auto; padding: 0 0 2px; border: 0; border-bottom: 1px solid var(--ink-3); border-radius: 0; background: none; font: 500 12px/16px var(--f); color: var(--ink); white-space: nowrap; }
+:root[data-scope="public"] .ui-tools__icon { display: none; }
+:root[data-scope="public"] .ui-tools__chev { width: 12px; height: 12px; color: var(--ink); transition: transform var(--t-base) ease; }
+:root[data-scope="public"] .ui-tools__btn[aria-expanded="true"] .ui-tools__pill { background: none; color: var(--ink); border-color: var(--ink); }
+:root[data-scope="public"] .ui-tools__btn[aria-expanded="true"] .ui-tools__chev { transform: rotate(180deg); }
+:root[data-scope="public"] .ui-tools__short { display: none; }
+@media (max-width: 359px) { :root[data-scope="public"] .ui-tools__long { display: none; } :root[data-scope="public"] .ui-tools__short { display: inline; } }
+:root[data-scope="public"] .ui-ideas { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+:root[data-scope="public"] .ui-ideas__label { font: 500 12px/16px var(--f); color: var(--ink-2); white-space: nowrap; }
+@media (max-width: 399px) { :root[data-scope="public"] .ui-ideas__label { display: none; } }
+:root[data-scope="public"] .ui-ideas__track { position: relative; display: inline-flex; flex: none; }
+:root[data-scope="public"] .ui-ideas__track::before { content: ''; position: absolute; inset: 9px 0; pointer-events: none; border: 1px solid var(--ink); border-radius: 0; background: transparent; }
+:root[data-scope="public"] .ui-ideas__opt { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 1px; border: 0; background: none; color: var(--ink); font: inherit; cursor: pointer; }
+:root[data-scope="public"] .ui-ideas__pill { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 0; font: 500 12px/1 var(--f); white-space: nowrap; }
+:root[data-scope="public"] .ui-ideas__opt.is-selected .ui-ideas__pill { background: var(--ink); color: var(--paper); font-weight: 500; }
+:root[data-scope="public"] .ui-tools__panel { position: absolute; z-index: 2; top: calc(100% + 8px); left: 12px; right: 12px; display: flex; flex-direction: column; gap: 0; max-height: calc(100dvh - 80px); overflow-y: auto; padding: 16px 16px 8px; border: 1px solid var(--ink); border-radius: 0; background: var(--field); color: var(--ink); box-shadow: none; font-size: 14px; line-height: 20px; animation: none; }
+@media (min-width: 720px) { :root[data-scope="public"] .ui-tools__panel { left: var(--m); right: auto; width: 360px; } }
+:root[data-scope="public"] .ui-tools__head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; }
+:root[data-scope="public"] .ui-tools__title { margin: 0; font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; }
+:root[data-scope="public"] .ui-tools__close { display: inline-grid; place-items: center; width: 44px; height: 44px; margin: -12px -12px -12px 0; border: 0; background: none; color: var(--ink); cursor: pointer; }
+:root[data-scope="public"] .ui-tools__text { margin: 0; padding: 12px 0; border-top: 1px solid var(--rule); max-width: none; color: var(--ink-2); font-size: 13px; line-height: 19px; }
+:root[data-scope="public"] .ui-tools__text--ideas { border-top: 1px solid var(--rule); padding-top: 12px; }
+:root[data-scope="public"] .ui-tools__row, :root[data-scope="public"] .ui-tools__group { padding: 12px 0; border-top: 1px solid var(--rule); }
+:root[data-scope="public"] .ui-tools__label { margin: 0 0 8px; font: 600 12px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+:root[data-scope="public"] .ui-tools__list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+:root[data-scope="public"] .ui-tools__link { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0; border: 0; color: var(--ink); font-weight: 500; text-decoration: none; }
+:root[data-scope="public"] .ui-tools__chips { display: flex; flex-wrap: wrap; gap: 0 20px; margin: 0; padding: 0; list-style: none; }
+:root[data-scope="public"] .ui-tools__chip { display: inline-flex; align-items: center; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ink); font-weight: 500; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+:root[data-scope="public"] .ui-seg { display: inline-flex; gap: 0; padding: 0; border: 1px solid var(--ink); border-radius: 0; background: none; overflow: visible; }
+:root[data-scope="public"] .ui-seg__opt { min-height: 44px; padding: 0 14px; border: 0; border-radius: 0; background: none; color: var(--ink); font: 500 14px/1 var(--f); box-shadow: none; }
+:root[data-scope="public"] .ui-seg__opt + .ui-seg__opt { border-left: 1px solid var(--ink); }
+:root[data-scope="public"] .ui-seg__opt svg { display: none; }
+:root[data-scope="public"] .ui-seg__opt.is-selected { background: var(--ink); color: var(--paper); font-weight: 500; box-shadow: none; border-color: var(--ink); }
+
+/* ================= header: black, the logo's own ground. Static on phones, sticky from 720 ================= */
+.lp-header { position: relative; z-index: var(--z-header); background: var(--black); color: var(--on-black); }
+@media (min-width: 720px) { .lp-header { position: sticky; top: 0; } }
+/* a hairline keeps the bar readable where it passes over the black closing band, and on the dark theme */
+.lp-header { box-shadow: 0 1px 0 var(--rule-b); }
+.lp-header__bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: var(--hdr-h); }
+.lp-brand { display: block; flex: none; line-height: 0; text-decoration: none; }
+.lp-brand .lp-logo { --logo-h: var(--hdr-logo-h); }
+.lp-nav { display: none; }
+.lp-header__actions { display: flex; align-items: center; gap: 24px; }
+.lp-header__phone { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--on-black); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; text-decoration: none; }
+@media (hover: hover) { .lp-header__phone:hover { text-decoration: underline; text-underline-offset: 4px; } }
+/* One red button on screen at a time: the header's appears only after the hero's has scrolled out (js: useHeroCtaGone toggles .is-cta-on). */
+.lp-header__book { display: none; }
+@media (min-width: 720px) { .lp-header.is-cta-on .lp-header__book { display: inline-flex; } }
+@media (min-width: 1024px) {
+  .lp-nav { display: flex; gap: 32px; }
+  .lp-nav__link { position: relative; display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; justify-content: center; font-size: 14px; font-weight: 500; color: var(--on-black-2); text-decoration: none; transition: color var(--t-fast) ease; }
+  .lp-nav__link:hover, .lp-nav__link.is-active { color: var(--on-black); }
+  .lp-nav__link::after { content: ''; position: absolute; left: 0; right: 0; bottom: 6px; height: 2px; background: var(--red); transform: scaleX(0); transform-origin: left; transition: transform var(--t-base) ease; }
+  .lp-nav__link.is-active::after { transform: scaleX(1); }
+}
+@media (min-width: 1024px) and (max-width: 1179px) { .lp-header__phone span { display: none; } .lp-nav { gap: 24px; } }
+
+/* ================= hero ================= */
+.lp-hero { padding-top: 40px; overflow-x: clip; }
+.lp-hero__eyebrow { color: var(--ink); }
+.lp-hero__title { margin-top: 16px; max-width: 11.4em; font-size: var(--h1); line-height: 1.02; }
+.lp-hero__title > span { display: block; }
+.lp-hero__title > span + span { text-wrap: balance; }
+.lp-hero__body { margin-top: 32px; }
+.lp-hero__sub { max-width: 30em; font-size: var(--lede); line-height: 1.5; color: var(--ink); text-wrap: pretty; }
+.lp-hero__cta { margin-top: 32px; }
+.lp-hero__btn { width: 100%; }
+.lp-note { margin-top: 16px; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.lp-note strong { display: block; color: var(--ink); font-weight: 600; }
+.lp-hero__photo { margin: 40px calc(-1 * var(--m)) 0; }
+.lp-hero__photo .lp-photo { aspect-ratio: 3 / 2; }
+@media (min-width: 720px) { .lp-hero { padding-top: 56px; } .lp-hero__btn { width: auto; } }
+@media (min-width: 1024px) {
+  .lp-hero__title { margin-top: 20px; }
+  .lp-hero__body { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; align-items: start; margin-top: 48px; }
+  .lp-hero__copy { grid-column: 1 / 5; }
+  .lp-hero__photo { grid-column: 5 / -1; margin: 0 calc(-1 * (var(--m) + var(--bleed))) 0 0; }
+}
+
+/* ---------- the spec strip: his three ticks, then "Accredited and qualified" ---------- */
+.lp-spec { margin-top: 40px; border-top: 1px solid var(--ink); }
+.lp-spec__ticks li { display: flex; align-items: flex-start; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--rule); font-size: 17px; line-height: 24px; font-weight: 500; }
+.lp-spec__ticks .lp-glyph { margin-top: 2px; }
+.lp-spec__trust { border-bottom: 1px solid var(--rule); }
+.lp-spec__k { padding: 20px 0 4px; }
+.lp-spec__cred { display: grid; grid-template-columns: 128px 1fr; column-gap: 12px; align-items: baseline; padding: 14px 0; border-top: 1px solid var(--rule); font-size: 17px; line-height: 24px; }
+.lp-spec__cred:last-child { padding-bottom: 20px; }
+.lp-fig { font-size: var(--fig); line-height: 1; letter-spacing: -0.02em; }
+@media (min-width: 1024px) {
+  .lp-spec { margin-top: 72px; }
+  .lp-spec__ticks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px; }
+  .lp-spec__ticks li { padding: 28px 0; border-bottom: 0; font-size: 18px; }
+  .lp-spec__trust { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); }
+  .lp-spec__k { padding: 36px 0; }
+  .lp-spec__cred { display: block; padding: 28px 0 32px; border-top: 0; font-size: 18px; line-height: 26px; }
+  .lp-spec__cred:last-child { padding-bottom: 32px; }
+  .lp-spec__cred .lp-fig { display: block; margin-bottom: 12px; }
+}
+
+/* ================= closing composition: the last screen is the logo at scale. One near-black block (final call to action + footer), the logo's two opposite-corner stripes ================= */
+.lp-final, .lp-footer { position: relative; overflow: hidden; background: var(--black); color: var(--on-black); }
+.lp-final::before, .lp-footer::after {
+  content: ''; position: absolute; width: var(--sl); height: var(--sl); pointer-events: none;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  background: linear-gradient(135deg, var(--red) 0 19%, transparent 19% 25%, var(--on-black) 25% 32%, transparent 32% 38%, var(--red) 38% 50%);
+}
+.lp-final::before { top: 0; left: 0; }
+.lp-footer::after { right: 0; bottom: 0; transform: rotate(180deg); }
+.lp-final { margin-top: var(--sec-l); padding: calc(var(--sl) + 16px) 0 72px; }
+.lp-final__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+.lp-final__h { font-size: var(--final-h); line-height: 1; max-width: 9em; }
+.lp-final__side p { color: var(--on-black-2); font-size: 18px; line-height: 1.5; max-width: 26em; }
+.lp-final__btn { margin-top: 32px; width: 100%; }
+@media (min-width: 720px) { .lp-final { padding-bottom: 96px; } .lp-final__btn { width: auto; } }
+@media (min-width: 1024px) {
+  .lp-final { padding-bottom: 128px; }
+  .lp-final__grid { grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: 1fr auto; column-gap: 24px; row-gap: 0; }
+  .lp-final__h { grid-column: 1 / 9; grid-row: 1 / 3; max-width: none; }
+  .lp-final__side { display: contents; }
+  .lp-final__side p { grid-column: 9 / -1; grid-row: 1; align-self: start; padding-top: 0.5em; }
+  .lp-final__btn { grid-column: 9 / -1; grid-row: 2; align-self: end; margin-top: 0; width: 100%; }
+}
+.lp-footer { padding-bottom: calc(var(--sl) + env(safe-area-inset-bottom, 0px)); }
+.lp-footer__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; border-top: 1px solid var(--rule-b); padding-top: 48px; }
+.lp-footer__logo { display: block; line-height: 0; text-decoration: none; }
+.lp-footer__logo .lp-logo { --logo-h: 88px; }
+.lp-footer__list > div { padding: 16px 0; border-top: 1px solid var(--rule-b); }
+.lp-footer__list > div:last-child { border-bottom: 1px solid var(--rule-b); }
+.lp-footer__list dt { font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--on-black-2); }
+.lp-footer__list dd { margin-top: 6px; font-size: 20px; line-height: 1.3; font-weight: 500; letter-spacing: -0.01em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.lp-footer__list dd.lp-footer__phone { font-family: var(--f-display); font-stretch: 108%; font-weight: 650; font-size: var(--phone-fs); line-height: 1.1; letter-spacing: -0.03em; }
+.lp-footer__list a { display: inline-flex; align-items: center; min-height: 44px; padding: 0; color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color var(--t-fast) ease; }
+@media (hover: hover) { .lp-footer__list a:hover { border-bottom-color: currentColor; } }
+.lp-footer__legal { font-size: 14px; line-height: 20px; color: var(--on-black-2); }
+@media (min-width: 1024px) {
+  .lp-footer__grid { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; padding-top: 64px; align-items: start; }
+  .lp-footer__logo { grid-column: 1 / 5; }
+  .lp-footer__logo .lp-logo { --logo-h: 112px; }
+  .lp-footer__list { grid-column: 5 / 11; }
+  .lp-footer__list dd { font-size: 24px; }
+  .lp-footer__legal { grid-column: 5 / 11; margin-top: 8px; }
+}
+
+/* ================= sticky mobile bar (below 720): Call + the one red button. Slides in once the hero button has scrolled out; steps aside while an in-page quote button is on screen ================= */
+.lp-sticky { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-bar); display: flex; gap: 8px; padding: 12px var(--m) calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--paper); border-top: 1px solid var(--ink); transform: translateY(105%); visibility: hidden; transition: transform var(--t-slow) ease, visibility 0s linear var(--t-slow); }
+.lp-sticky.is-on { transform: none; visibility: visible; transition: transform var(--t-slow) ease; }
+.lp-sticky__call { flex: none; padding: 0 18px; gap: 8px; justify-content: center; }
+.lp-sticky__book { flex: 1; min-width: 0; padding: 0 16px; gap: 12px; font-size: 15px; }
+html.is-scroll-locked .lp-sticky, html.is-keyboard-open .lp-sticky { display: none; }   /* carried over: a sheet or the keyboard is open */
+@media (max-width: 359px) { .lp-sticky__call { padding: 0 12px; } .lp-sticky__book { justify-content: center; padding: 0 8px; font-size: 14px; } .lp-sticky__book .lp-glyph { display: none; } }
+@media (min-width: 720px) { .lp-sticky { display: none; } }
+
+/* ================= carried over from the previous landing.css (behaviour, not look) ================= */
+/* Toasts sit above the sticky bar below 720px. */
+:root[data-scope="public"] { --toast-bottom: calc(var(--bar-h) + 12px); }
+@media (min-width: 720px) { :root[data-scope="public"] { --toast-bottom: 16px; } }
+/* The booking form is fetched on first use (js/landing/booking-host.js). If a tap beats the fetch, the sheet's own dimmed .ui-scrim shows until the sheet takes over; a quiet square spinner says "working". */
+.lp-booking-wait { z-index: var(--z-scrim, 100); cursor: progress; }
+.lp-booking-wait::after { content: ''; position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 2px solid rgba(245, 245, 244, 0.3); border-top-color: #F5F5F4; animation: lp-spin 700ms linear infinite; }
+@keyframes lp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { :root[data-scope="public"] .lp-booking-wait::after { animation: lp-spin 2.4s linear infinite !important; } }
+/* BreakerArt (js/landing/art.js, the funnel confirmation graphic): its .lp-breaker* rules move unchanged to css/booking.css in this rebuild (the sheet is the only place it is drawn). */

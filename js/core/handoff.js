@@ -8,7 +8,7 @@ import {
 } from './config.js';
 import { nowStamp } from './clock.js';
 import { addMinutes, isDayKey } from './dates.js';
-import { firstName, gbp, isValidPostcode, normalisePhone, normalisePostcode, outsideAreaLabel, toWaDigits } from './format.js';
+import { firstName, gbp, isValidPostcode, normalisePhone, normalisePostcode, outsideAreaLabel, safeEncode, toWaDigits, wellFormed } from './format.js';
 import { normaliseLeadSource } from './utm.js';
 
 // ---------- limits ----------
@@ -54,7 +54,7 @@ function cutText(text, max) {
  */
 export function sanitiseText(value, max = 200, { multiline = false } = {}) {
   if (typeof value !== 'string') return '';
-  let s = value.slice(0, max * 4 + 200).replace(/\r\n?/g, '\n').replace(INVISIBLE, '');
+  let s = wellFormed(value.slice(0, max * 4 + 200)).replace(/\r\n?/g, '\n').replace(INVISIBLE, '');
   for (let i = 0; i < 3; i += 1) {
     const stripped = s.replace(HTML_TAG, ''); // up to three passes: '<<b>script>' must not rebuild a tag
     if (stripped === s) break;
@@ -321,7 +321,7 @@ export function buildQuotePayload(quote, booking, extra) {
   return quotePayloadResult(quote, booking, extra).payload;
 }
 
-const idOnlyQuoteUrl = (id) => `${SITE_BASE_URL}quote.html#q=${encodeURIComponent(String(id === undefined || id === null ? '' : id))}`;
+const idOnlyQuoteUrl = (id) => `${SITE_BASE_URL}quote.html#q=${safeEncode(String(id === undefined || id === null ? '' : id))}`;
 
 /**
  * The link to SEND, COPY or CHASE a quote with. `url` is `quote.html#d=<payload>` (portable: opens on any phone) or, when the quote cannot

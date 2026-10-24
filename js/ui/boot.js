@@ -5,6 +5,7 @@ import { initStore } from '../core/store.js';
 import { initTheme } from './theme.js';
 import { ToastHost } from './toast.js';
 import { Button } from './button.js';
+import { ResetDataButton } from './reset.js';
 import { initClean } from './clean.js';
 
 const FAIL_KEY = 'vm_boot_fail';
@@ -30,7 +31,12 @@ function trackViewport() {
     root.style.setProperty('--kb-inset', inset + 'px');
     root.classList.toggle('is-keyboard-open', inset > 120);
   };
-  if (vv) { vv.addEventListener('resize', update); vv.addEventListener('scroll', update); }
+  if (vv) {
+    // The visual viewport scrolls while a pinch-zoomed page is panned: that can fire every frame, so the scroll listener is passive and coalesced to one read per frame.
+    let queued = false;
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; update(); }); } }, { passive: true });
+  }
   window.addEventListener('orientationchange', update);
   update();
 
@@ -40,6 +46,7 @@ function trackViewport() {
     const el = e.target;
     if (!(el instanceof HTMLElement) || !el.matches('input, textarea, select')) return;
     if (!touch && !root.classList.contains('is-keyboard-open')) return;
+    if (el.closest('[data-keep-scroll]')) return; // a screen that places its own focused field opts out (the quote funnel, js/booking/funnel.js: centring left its heading half cut)
     setTimeout(() => {
       if (document.activeElement === el) el.scrollIntoView({ block: 'center' });
     }, 250);
@@ -59,7 +66,8 @@ function fatalScreen(root) {
   root.textContent = '';
   render(h('div', { class: 'ui-fatal', role: 'alert' },
     h('p', { class: 'ui-fatal__text' }, "Couldn't load saved data. Reload to reset."),
-    h(Button, { variant: 'primary', onClick: () => location.reload() }, 'Reload')), root);
+    h(Button, { variant: 'primary', onClick: () => location.reload() }, 'Reload'),
+    h(ResetDataButton, { variant: 'secondary' })), root);
 }
 
 /**

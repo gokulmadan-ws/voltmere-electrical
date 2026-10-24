@@ -28,7 +28,7 @@ test('the business defaults are his real, public details (and nothing invented)'
 
 test('storage keys keep their names; the schema is v3 (quotes, pipeline, connections) and adds the utm session key', () => {
   assert.equal(SCHEMA_VERSION, 3);
-  assert.deepEqual(STORAGE_KEYS, { state: 'vm_state_v1', theme: 'vm_theme', draft: 'vm_draft_v1', bootFail: 'vm_boot_fail', utm: 'vm_utm' });
+  assert.deepEqual(STORAGE_KEYS, { state: 'vm_state_v1', theme: 'vm_theme', draft: 'vm_draft_v1', bootFail: 'vm_boot_fail', utm: 'vm_utm', backup: 'vm_state_backup' });
   assert.equal(PROMISES.contactWithinHours, 24);
 });
 
@@ -78,7 +78,7 @@ test('ENQUIRY_STEPS: the four choice questions (his funnel, step 5 reworded for 
     'Where would you normally park to charge?',
     'Do you already have your electric or plug-in hybrid car?',
     'When would you like your charger installed?',
-    "Do you own the property, or have the owner's permission?"
+    'Can you authorise installation work at the property?'
   ]);
   assert.equal(ENQUIRY_STEPS[0].note, 'Whatever you pick, we will check that a safe cable route and parking position can be arranged.');
   assert.equal(ENQUIRY_STEPS[1].note, '');
@@ -95,7 +95,7 @@ test('ENQUIRY_STEPS: the four choice questions (his funnel, step 5 reworded for 
   assert.deepEqual(ENQUIRY_STEPS[2].options.map((o) => [o.value, o.label]), [
     ['asap', 'As soon as possible'], ['month', 'Within the next month'], ['one_to_three', 'Within 1 to 3 months'], ['researching', 'Just researching']
   ]);
-  assert.deepEqual(ENQUIRY_STEPS[3].options.map((o) => [o.value, o.label]), [['yes', 'Yes'], ['landlord', 'I rent or lease and need permission'], ['unsure', 'Not sure']]);
+  assert.deepEqual(ENQUIRY_STEPS[3].options.map((o) => [o.value, o.label]), [['yes', 'Yes'], ['landlord', 'I need landlord or freeholder approval'], ['unsure', "I'm not sure"]]);
   for (const step of ENQUIRY_STEPS) for (const o of step.options) assert.ok(!/^[A-E][.)]?\s/.test(o.label), 'no A/B/C letter in a label');
   assert.deepEqual(ENQUIRY_ANSWER_KEYS, ['postcode', 'parking', 'vehicle', 'timing', 'permission']);
   assert.deepEqual(Object.keys(ENQUIRY_ANSWER_HEADINGS), ENQUIRY_ANSWER_KEYS);
@@ -106,7 +106,7 @@ test('answerLabel: the verbatim label, the postcode itself, and an empty string 
   assert.equal(answerLabel('parking', 'other'), 'Other or not sure');
   assert.equal(answerLabel('vehicle', 'ordered'), "It's ordered or arriving soon");
   assert.equal(answerLabel('timing', 'one_to_three'), 'Within 1 to 3 months');
-  assert.equal(answerLabel('permission', 'landlord'), 'I rent or lease and need permission');
+  assert.equal(answerLabel('permission', 'landlord'), 'I need landlord or freeholder approval');
   assert.equal(answerLabel('postcode', 'BT9 6QP'), 'BT9 6QP');
   assert.equal(answerLabel('postcode', undefined), '');
   assert.equal(answerLabel('parking', 'moon'), '');

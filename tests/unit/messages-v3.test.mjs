@@ -177,3 +177,12 @@ test('bubbleActions: Confirm on a pencilled install from an accepted quote, Open
   for (const kind of ['customer_quote_sent', 'customer_quote_accepted', 'customer_photos_request', 'owner_test_event']) assert.deepEqual(bubbleActions({ kind }, enquiry(), '2026-10-23T20:30'), [], kind);
   assert.deepEqual(bubbleActions(accepted, null, '2026-10-23T20:30'), []);
 });
+
+test('an install given its first day (oldWhen "To be arranged") gets a plain offer, never "moved from a time to be arranged"', () => {
+  const b = install({ tentative: false, status: 'new' });
+  const m = buildMessage('customer_rescheduled', b, stateOf(), { oldWhen: 'To be arranged', newWhen: 'Thu 29 Oct, afternoon, 1–3pm' });
+  assert.ok(m.body.startsWith("Hi Aoife, it's Daniel from 180 Electrical. I can do your EV charger installation on Thu 29 Oct, afternoon, 1–3pm at 14 Larkfield Gardens."), m.body);
+  assert.ok(!/moved|to be arranged|pencil|provisional/i.test(m.body), m.body);
+  const real = buildMessage('customer_rescheduled', b, stateOf(), { oldWhen: 'Tue 27 Oct, morning, 8–10am', newWhen: 'Thu 29 Oct, afternoon, 1–3pm' });
+  assert.ok(/I've moved your EV charger installation from Tue 27 Oct/.test(real.body), real.body);
+});

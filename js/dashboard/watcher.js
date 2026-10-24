@@ -5,7 +5,8 @@ import { getState } from '../core/store.js';
 import { selectUnseenBookings } from '../core/selectors.js';
 import { firstName } from '../core/format.js';
 import { bookingWhen } from '../core/availability.js';
-import { toast, useStore } from '../ui/index.js';
+import { toast } from '../ui/toast.js';
+import { useStore } from '../ui/hooks.js';
 import { navigate, parseHash, routeHref } from './router.js';
 
 // The shell owns the page title text and the watcher owns the "(n) " prefix, so both go through here

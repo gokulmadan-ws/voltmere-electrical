@@ -1,7 +1,9 @@
 // js/dashboard/shared/enquiry.js: enquiry helpers shared by the owner views (answer chips, status wording, price text, quote progress).
 // Owner: E3 (v1 by E2)
 import { html } from '../../vendor/preact-htm.js';
-import { Chip, Icon, StatusPill, cx, loadCss } from '../../ui/index.js';
+import { Chip, Icon, StatusPill } from '../../ui/display.js';
+import { cx } from '../../ui/util.js';
+import { loadCss } from '../../ui/load-css.js';
 import { ENQUIRY_ANSWER_KEYS, answerLabel } from '../../core/config.js';
 import { gbp, isValidPostcode, normalisePostcode } from '../../core/format.js';
 import { quoteStatus, selectJourney } from '../../core/selectors.js';

@@ -1,5 +1,6 @@
 // js/dashboard/views/messages.js: Messages, the outbox of WhatsApp and email messages (simulated): banner, compare card, filters, live bubble buttons, links.
 // Owner: E3 (v1 by WP8, enquiry chips and wording by E2)
+import { STORAGE_FULL_TEXT } from '../../ui/util.js';
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Chip, Disclosure, EmptyState, Icon, PageHeader, Segmented, Sheet, WhatsAppBubble,
@@ -78,7 +79,7 @@ function previewOf(body) {
 
 /** Generic failure rule (8.3) for any mutation result this screen does not handle specially. */
 function failToast(res) {
-  toast({ message: res && res.reason === 'not_found' ? 'That booking no longer exists.' : FAIL_TEXT, tone: 'danger' });
+  toast({ message: res && res.reason === 'not_found' ? 'That booking no longer exists.' : res && res.reason === 'storage_full' ? STORAGE_FULL_TEXT : FAIL_TEXT, tone: 'danger' });
 }
 
 /** 'Fri 18:00' for a scheduled send. */

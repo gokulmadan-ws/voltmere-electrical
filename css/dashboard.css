@@ -338,6 +338,7 @@ a.db-list__item:active, button.db-list__item:active { background: var(--surface-
 }
 
 .db-error__text { margin: 0 0 var(--space-3); font-weight: var(--fw-semibold); }
+.db-error__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 
 /* The loading state of a screen: a title, a subtitle and three card placeholders (shell.js ViewSkeleton). */
 .db-skel { display: flex; flex-direction: column; gap: var(--space-3); }

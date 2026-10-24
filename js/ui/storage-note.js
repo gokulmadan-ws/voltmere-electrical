@@ -10,8 +10,8 @@ const selectMode = () => getStorageStatus().mode;
 
 const COPY = {
   dashboard: 'This browser is not saving anything (a private window, or site data is blocked). What you do here is kept only while this tab stays open and is gone when you close or reload it. Use a normal window, or allow site data for this page, to keep your work.',
-  confirmation: (phone) => `This browser is not saving anything, so this page is gone if you close or reload it. To be sure Daniel has your enquiry, send it on WhatsApp with the button above${phone ? `, or call ${phone}` : ''}.`,
-  quote: 'This browser is not saving anything, so this page will not remember your reply if you close or reload it. Your message only reaches Daniel once you send it in WhatsApp.'
+  confirmation: (phone) => `This browser is not saving anything, so this page is gone if you close or reload it. To be sure we have your enquiry, send it on WhatsApp from the top of this page${phone ? `, or call ${phone}` : ''}.`,
+  quote: 'This browser is not saving anything, so this page will not remember your reply if you close or reload it. Your message only reaches us once you send it in WhatsApp.'
 };
 
 /**

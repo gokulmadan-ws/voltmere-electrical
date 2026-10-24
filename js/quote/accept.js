@@ -1,12 +1,16 @@
-// js/quote/accept.js: the "Accept quote" flow: choose an install day from the real availability engine, check it, accept (with friendly recovery).
+// js/quote/accept.js: the install-day flow behind the red "Choose install day" button: choose a day from the real availability engine (step 1 of 2), check it and accept
+// (step 2 of 2; only that last button says "Accept quote"), with friendly recovery.
 // Owner: Q2 (customer quote page)
 import { html, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
-import { Banner, Button, Icon, Sheet, cx } from '../ui/index.js';
+import { Banner } from '../ui/display.js';
+import { Button } from '../ui/button.js';
+import { Sheet } from '../ui/sheet.js';
+import { cx } from '../ui/util.js';
 import { getBookableDays, getDaySlots, isSlotFree } from '../core/availability.js';
 import { todayKey } from '../core/clock.js';
-import { DAY_SHORT, MONTH_SHORT, fmtDayLong, parseDayKey } from '../core/dates.js';
+import { DAY_SHORT, MONTH_LONG, fmtDayLong, parseDayKey } from '../core/dates.js';
 import { waLink } from '../core/messages.js';
-import { DateBox, StepFocus } from './parts.js';
+import { DateBox, SheetBar, StepFocus } from './parts.js';
 import { acceptQuote } from '../core/store.js';
 import { WINDOWS } from '../core/config.js';
 import { dayTitle, money, partOfDay, shownTotal, slotShort, soonestText, windowLine } from './format.js';
@@ -34,26 +38,25 @@ export function freeInstallDays(state) {
 
 /** A plain-English reading of a failed acceptQuote, with what to do about it. `close` means the sheet cannot help any more. */
 export function explainFailure(result, brand) {
-  const owner = brand.ownerFirst;
   switch (result && result.reason) {
     case 'slot_taken':
       return { tone: 'warn', title: 'That day was just taken', text: 'Sorry, someone got there first. Here are the next free days, or choose another below.', alternatives: result.alternatives || [] };
     case 'expired':
-      return { tone: 'danger', title: 'This quote has expired', text: `It can't be accepted any more. ${owner} can send you an updated one.`, close: true };
+      return { tone: 'danger', title: 'This quote has expired', text: 'It can\'t be accepted any more. We can send you an updated one.', close: true };
     case 'already_accepted':
       return { tone: 'ok', title: 'This quote is already accepted', text: 'Nothing more to do. Your install day is on the page.', close: true };
     case 'bad_transition':
-      return { tone: 'danger', title: "This quote can't be accepted now", text: `It has been closed or is not ready yet. Please call ${owner} to sort it out.`, close: true };
+      return { tone: 'danger', title: "This quote can't be accepted now", text: 'It has been closed or is not ready yet. Please call us to sort it out.', close: true };
     case 'service_unavailable':
-      return { tone: 'danger', title: "Install days can't be booked here right now", text: `Please call or WhatsApp ${owner} to find a day.`, contact: true };
+      return { tone: 'danger', title: "Install days can't be booked here right now", text: 'Please call or WhatsApp us to find a day.', contact: true };
     case 'invalid':
       return { tone: 'warn', title: 'Please choose a day', text: 'Pick a morning or afternoon first.' };
     case 'storage_full':
-      return { tone: 'danger', title: "Couldn't save this on your device", text: `Your device has no room left, so nothing was changed. Free up some space and try again, or call ${owner}.`, contact: true };
+      return { tone: 'danger', title: "Couldn't save this on your device", text: 'Your device has no room left, so nothing was changed. Free up some space and try again, or call us.', contact: true };
     case 'not_found':
-      return { tone: 'danger', title: "This quote is not on this device", text: `Nothing was changed. Please call ${owner}.`, contact: true };
+      return { tone: 'danger', title: "This quote is not on this device", text: 'Nothing was changed. Please call us.', contact: true };
     default:
-      return { tone: 'danger', title: 'Something went wrong', text: `Nothing was changed. Please try again, or call ${owner}.`, contact: true };
+      return { tone: 'danger', title: 'Something went wrong', text: 'Nothing was changed. Please try again, or call us.', contact: true };
   }
 }
 
@@ -68,7 +71,7 @@ function SlotOption({ date, windowId, free, selected, onPick }) {
         <span class="q2-slot__part"><span class="u-sr-only">${fmtDayLong(date)}, </span>${label}</span>
         <span class="q2-slot__arrive">${free ? `Free · arrive ${WINDOWS[windowId].label}` : 'Booked'}</span>
       </span>
-      <span class="q2-slot__tick" aria-hidden="true"><${Icon} name="check" size=${18} /></span>
+      <span class="q2-slot__tick" aria-hidden="true"></span>
     </label>
   `;
 }
@@ -82,9 +85,9 @@ function chipLabel(day) {
 }
 
 /**
- * The days as one horizontal strip of chips (weekday, date, and AM and PM marks: solid when free, crossed out when booked), with the month
- * written where it changes. One radio group: choosing a chip chooses the day and shows its two halves underneath. Until a chip is tapped
- * NOTHING in the strip looks chosen.
+ * The days as one horizontal strip of chips (weekday, date, and AM and PM marks: solid when free, crossed out when booked), each month under its own horizontal
+ * name (October, November: it sticks to the left edge while that month's days scroll past). One radio group: choosing a chip chooses the day and shows its two
+ * halves underneath. Until a chip is tapped NOTHING in the strip looks chosen.
  */
 function DayStrip({ days, viewKey, pickDate, onView }) {
   const ref = useRef(null);
@@ -97,25 +100,27 @@ function DayStrip({ days, viewKey, pickDate, onView }) {
     if (typeof strip.scrollTo === 'function') strip.scrollTo({ left, behavior: reducedMotion() ? 'auto' : 'smooth' });
     else strip.scrollLeft = left;
   }, [viewKey]);
-  let month = -1;
-  const items = [];
+  const groups = [];
   for (const day of days) {
     const date = parseDayKey(day.date);
-    if (date.getMonth() !== month) {
-      month = date.getMonth();
-      items.push(html`<span class="q2-strip__month" key=${`m${day.date}`} aria-hidden="true">${MONTH_SHORT[month]}</span>`);
-    }
+    const month = date.getMonth();
+    if (!groups.length || groups[groups.length - 1].month !== month) groups.push({ month, key: day.date, chips: [] });
     const viewed = day.date === viewKey;
-    items.push(html`
+    groups[groups.length - 1].chips.push(html`
       <label class=${cx('q2-chip', viewed && 'is-viewed', pickDate === day.date && 'is-picked')} key=${day.date} data-testid=${`q2-day-${day.date}`}>
         <input class="q2-chip__input" type="radio" name="q2-day" value=${day.date} checked=${viewed} onChange=${() => onView(day.date)} />
         <span class="u-sr-only">${chipLabel(day)}</span>
         <span class="q2-chip__dow" aria-hidden="true">${DAY_SHORT[date.getDay()]}</span>
-        <span class="q2-chip__num" aria-hidden="true">${date.getDate()}</span>
+        <span class="q2-chip__num lp-logovoice" aria-hidden="true">${date.getDate()}</span>
         <span class="q2-chip__halves" aria-hidden="true">${day.slots.map((s) => html`<i class=${cx('q2-chip__half', s.free ? 'is-free' : 'is-booked')} key=${s.windowId}>${partOfDay(s.windowId) === 'Morning' ? 'AM' : 'PM'}</i>`)}</span>
       </label>`);
   }
-  return html`<div class="q2-strip" role="radiogroup" aria-label="Choose a day" data-testid="q2-strip" ref=${ref}>${items}</div>`;
+  return html`<div class="q2-strip" role="radiogroup" aria-label="Choose a day" data-testid="q2-strip" ref=${ref}>
+    ${groups.map((g) => html`<div class="q2-strip__group" key=${g.key}>
+      <span class="q2-strip__month" aria-hidden="true">${MONTH_LONG[g.month]}</span>
+      <div class="q2-strip__days">${g.chips}</div>
+    </div>`)}
+  </div>`;
 }
 
 function Problem({ problem, brand, onPickAlt }) {
@@ -123,11 +128,11 @@ function Problem({ problem, brand, onPickAlt }) {
   const alts = Array.isArray(problem.alternatives) ? problem.alternatives : [];
   return html`
     <${Banner} tone=${problem.tone === 'ok' ? 'ok' : problem.tone} data-testid="q2-slot-problem" class="q2-problem"
-      actions=${problem.contact ? html`<${Button} size="sm" variant="secondary" icon="phone" href=${brand.telHref}>Call ${brand.phone}<//>` : null}>
+      actions=${problem.contact ? html`<${Button} size="sm" variant="secondary" href=${brand.telHref}>Call ${brand.phone}<//>` : null}>
       <strong>${problem.title}.</strong> ${problem.text}
       ${alts.length ? html`<span class="q2-alts" data-testid="q2-slot-alts">
         ${alts.map((a, i) => html`<button type="button" class="q2-alt" key=${`${a.date}-${a.windowId}`} data-testid=${`q2-slot-alt-${i}`}
-          onClick=${() => onPickAlt(a.date, a.windowId)}><${Icon} name="calendar-check" size=${18} /><span>${a.human}</span></button>`)}
+          onClick=${() => onPickAlt(a.date, a.windowId)}><span>${a.human}</span></button>`)}
       </span>` : null}
     <//>
   `;
@@ -202,7 +207,7 @@ export function AcceptFlow({ open, state, d, brand, onClose, onAccepted }) {
         <div class="q2-confirm__when">
           <p class="q2-confirm__day">${fmtDayLong(active.date)}</p>
           <p class="q2-confirm__part">${windowLine(active.windowId)}</p>
-          <button type="button" class="q2-changebtn" onClick=${() => setStep('pick')} data-testid="q2-slot-change"><${Icon} name="pencil" size=${16} /><span>Change</span></button>
+          <button type="button" class="q2-changebtn" onClick=${() => setStep('pick')} data-testid="q2-slot-change"><span>Change</span></button>
         </div>
       </div>
       <dl class="q2-confirm__rows">
@@ -210,61 +215,67 @@ export function AcceptFlow({ open, state, d, brand, onClose, onAccepted }) {
         ${d.quote.brand ? html`<div><dt>Charger</dt><dd>${d.quote.brand}</dd></div>` : null}
         <div class="q2-confirm__sum"><dt>Total</dt><dd>${money(shownTotal(d))}</dd></div>
       </dl>
-      <p class="q2-confirm__fine">By accepting you agree to the prices and notes on this quote. ${owner} will confirm your install day with you. Nothing is paid on this page.</p>
+      <p class="q2-confirm__fine">By accepting you agree to the prices and notes on this quote. We will confirm your install day with you. Nothing is paid on this page.</p>
       <${Problem} problem=${shown} brand=${brand} onPickAlt=${quickPick} />
       <div class="q2-sheet__actions" key="foot-confirm">
-        <${Button} variant="secondary" size="lg" icon="arrow-left" onClick=${() => setStep('pick')} data-testid="q2-slot-back" aria-label="Back to the choice of day"><span class="q2-back">Back</span><//>
-        <${Button} variant="primary" size="lg" block icon="check" onClick=${accept} data-testid="q2-slot-confirm">Accept quote<//>
+        <${Button} variant="secondary" size="lg" onClick=${() => setStep('pick')} data-testid="q2-slot-back" aria-label="Back to the choice of day"><span class="q2-back">Back</span><//>
+        <${Button} variant="primary" size="lg" block onClick=${accept} data-testid="q2-slot-confirm">Accept quote<//>
       </div>`;
   } else {
     body = html`
       <${StepFocus} key="pick" class="q2-sheet__lead" testid="q2-pick-heading">
-        Choose a day and a time of day that suit you. ${owner} will confirm it with you.
+        Choose a day and a time of day that suit you, and we will confirm it with you.
       <//>
       <${Problem} problem=${shown} brand=${brand} onPickAlt=${quickPick} />
       ${days.length
     ? html`
         <button type="button" class=${cx('q2-soonest', soonestChosen && 'is-selected')} onClick=${() => choose(soonest.date, soonest.windowId)}
           aria-pressed=${soonestChosen ? 'true' : 'false'} data-testid="q2-soonest">
-          <span class="q2-soonest__icon" aria-hidden="true"><${Icon} name=${soonestChosen ? 'check' : 'zap'} size=${20} /></span>
           <span class="q2-soonest__text">
             <span class="q2-soonest__k">Soonest available</span>
             <span class="q2-soonest__v">${soonestText(soonest.date, soonest.windowId)}</span>
           </span>
           <span class="q2-soonest__go" aria-hidden="true">${soonestChosen ? 'Chosen' : 'Choose'}</span>
         </button>
-        <p class="q2-pickstep" data-testid="q2-pickstep-day"><span class="q2-pickstep__n" aria-hidden="true">1</span><span>Choose a day</span></p>
+        <div class="q2-pickhead">
+          <p class="q2-label q2-pickstep" data-testid="q2-pickstep-day">Choose a day</p>
+          <p class="q2-key" aria-hidden="true" data-testid="q2-key">
+            <span class="q2-key__item"><i class="q2-chip__half is-free">PM</i>Free</span>
+            <span class="q2-key__item"><i class="q2-chip__half is-booked">PM</i>Booked</span>
+          </p>
+        </div>
         <${DayStrip} days=${days} viewKey=${viewKey} pickDate=${active ? active.date : ''} onView=${setViewDay} />
         ${viewed
     ? html`
         <div class="q2-slots" data-testid="q2-slots" role="radiogroup" aria-labelledby="q2-day-head">
-          <p class="q2-pickstep" data-testid="q2-pickstep-half"><span class="q2-pickstep__n" aria-hidden="true">2</span><span>Choose morning or afternoon</span></p>
+          <p class="q2-label q2-pickstep" data-testid="q2-pickstep-half">Choose morning or afternoon</p>
           <h3 class="q2-day__head" id="q2-day-head" data-testid="q2-day-head">${dayTitle(viewed.date, todayKey())}</h3>
           <div class="q2-day__opts">
             ${viewed.slots.map((slot) => html`<${SlotOption} key=${`${viewed.date}-${slot.windowId}`} date=${viewed.date} windowId=${slot.windowId} free=${slot.free}
               selected=${!!active && active.date === viewed.date && active.windowId === slot.windowId} onPick=${choose} />`)}
           </div>
         </div>`
-    : html`<p class="q2-slots__hint" data-testid="q2-slots-hint">Tap a day above to see its morning and afternoon.</p>`}
-        <p class="q2-sheet__small">Showing the next two weeks. AM is morning and PM is afternoon: a solid mark is free, a crossed-out mark is booked.</p>`
+    : null}`
     : html`
         <div class="q2-empty" data-testid="q2-slot-empty">
-          <${Icon} name="calendar-x" size=${40} />
           <p class="q2-empty__title">No free install days in the next two weeks</p>
-          <p class="q2-empty__text">${owner} can usually find you a day. Call or WhatsApp and it will be sorted out.</p>
+          <p class="q2-empty__text">We can usually find you a day. Call or WhatsApp and we will sort it out.</p>
           <div class="q2-row q2-row--even">
-            <${Button} variant="primary" icon="phone" href=${brand.telHref}>Call ${brand.phone}<//>
-            <${Button} variant="secondary" icon="message-circle" href=${waLink(brand.phone, helpText, brand.demoPhoneDigits)}>WhatsApp<//>
+            <${Button} variant="primary" href=${brand.telHref}>Call ${brand.phone}<//>
+            <${Button} variant="secondary" href=${waLink(brand.phone, helpText, brand.demoPhoneDigits)}>WhatsApp<//>
           </div>
         </div>`}`;
     footer = html`
       <div class="q2-sheet__foot" key="foot-pick">
         <p class="q2-sheet__sum" data-testid="q2-slot-summary" aria-live="polite">${active ? slotShort(active.date, active.windowId) : (viewed ? 'Choose morning or afternoon' : 'Choose a day')}</p>
-        <${Button} variant="primary" size="lg" block iconRight="arrow-right" disabled=${!active} onClick=${() => setStep('confirm')} data-testid="q2-slot-continue">Continue<//>
+        <${Button} variant="primary" size="lg" block disabled=${!active} onClick=${() => setStep('confirm')} data-testid="q2-slot-continue">Continue<//>
       </div>`;
   }
 
   // Both steps are short, so the sheet fits its content: no void between the text and the buttons (Accept sits right under the agreement).
-  return html`<${Sheet} open=${true} size="auto" title=${title} onClose=${() => onClose(null)} footer=${footer}
+  // The same head on both steps: the funnel's black bar with his logo and "Close", then "Step 1 of 2" or "Step 2 of 2" and the title.
+  const stepLabel = days.length || where === 'confirm' ? (where === 'confirm' ? 'Step 2 of 2' : 'Step 1 of 2') : '';
+  const header = html`<${SheetBar} brand=${brand} title=${title} step=${stepLabel} onClose=${() => onClose(null)} />`;
+  return html`<${Sheet} open=${true} size="auto" title=${title} header=${header} onClose=${() => onClose(null)} footer=${footer}
     initialFocus="[data-q2-focus]" testid="q2-accept-sheet">${body}<//>`;
 }

@@ -13,7 +13,7 @@ const realItems = () => [
   'Your own quote funnel, word for word: the postcode, parking, vehicle, timing, permission and contact questions and their answer options come from your current website',
   'Your public phone, email and credentials, and your own photos (linked from your current website); edit them in Settings',
   'Every enquiry becoming a job card with their answers, where they came from (the tracked link, or phone or word of mouth) and a countdown against your reply promise',
-  'A free survey visit pencilled into the diary automatically, with the customer told it is provisional until you confirm',
+  'A free survey visit pencilled into your diary automatically (you see it as pencilled in), with the customer told you will confirm it',
   'The quote builder: lines from your price list, totals, terms and a valid-until date, then the customer quote page where they accept and pick an install day from your real diary',
   'The pipeline from enquiry to survey, quote, accepted, install and paid, with money and response-time numbers worked out from the bookings',
   'Photos a customer attaches to an enquiry, stored as small copies in this browser, and the lightbox you review them in',
@@ -23,7 +23,8 @@ const realItems = () => [
   'The loop between two phones, with no server: the customer\'s WhatsApp message is a real wa.me link that carries their enquiry, so opening it on your phone shows exactly what they entered and one tap adds it. A quote you send, and the customer\'s accept or decline, come back the same way inside the link. You always see what will be added before you tap',
   'Campaign links with utm tags and QR codes that really encode your link, a printable QR card, and tap-to-call and WhatsApp links with the exact message filled in (they open your own WhatsApp, or the demo number when one is set)',
   'Real Google Maps search links, email links and a downloadable calendar file (.ics)',
-  'Light and dark themes (dark is the default, like your site)'
+  'The Show: With ideas | Only my content switch on the public pages: everything we added that your current site does not say is tagged "Idea from us, not on your site today", and one tap hides it all',
+  'Light and dark themes: your website opens in light and this dashboard in dark, and each has its own switch'
 ];
 
 const simulatedItems = (owner) => [

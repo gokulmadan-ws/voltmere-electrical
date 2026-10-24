@@ -1,7 +1,8 @@
 // js/booking/manage.js: Manage page (#manage/<ref>): live status, customer cancel (free until the cutoff), call and WhatsApp.
 // Owner: WP3, enquiry wording by D2, journey timeline, quote link and cancel rules by D3
 import { html, useState } from '../vendor/preact-htm.js';
-import { Icon, Button, Chip, Select, Sheet, EmptyState, toast } from '../ui/index.js';
+import { Button, Chip, Select, Sheet, EmptyState, toast } from '../ui/index.js';
+import { Glyph } from '../landing/glyphs.js';
 import { cancelBooking } from '../core/store.js';
 import { isWithinChangeCutoff, selectBookingByRef, selectService, selectQuoteForBooking } from '../core/selectors.js';
 import { waLink } from '../core/messages.js';
@@ -34,11 +35,11 @@ function StatusTimeline({ booking, brand }) {
   return html`<div class="bk-block">
     <ol class="bk-steps" data-testid="manage-status-timeline" aria-label="Booking status">
       ${STEPS.map((s, i) => html`<li key=${s.id} class=${'bk-steps__item' + (i < at ? ' is-past' : '') + (i === at ? ' is-current' : '')} aria-current=${i === at ? 'step' : undefined}>
-        <span class="bk-steps__mark" aria-hidden="true">${i < at ? html`<${Icon} name="check" size=${14} />` : null}</span>
+        <span class="bk-steps__mark" aria-hidden="true">${i < at ? html`<${Glyph} name="tick" size=${14} />` : null}</span>
         <span class="bk-steps__label">${s.label}</span>
       </li>`)}
     </ol>
-    ${booking.status === 'on_the_way' && booking.etaAt ? html`<p class="bk-note">${brand.ownerFirst} is on the way. Expected about ${stampTime(booking.etaAt)} (${brand.ownerFirst}'s own estimate, not live tracking).</p>` : null}
+    ${booking.status === 'on_the_way' && booking.etaAt ? html`<p class="bk-note">We are on the way. Expected about ${stampTime(booking.etaAt)} (our own estimate, not live tracking).</p>` : null}
   </div>`;
 }
 
@@ -50,8 +51,8 @@ export function Manage({ ctx, refId }) {
 
   if (!booking) {
     return html`<div class="bk-step" data-testid="manage-not-found">
-      <${EmptyState} icon="calendar-x" title="We couldn't find that reference" body=${`Check the reference, or call ${brand.ownerFirst} on ${brand.phone}.`}
-        action=${html`<div class="bk-contact"><${Button} variant="primary" class="bk-pill" onClick=${() => go({})}>Get my installation quote<//><${Button} icon="phone" href=${brand.telHref}>Call ${brand.ownerFirst}<//></div>`} />
+      <${EmptyState} icon="calendar-x" title="We couldn't find that reference" body=${`Check the reference, or call us on ${brand.phone}.`}
+        action=${html`<div class="bk-contact"><${Button} variant="primary" class="bk-pill" onClick=${() => go({})}>Get my installation quote<//><${Button} icon="phone" href=${brand.telHref}>Call us<//></div>`} />
     </div>`;
   }
 
@@ -75,7 +76,7 @@ export function Manage({ ctx, refId }) {
     const res = cancelBooking(booking.id, 'customer', { reason });
     setConfirming(false);
     if (res.ok) toast({ message: enquiry ? 'Enquiry cancelled. The suggested visit time is free again.' : 'Visit cancelled. That time is free again.' });
-    else if (res.reason === 'not_allowed') toast({ message: `This is close, so please call ${brand.ownerFirst}.`, tone: 'danger' });
+    else if (res.reason === 'not_allowed') toast({ message: 'This is close, so please call us.', tone: 'danger' });
     else if (res.reason === 'not_found') toast({ message: 'That booking no longer exists.', tone: 'danger' });
     else if (res.reason === 'storage_full') toast({ message: 'This device has no room left to save that change. Please call instead.', tone: 'danger' });
     else toast({ message: 'That did not work: the diary changed. Please check and try again.', tone: 'danger' });
@@ -103,15 +104,15 @@ export function Manage({ ctx, refId }) {
     : enquiry
       ? html`<${JourneyTimeline} items=${enquiryJourney(booking, brand, hours, quote)} testid="manage-status-timeline" label="Where things are" />`
       : html`<${StatusTimeline} booking=${booking} brand=${brand} />`}
-    ${enquiry && booking.status === 'on_the_way' && booking.etaAt ? html`<p class="bk-note bk-note--strong" data-testid="manage-eta">${brand.ownerFirst} is on the way. Expected about ${stampTime(booking.etaAt)} (${brand.ownerFirst}'s own estimate, not live tracking).</p>` : null}
-    ${pending ? html`<p class="bk-note bk-note--strong bk-manage__reply" data-testid="manage-reply-note"><${Icon} name="clock" size=${18} />${' '}<span>We'll be in touch within ${hours} hours.</span></p>` : null}
+    ${enquiry && booking.status === 'on_the_way' && booking.etaAt ? html`<p class="bk-note bk-note--strong" data-testid="manage-eta">We are on the way. Expected about ${stampTime(booking.etaAt)} (our own estimate, not live tracking).</p>` : null}
+    ${pending ? html`<p class="bk-note bk-note--strong bk-manage__reply" data-testid="manage-reply-note"><span>We'll be in touch within ${hours} hours.</span></p>` : null}
     ${canCancel ? html`<div class="bk-block bk-manage__actions">
-      <${Button} variant="secondary" size="lg" block icon="calendar-x" onClick=${() => setConfirming(true)} data-testid="manage-cancel">${enquiry ? 'Cancel enquiry' : 'Cancel visit'}<//>
-      <p class="bk-note">${enquiry ? `To change the visit time, call ${brand.ownerFirst}.` : `To change the time, call or WhatsApp ${brand.ownerFirst}.`}</p>
+      <${Button} variant="secondary" size="lg" block onClick=${() => setConfirming(true)} data-testid="manage-cancel">${enquiry ? 'Cancel enquiry' : 'Cancel visit'}<//>
+      <p class="bk-note">${enquiry ? 'To change the visit time, call us.' : 'To change the time, call or WhatsApp us.'}</p>
       ${contact}
     </div>` : null}
     ${active && !canCancel ? html`<div class="bk-block bk-manage__actions">
-      <p class="bk-note bk-note--strong" data-testid="manage-close-note">This is close, so please call ${brand.ownerFirst}.</p>
+      <p class="bk-note bk-note--strong" data-testid="manage-close-note">This is close, so please call us.</p>
       <p class="bk-note">${enquiry ? 'Your visit is coming up soon, so changes are best made by phone.' : 'The visit is coming up, so changes are best made by phone.'}</p>
       ${contact}
     </div>` : null}

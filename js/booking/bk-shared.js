@@ -1,11 +1,14 @@
 // js/booking/bk-shared.js: small pieces shared by the booking steps (title, help line, price text, slot-taken banner).
 // Owner: WP3, refreshed by D2 (quote-led price text, call-only help line)
 import { html } from '../vendor/preact-htm.js';
-import { Banner, BrandMark, Button, Chip, Icon, cx } from '../ui/index.js';
+import { Banner, BrandMark, Chip } from '../ui/display.js';
+import { Button } from '../ui/button.js';
+import { cx } from '../ui/util.js';
 import { waLink } from '../core/messages.js';
 import { PROMISES } from '../core/config.js';
 import { gbp } from '../core/format.js';
 import { LogoImg } from '../landing/media.js';
+import { Glyph } from '../landing/glyphs.js';
 
 /** Step heading. It is an h2 in both presentations (the dashboard page keeps its single h1) and takes focus on each step change. */
 export function StepTitle({ children, sub }) {
@@ -122,21 +125,35 @@ export function PrototypeStrip() {
   return html`<p class="bk-strip" data-proto="true" data-testid="booking-proto-strip"><span class="bk-strip__tag">Prototype</span><span class="bk-strip__text">Sample data, nothing is really sent</span></p>`;
 }
 
-/** The hours Daniel promises to reply within (his own target from Settings, else the 24 of his site). */
+/** The hours the business promises to reply within (his own target from Settings, else the 24 of his site). */
 function replyHoursOf(state) {
   const h = state && state.settings && state.settings.sla ? state.settings.sla.replyHours : 0;
   return Number.isInteger(h) && h > 0 ? h : PROMISES.contactWithinHours;
 }
 
 /**
- * Anchored under the answer rows: ONE line (his free-quote line and the hours Daniel contacts you within), optionally his two credentials as
- * quiet chips (step 1 only), and a tap-to-call link.
+ * A credential as typography: 'Level 3 Electrical Installation' -> figure 'Level 3' + descriptor 'Electrical Installation', '2391 Inspection and Testing' ->
+ * '2391' + 'Inspection and Testing' (the same split as the landing page's spec strip). A credential that does not start with a figure is the descriptor alone.
  */
-export function ReassureRow({ brand, state, free = true, credentials = false }) {
+export function splitCredential(text) {
+  const m = /^(Level\s+\d+|\d+[A-Za-z]?)\s+(.*)$/i.exec(String(text || '').trim());
+  return m ? { figure: m[1], rest: m[2] } : { figure: '', rest: String(text || '').trim() };
+}
+
+/**
+ * Anchored at the foot of a funnel step. Steps 2 to 5 carry ONE thing here: a tap-to-call link ("Questions? Call us on 07885 496800", one continuous 1px
+ * underline). Step 1 adds his two credentials as ruled rows in type (the figure in the logo voice, no chip, no badge). The free-quote line is shown once, on
+ * step 1 (under the button) and in step 6's promise, so it is `free={false}` by default; with `free` it reads in the business's voice ("We will contact you ...").
+ */
+export function ReassureRow({ brand, state, free = false, credentials = false }) {
   const creds = credentials ? credentialList(state) : [];
   return html`<div class="bk-reassure" data-testid="funnel-reassure">
-    ${free ? html`<p class="bk-reassure__free"><${Icon} name="shield-check" size=${18} /><span>Free, no-obligation quote. ${brand.ownerFirst} will contact you within ${replyHoursOf(state)} hours.</span></p>` : null}
-    ${creds.length ? html`<ul class="bk-reassure__chips" aria-label="Accredited and qualified" data-testid="funnel-credentials">${creds.map((c) => html`<li class="bk-reassure__chip" key=${c}><${Icon} name="badge-check" size=${16} /><span>${c}</span></li>`)}</ul>` : null}
-    <a class="bk-reassure__call" href=${brand.telHref} data-testid="booking-call"><${Icon} name="phone" size=${18} /><span>Questions? Call ${brand.ownerFirst} on <span class="bk-nowrap">${brand.phone}</span></span></a>
+    ${free ? html`<p class="bk-reassure__free"><${Glyph} name="tick" size=${18} /><span>Free, no-obligation quote. We will contact you within ${replyHoursOf(state)} hours.</span></p>` : null}
+    ${creds.length ? html`<div class="bk-reassure__creds"><p class="bk-reassure__k" id="bk-creds-k">Accredited and qualified</p>
+      <ul class="bk-reassure__chips" aria-labelledby="bk-creds-k" data-testid="funnel-credentials">${creds.map((c) => {
+    const parts = splitCredential(c);
+    return html`<li class="bk-reassure__chip" key=${c}>${parts.figure ? html`<span class="bk-reassure__fig lp-logovoice">${parts.figure}</span>${' '}<span class="bk-reassure__desc">${parts.rest}</span>` : html`<span class="bk-reassure__desc">${parts.rest}</span>`}</li>`;
+  })}</ul></div>` : null}
+    <a class="bk-reassure__call" href=${brand.telHref} data-testid="booking-call"><span class="bk-reassure__calltext">Questions? Call us on ${brand.phone}</span></a>
   </div>`;
 }

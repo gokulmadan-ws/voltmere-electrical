@@ -6,6 +6,10 @@
   "description": "Prototype: electrician booking site and owner dashboard. Sample data only. Static site, no build step.",
   "scripts": {
     "serve": "python3 -m http.server 4100",
-    "test": "TZ=Europe/London node --test \"tests/unit/*.test.mjs\""
+    "test": "TZ=Europe/London node --test \"tests/unit/*.test.mjs\"",
+    "robust": "node tests/qa/robust.mjs",
+    "perf": "node tests/qa/perf.mjs",
+    "modulepreload": "node scripts/modulepreload.mjs",
+    "audit": "node tests/qa/audit.mjs"
   }
 }

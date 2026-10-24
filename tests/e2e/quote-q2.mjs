@@ -81,7 +81,7 @@ async function newContext(vp, scheme = 'dark', extra = {}) {
     viewport: vp, timezoneId: 'Europe/London', locale: 'en-GB', colorScheme: scheme,
     isMobile: vp.width < 600, hasTouch: vp.width < 600, acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'], ...rest
   });
-  if (theme) await ctx.addInitScript((t) => { try { localStorage.setItem('vm_theme', t); } catch (e) { /* blocked */ } }, theme);
+  if (theme) await ctx.addInitScript((t) => { try { localStorage.setItem('vm_theme_public', t); } catch (e) { /* blocked */ } }, theme);
   // His pictures live on two external hosts the sandbox cannot reach: every request to them is answered with a stand-in.
   await ctx.route((u) => IMG_HOSTS.has(u.hostname), (route) => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: STAND_IN }));
   // wa.me is not reachable from the sandbox (and a test must never message anyone): a tab that opens WhatsApp lands on a stand-in page.
@@ -213,7 +213,7 @@ await section('1. no quote: missing reference, unknown reference, draft', async 
   await openBlank(page, '#q=Q-NOPE-9');
   check('unknown id gives the same plain state', (await stateOf(page)) === 'invalid' && (await txt(page, 'q2-title')) === 'We could not open this quote', await txt(page, 'q2-title'));
   const body = await txt(page, 'q2-invalid');
-  check('it speaks in customer words: cut short, Call or WhatsApp Daniel, he will send it again', /The link may have been cut short\. Call or WhatsApp Daniel and he will send it again\./.test(body), body.slice(0, 240));
+  check('it speaks in customer words, in our voice: cut short, Call or WhatsApp us, we will send it again', /The link may have been cut short\. Call or WhatsApp us and we will send it again\./.test(body), body.slice(0, 240));
   check('no customer-visible "prototype" wording outside [data-proto]', await page.evaluate(() => {
     const clone = document.getElementById('app').cloneNode(true);
     clone.querySelectorAll('[data-proto], [data-testid="prototype-strip"]').forEach((n) => n.remove());
@@ -221,6 +221,12 @@ await section('1. no quote: missing reference, unknown reference, draft', async 
   }));
   check('the prototype explanation lives in its own data-proto card', (await tid(page, 'q2-demo').getAttribute('data-proto')) !== null && /kept in the browser that made them/.test(await txt(page, 'q2-demo')));
   check('Call is the primary button and WhatsApp the secondary one', await page.evaluate(() => document.querySelector('[data-testid="q2-call"]').classList.contains('ui-btn--primary') && document.querySelector('[data-testid="q2-whatsapp"]').classList.contains('ui-btn--secondary')));
+  check('T06: "Visit 180 Electrical" is an ordinary underlined text link, flush left under the WhatsApp button (nothing on this page is centred)', await page.evaluate(() => {
+    const home = document.querySelector('[data-testid="q2-home"]');
+    const wa = document.querySelector('[data-testid="q2-whatsapp"]').getBoundingClientRect();
+    const r = home.getBoundingClientRect();
+    return home.tagName === 'A' && home.classList.contains('lp-link') && Math.abs(r.left - wa.left) <= 1 && r.top >= wa.bottom - 1 && r.width < wa.width * 0.8 && getComputedStyle(home, '::after').height === '1px' && r.height >= 43.5 && [...document.querySelectorAll('.q2-main *')].every((e) => getComputedStyle(e).textAlign !== 'center');
+  }));
   check('WhatsApp is prefilled: "Hi Daniel, I cannot open my quote Q-NOPE-9."', decodeURIComponent((await attr(page, 'q2-whatsapp', 'href')) || '').endsWith('text=Hi Daniel, I cannot open my quote Q-NOPE-9.'), decodeURIComponent((await attr(page, 'q2-whatsapp', 'href')) || ''));
   check('it shows the reference from the link', (await txt(page, 'q2-bad-id')) === 'Q-NOPE-9');
   check('it offers his real number', (await attr(page, 'q2-call', 'href')) === 'tel:+447885496800');
@@ -250,19 +256,22 @@ await section('2. the open quote on a phone', async () => {
   check('hash change opens the quote', await until(async () => (await stateOf(page)) === 'open'));
   check('title is "Your quote" with the reference in the tab', await until(async () => /Your quote Q-EL-\d+ · 180 Electrical/.test(await page.title())), await page.title());
   check('D3: his logo picture is in the footer (decorative: the business name is printed in the link label) and the header', (await tid(page, 'q2-logo-img').evaluate((el) => !!el.closest('[data-testid="q2-footer"]') && el.getAttribute('alt') === '')) && (await tid(page, 'q2-header-logo-img').evaluate((el) => !!el.closest('[data-testid="q2-header"]'))));
-  check('D3 header: HIS logo (cropped lockup, 44px tall) is the brand: no bolt-in-a-square mark, "Quote for Sean" for screen readers, and Call', await page.evaluate(() => {
+  check('D3 header: HIS logo (the cropped lockup, 48px tall, 56px from 1024) is the brand: no bolt-in-a-square mark, "Quote for Sean" for screen readers, and Call', await page.evaluate(() => {
     const bar = document.querySelector('[data-testid="q2-header"]');
     const logo = bar.querySelector('.q2-logo');
     const call = bar.querySelector('[data-testid="q2-top-call"]');
     const link = bar.querySelector('[data-testid="q2-logo"]');
-    return !!logo && Math.round(logo.getBoundingClientRect().height) === 44 && !bar.querySelector('svg.ui-brandmark') && /^180 Electrical home page$/.test(link.getAttribute('aria-label'))
+    return !!logo && Math.round(logo.getBoundingClientRect().height) === (innerWidth >= 1024 ? 56 : 48) && !bar.querySelector('svg.ui-brandmark') && /^180 Electrical home page$/.test(link.getAttribute('aria-label'))
       && /^Quote for Sean$/.test(bar.querySelector('[data-testid="q2-for"]').textContent.trim()) && !!call && call.getBoundingClientRect().height >= 44;
   }));
-  check('D3 header: at least 20px of air above the logo and below the bar, and the logo and the Call button share a row', await page.evaluate(() => {
+  check('D3 header: the black bar is 64px (72 from 1024) with the logo centred in it, on one row with Call, and the bar is the logo\'s own near-black', await page.evaluate(() => {
     const bar = document.querySelector('[data-testid="q2-header"]');
+    const black = document.querySelector('.q2-bar');
     const logo = bar.querySelector('.q2-logo').getBoundingClientRect();
     const call = bar.querySelector('[data-testid="q2-top-call"]').getBoundingClientRect();
-    return logo.top - bar.getBoundingClientRect().top >= 19.5 && bar.getBoundingClientRect().bottom - logo.bottom >= 19.5 && Math.abs((logo.top + logo.bottom) / 2 - (call.top + call.bottom) / 2) <= 3;
+    const b = bar.getBoundingClientRect();
+    return Math.abs(b.height - (innerWidth >= 1024 ? 72 : 64)) <= 1 && Math.abs((logo.top + logo.bottom) / 2 - (b.top + b.bottom) / 2) <= 1.5 && Math.abs((logo.top + logo.bottom) / 2 - (call.top + call.bottom) / 2) <= 3
+      && getComputedStyle(black).backgroundColor === 'rgb(11, 11, 12)';
   }));
   check('D1/D4: the prototype strip (Prototype tools + "Show: With ideas | Only my content") sits above the header, is never data-proto, and is the only one', await page.evaluate(() => {
     const strip = document.querySelector('[data-testid="prototype-strip"]');
@@ -274,15 +283,15 @@ await section('2. the open quote on a phone', async () => {
   check('T08: no dark-red arc beside the card (the hero ends in a straight edge)', await page.evaluate(() => getComputedStyle(document.querySelector('.q2-hero')).borderBottomLeftRadius === '0px' && getComputedStyle(document.querySelector('.q2-hero')).borderBottomRightRadius === '0px'));
   const pageText = await txt(page, 'q2-page');
   check('T02: no invented promises on the page (12-month, Fixed written, no hidden)', !/12-month|Fixed written|no hidden/i.test(pageText) && !/guarantee/i.test(pageText), pageText.match(/12-month|Fixed written|no hidden|guarantee/i) + '');
-  check('T02: it speaks of Daniel in the third person, never "we" or "our"', !/\b(we|our|we'll|we're)\b/i.test(pageText));
+  check('T11: it speaks as "we": the visible text of the open quote never says "Daniel" (no "Call Daniel", no "Notes from Daniel", no "Daniel confirms")', !/Daniel/.test(pageText), (pageText.match(/.{0,30}Daniel.{0,30}/) || [''])[0]);
   check('T02: at 375 the first screen shows the total, Accept and the "Accepting takes no payment" line directly under Accept', await page.evaluate(() => {
     const r = (t) => document.querySelector(`[data-testid="${t}"]`).getBoundingClientRect();
     const accept = r('q2-accept');
     const nopay = r('q2-nopay');
     return r('q2-total').bottom < innerHeight && accept.bottom < innerHeight && nopay.bottom <= innerHeight && nopay.top >= accept.bottom && nopay.top - accept.bottom < 24;
   }), JSON.stringify(await page.evaluate(() => ['q2-total', 'q2-accept', 'q2-nopay'].map((t) => Math.round(document.querySelector(`[data-testid="${t}"]`).getBoundingClientRect().bottom)))));
-  check('D1: the line under Accept states no payment TERM ("pay after" is an idea): "Accepting takes no payment. Daniel confirms your install day with you."', (await txt(page, 'q2-nopay')) === 'Accepting takes no payment. Daniel confirms your install day with you.', await txt(page, 'q2-nopay'));
-  check('greeting by first name', (await txt(page, 'q2-greeting')) === 'Hi Sean,');
+  check('D1: the line under the button states no payment TERM ("pay after" is an idea): "Accepting takes no payment. We confirm your install day with you."', (await txt(page, 'q2-nopay')) === 'Accepting takes no payment. We confirm your install day with you.', await txt(page, 'q2-nopay'));
+  check('greeting by first name', (await txt(page, 'q2-greeting')).toLowerCase() === 'hi sean,');
   check('title is "Your EV charger installation quote"', (await txt(page, 'q2-title')) === 'Your EV charger installation quote');
   check('quote reference and customer shown', (await txt(page, 'q2-ref')) === id && (await txt(page, 'q2-for')) === 'Quote for Sean', id);
   check('total is whole pounds with a separator', (await txt(page, 'q2-total')) === '£1,286', await txt(page, 'q2-total'));
@@ -295,33 +304,56 @@ await section('2. the open quote on a phone', async () => {
   // T09: it reads as a proposal, not a receipt
   check('D1: the decision card names the charger (the brand he chose) and carries NO spec line, no kW and no picture of ours', /OHME home charger/.test(await txt(page, 'q2-product')) && (await tid(page, 'q2-spec').count()) === 0 && (await tid(page, 'q2-thumb-img').count()) === 0 && !/\bkW\b|smart|solar|schedul/i.test(await txt(page, 'q2-decision')), await txt(page, 'q2-decision'));
   check('D1: nothing on the page states a product spec of ours (no kW, no "smart", no "solar")', !/\bkW\b|smart charger|solar/i.test(await txt(page, 'q2-page')), (await txt(page, 'q2-page')).match(/\bkW\b|smart charger|solar/i) + '');
-  check('D5: the three facts under the total are all true of the document: a written quote, itemised, valid until a day', (await txt(page, 'q2-fixed')) === 'A written quote', await txt(page, 'q2-fixed'));
-  const sum = await page.$$eval('[data-testid="q2-summary"] li', (els) => els.map((e) => e.innerText.trim()));
-  check('exactly three facts: "A written quote", "Itemised, line by line", "Valid until <day>"; the ticks are green (not the brand red)', sum.length === 3 && sum[0] === 'A written quote' && sum[1] === 'Itemised, line by line' && /^Valid until [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}/.test(sum[2]) && await page.evaluate(() => { const c = getComputedStyle(document.querySelector('[data-testid="q2-summary"] svg')).color; const [r, g, b] = c.match(/\d+/g).map(Number); return g > r && g > b; }), JSON.stringify(sum));
-  check('the total and the facts come before the line items', await page.evaluate(() => { const y = (t) => document.querySelector(`[data-testid="${t}"]`).getBoundingClientRect().top; return y('q2-total') < y('q2-lines-card') && y('q2-summary') < y('q2-lines-card'); }));
+  check('T12: the tick list under the total is gone (no "A written quote", no "Itemised, line by line", no q2-summary)', (await tid(page, 'q2-summary').count()) === 0 && !/A written quote|Itemised, line by line/.test(await txt(page, 'q2-page')));
+  check('T12: the first screen goes total, product line, then the red button with nothing between them but the sample signature and the jump link', await page.evaluate(() => {
+    const r = (t) => document.querySelector(`[data-testid="${t}"]`).getBoundingClientRect();
+    const card = document.querySelector('[data-testid="q2-decision"]');
+    const between = [...card.children].filter((c) => c.getBoundingClientRect().top >= r('q2-product').bottom - 1 && c.getBoundingClientRect().bottom <= r('q2-accept').top + 1 && c.contains(document.querySelector('[data-testid="q2-accept"]')) === false).map((c) => c.getAttribute('data-testid') || c.className);
+    return r('q2-total').bottom < innerHeight && r('q2-product').bottom < r('q2-accept').top && r('q2-accept').bottom < innerHeight && between.every((b) => /q2-sample|q2-seeall|q2-see-breakdown/.test(b));
+  }), await page.evaluate(() => JSON.stringify(['q2-total', 'q2-product', 'q2-accept'].map((t) => Math.round(document.querySelector(`[data-testid="${t}"]`).getBoundingClientRect().bottom)))));
+  check('T12: "Valid until" is the fourth fact in the Quote / Quoted / Postcode row, and it appears once on the page body (the sticky bar keeps its own single value)', await page.evaluate(() => {
+    const facts = [...document.querySelectorAll('.q2-meta li .q2-meta__k')].map((e) => e.textContent.trim());
+    const clone = document.getElementById('app').cloneNode(true);
+    clone.querySelectorAll('[data-testid="q2-sticky"], [data-testid="prototype-strip"]').forEach((n) => n.remove());
+    return facts.join('|') === 'Quote|Quoted|Postcode|Valid until' && (clone.textContent.match(/valid until/gi) || []).length === 1 && (document.querySelector('[data-testid="q2-sticky"]').textContent.match(/valid until/gi) || []).length === 1;
+  }), await page.evaluate(() => [...document.querySelectorAll('.q2-meta li .q2-meta__k')].map((e) => e.textContent.trim()).join('|')));
+  check('the total and the facts come before the line items', await page.evaluate(() => { const y = (t) => document.querySelector(`[data-testid="${t}"]`).getBoundingClientRect().top; return y('q2-total') < y('q2-lines-card') && y('q2-fixed') < y('q2-lines-card'); }));
   check('the total is shown at most twice on the page (card and table)', (await page.evaluate(() => document.getElementById('app').textContent.split('£1,286').length - 1)) <= 2, String(await page.evaluate(() => document.getElementById('app').textContent.split('£1,286').length - 1)));
   check('"Not for me" is a small grey underlined link below the card, not a button inside it', await page.evaluate(() => {
     const el = document.querySelector('[data-testid="q2-decline"]');
     const cs = getComputedStyle(el);
     const [r, g, b] = cs.color.match(/\d+/g).map(Number);
-    return !el.closest('[data-testid="q2-decision"]') && cs.textDecorationLine === 'underline' && parseFloat(cs.fontSize) <= 15 && Math.max(r, g, b) - Math.min(r, g, b) < 24
+    return !el.closest('[data-testid="q2-decision"]') && el.classList.contains('lp-link') && parseFloat(getComputedStyle(el, '::after').height) === 1 && parseFloat(cs.fontSize) <= 15 && Math.max(r, g, b) - Math.min(r, g, b) < 24
       && el.getBoundingClientRect().top >= document.querySelector('[data-testid="q2-decision"]').getBoundingClientRect().bottom;
   }));
-  check('D1: the terms are a tagged IDEA: "Sample terms (Daniel sets these)", data-proto, the visible "Idea from us, not on your site today" tag, no guarantee row, no payment methods', (await tid(page, 'q2-terms').getAttribute('data-proto')) !== null && /^Sample terms \(Daniel sets these\)/.test(await txt(page, 'q2-terms')) && /Idea from us, not on your site today/.test(await txt(page, 'q2-terms-tag')) && !/guarantee|card, bank|cash/i.test(await txt(page, 'q2-terms')));
+  check('T08: the terms are a tagged IDEA headed "Terms" (dashed rule, data-proto, the visible "Idea from us, not on your site today" tag), with no "(Daniel sets these)", no repeated "Example:", no guarantee row, no payment methods', (await tid(page, 'q2-terms').getAttribute('data-proto')) !== null && /^Terms$/.test(await page.locator('#q2-terms-h').innerText()) && /Idea from us, not on your site today/.test(await txt(page, 'q2-terms-tag')) && !/Daniel|Example|Sample terms/.test(await txt(page, 'q2-terms')) && !/guarantee|card, bank|cash/i.test(await txt(page, 'q2-terms')) && (await page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="q2-terms"]')).borderTopStyle)) === 'dashed');
+  check('T08: below the total there is exactly ONE display-size heading ("What\'s included", the landing H2 size: 30px at 390), "Accredited and qualified" is the 13px label, and the other headings are the 20px title voice with no ink rule above them', await page.evaluate(() => {
+    const hs = [...document.querySelectorAll('.q2-main h2')].filter((h) => h.getBoundingClientRect().width > 0 && !h.classList.contains('u-sr-only'));
+    const big = hs.filter((h) => parseFloat(getComputedStyle(h).fontSize) >= 28);
+    const trust = document.querySelector('#q2-trust-h');
+    const title = (id) => { const h = document.querySelector(id); const cs = getComputedStyle(h); const rule = getComputedStyle(h.closest('section')); return parseFloat(cs.fontSize) === 20 && cs.fontWeight === '600' && rule.borderTopColor !== 'rgb(11, 11, 12)'; };
+    return big.length === 1 && big[0].id === 'q2-lines-h' && parseFloat(getComputedStyle(big[0]).fontSize) === 30 && getComputedStyle(trust).fontSize === '13px' && getComputedStyle(trust).textTransform === 'uppercase' && trust.innerText.trim() === 'ACCREDITED AND QUALIFIED' && title('#q2-steps-h') && title('#q2-contact-h') && title('#q2-notes-h') && title('#q2-terms-h');
+  }), await page.evaluate(() => [...document.querySelectorAll('.q2-main h2')].map((h) => h.id + ':' + getComputedStyle(h).fontSize).join(' ')));
+  check('T08: body copy is 17px or larger at 390 (notes, steps, the contact line, the credentials, the line items, the note under the button) and neither "(Daniel sets these)" nor "Example:" appears anywhere', await page.evaluate(() => {
+    const sizes = ['.q2-notes__text', '.q2-step__text', '.q2-contact__intro', '.q2-badge__text', '.q2-line__label', '.q2-nopay', '.q2-product__name', '.q2-facts li'].map((s) => [s, parseFloat(getComputedStyle(document.querySelector(s)).fontSize)]);
+    return sizes.every(([, px]) => px >= 17) && !/\(Daniel sets these\)|Example:/.test(document.getElementById('app').innerText);
+  }), await page.evaluate(() => JSON.stringify(['.q2-notes__text', '.q2-step__text', '.q2-contact__intro', '.q2-badge__text', '.q2-line__label', '.q2-nopay'].map((s) => getComputedStyle(document.querySelector(s)).fontSize))));
+  check('T13: before the confirm sheet no button on the page reads "Accept quote": the card button and the sticky button both say "Choose install day"', (await txt(page, 'q2-accept')) === 'Choose install day' && (await tid(page, 'q2-accept-sticky').evaluate((e) => e.textContent.trim())) === 'Choose install day' && !(await page.evaluate(() => [...document.querySelectorAll('#app button, #app a')].some((b) => /^Accept quote$/.test(b.textContent.trim())))));
   check('D1: outside tagged ideas the page states no payment term, no "pay after", no guarantee and no spec', await page.evaluate(() => {
     const clone = document.getElementById('app').cloneNode(true);
     clone.querySelectorAll('[data-proto], [data-testid="prototype-strip"]').forEach((n) => n.remove());
     return !/pay after|pay on|due when|deposit|guarantee|warranty|certificate issued|\bkW\b/i.test(clone.textContent);
   }));
-  check('the top bar names him and has a Call button with his real number', (await txt(page, 'q2-owner-name')) === 'Daniel' && (await attr(page, 'q2-top-call', 'href')) === 'tel:+447885496800' && /Call Daniel/.test((await attr(page, 'q2-top-call', 'aria-label')) || ''));
-  check('the quote date and installation postcode are shown', /^Quoted Fri 23 Oct$/.test(await txt(page, 'q2-quote-date')) && /BT9 6QP/.test(await txt(page, 'q2-postcode')), (await txt(page, 'q2-quote-date')) + ' | ' + (await txt(page, 'q2-postcode')));
+  check('the top bar says "Call us" and carries his real number (T11: it does not name him)', (await txt(page, 'q2-owner-name')) === 'us' && (await txt(page, 'q2-top-call')) === 'Call us' && (await attr(page, 'q2-top-call', 'href')) === 'tel:+447885496800' && /Call us on 07885 496800/.test((await attr(page, 'q2-top-call', 'aria-label')) || ''));
+  check('the quote date and installation postcode are shown', /^Quoted Fri 23 Oct$/i.test(await txt(page, 'q2-quote-date')) && /BT9 6QP/.test(await txt(page, 'q2-postcode')), (await txt(page, 'q2-quote-date')) + ' | ' + (await txt(page, 'q2-postcode')));
   await tid(page, 'q2-see-breakdown').click();
-  check('"See full breakdown" scrolls to the lines without changing the address', await until(async () => page.evaluate(() => { const r = document.querySelector('[data-testid="q2-lines-card"]').getBoundingClientRect(); return r.top >= 0 && r.top < 200; })) && /^#(q=|d=)/.test(await page.evaluate(() => location.hash)), await page.evaluate(() => location.hash));
+  check('T12: "See full breakdown" is a plain jump link (an anchor to the one "What\'s included" table, no disclosure, no second copy) and scrolls there without changing the address', await until(async () => page.evaluate(() => { const r = document.querySelector('[data-testid="q2-lines-card"]').getBoundingClientRect(); return r.top >= 0 && r.top < 200; })) && /^#(q=|d=)/.test(await page.evaluate(() => location.hash)) && await page.evaluate(() => { const a = document.querySelector('[data-testid="q2-see-breakdown"]'); return a.tagName === 'A' && a.getAttribute('href') === '#q2-lines-card' && !a.hasAttribute('aria-expanded') && document.querySelectorAll('[data-testid="q2-lines-card"]').length === 1 && document.querySelectorAll('[data-testid="q2-lines"]').length === 1; }), await page.evaluate(() => location.hash));
   await page.evaluate(() => window.scrollTo(0, 0));
   const until30 = await txt(page, 'q2-valid-until');
-  check('valid until shown', /^Valid until [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/.test(until30), until30);
-  const creds = await tid(page, 'q2-credentials').innerText();
-  check('both credentials as trust badges', /Level 3 Electrical Installation/.test(creds) && /2391 Inspection and Testing/.test(creds));
+  check('valid until shown (the fact in the row under the title)', /^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/.test(until30), until30);
+  const creds = (await tid(page, 'q2-credentials').innerText()).replace(/\s+/g, ' ');
+  check('both credentials as type: the figure in the logo voice, the descriptor beside it, and the text reads exactly as his', /Level 3 Electrical Installation/.test(creds) && /2391 Inspection and Testing/.test(creds) && (await page.locator('[data-testid="q2-credentials"] .lp-logovoice').count()) === 2
+    && (await page.$$eval('[data-testid="q2-credentials"] .q2-badge', (els) => els.map((e) => e.textContent.trim()))).join('|') === 'Level 3 Electrical Installation|2391 Inspection and Testing');
   check('call button uses his real number', (await attr(page, 'q2-call', 'href')) === 'tel:+447885496800' && /07885 496800/.test(await txt(page, 'q2-call')));
   const wa = (await attr(page, 'q2-whatsapp', 'href')) || '';
   check('WhatsApp button uses his real number', /^https:\/\/wa\.me\/447885496800\?text=/.test(wa), wa);
@@ -329,7 +361,9 @@ await section('2. the open quote on a phone', async () => {
   check('"Ask a question" opens WhatsApp with a prefilled message', /^https:\/\/wa\.me\/447885496800\?text=Hi Daniel, it's Sean Doherty\. I have a question about my EV charger quote Q-EL-\d+ \(£1,286\)\.$/.test(ask), ask);
   check('"Ask a question" opens in a new tab safely', (await attr(page, 'q2-ask', 'target')) === '_blank' && /noopener/.test((await attr(page, 'q2-ask', 'rel')) || ''));
   check('accept, ask and not-for-me are all there', (await tid(page, 'q2-accept').count()) === 1 && (await tid(page, 'q2-decline').count()) === 1);
-  check('D4 footer: finished and quiet: his logo, real phone, real email, "Serving Northern Ireland", both credentials and a small copyright line', /07885 496800/.test(await txt(page, 'q2-footer-phone')) && /daniel@180electrical.co.uk/.test(await txt(page, 'q2-footer-email')) && /Serving Northern Ireland/.test(await txt(page, 'q2-footer')) && /Level 3 Electrical Installation/.test(await txt(page, 'q2-footer-credentials')) && /2391 Inspection and Testing/.test(await txt(page, 'q2-footer-credentials')) && /^© 2026 180 Electrical$/.test(await txt(page, 'q2-footer-copyright')), await txt(page, 'q2-footer'));
+  check('D4 footer: the black ground and the landing\'s keyed rows (Phone, Email, Area), his logo, real phone, real email, "Serving Northern Ireland", a small copyright line, no credentials line (they are in the Accredited section) and no stripes', /07885 496800/.test(await txt(page, 'q2-footer-phone')) && /daniel@180electrical.co.uk/.test(await txt(page, 'q2-footer-email')) && /Serving Northern Ireland/.test(await txt(page, 'q2-footer')) && /^© 2026 180 Electrical$/.test(await txt(page, 'q2-footer-copyright'))
+    && (await page.$$eval('[data-testid="q2-footer"] dt', (els) => els.map((e) => e.textContent.trim()))).join('|') === 'Phone|Email|Area' && (await tid(page, 'q2-footer-credentials').count()) === 0
+    && (await page.evaluate(() => { const f = document.querySelector('[data-testid="q2-footer"]'); return getComputedStyle(f).backgroundColor === 'rgb(11, 11, 12)' && getComputedStyle(f, '::after').content === 'none' && getComputedStyle(f, '::before').content === 'none'; })), await txt(page, 'q2-footer'));
   check('D4 footer: no owner login, no "What\'s real", no theme switch, no disclosure, no link cloud', !/Owner login|What's real|Light|Dark|Auto|This is a prototype|On this page/.test(await txt(page, 'q2-footer')) && (await page.locator('[data-testid="q2-footer"] [data-testid^="theme-"]').count()) === 0);
   await tid(page, 'prototype-tools').click();
   check('D4: the Prototype tools popover (from the strip) holds the disclosure, the owner login, what\'s real and the theme', await until(async () => /This is a prototype/.test(await txt(page, 'footer-disclosure'))) && /Owner login \(demo\)/.test(await txt(page, 'prototype-tools-panel')) && /What's real in this prototype/.test(await txt(page, 'prototype-tools-panel')) && /appearance/i.test(await txt(page, 'prototype-tools-panel')));
@@ -358,6 +392,72 @@ await section('2. the open quote on a phone', async () => {
   await shot(page, 'quote-open-375-dark', true);
   check('no console errors, off-site or failed requests', clean(log), dump(log));
   void messages;
+  await ctx.close();
+});
+
+// ================================================================ 2b. one system with the landing page and the funnel (LANDING-V5 section 10)
+await section('2b. the quote page is one system with the landing page and the funnel: light by default, square and flat, red only on the one primary button, a ruled table for the lines', async () => {
+  const ctx = await newContext(MOBILE, 'dark'); // a phone in dark mode: the public pages still open light
+  const page = await ctx.newPage();
+  const log = watch(page);
+  await openBlank(page);
+  const id = await makeQuote(page, { name: 'Sean Doherty' });
+  await open(page, id);
+  await tid(page, 'q2-total').waitFor();
+  check('empty storage and a dark-mode phone: the page is LIGHT (data-scope public, data-theme light, the paper background)', await page.evaluate(() => document.documentElement.getAttribute('data-scope') === 'public' && document.documentElement.getAttribute('data-theme') === 'light' && getComputedStyle(document.body).backgroundColor === 'rgb(245, 245, 244)'));
+  check('the title is the display voice (Archivo, width 108, weight 650, -0.03em) in solid ink, and the page uses one family', await page.evaluate(() => {
+    const t = getComputedStyle(document.querySelector('[data-testid="q2-title"]'));
+    const fam = new Set([...document.querySelectorAll('#app *')].filter((e) => e.childNodes.length && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())).map((e) => getComputedStyle(e).fontFamily.split(',')[0].trim().replace(/['"]/g, '')));
+    return /Archivo/.test(t.fontFamily) && t.fontStretch === '108%' && t.fontWeight === '650' && parseFloat(t.letterSpacing) < 0 && t.color === 'rgb(11, 11, 12)' && [...fam].every((f) => /^Archivo/.test(f));
+  }));
+  check('the bar and the footer are the logo\'s near-black; the hero between them is flat paper', await page.evaluate(() => {
+    const bar = getComputedStyle(document.querySelector('.q2-bar')).backgroundColor;
+    const foot = getComputedStyle(document.querySelector('[data-testid="q2-footer"]')).backgroundColor;
+    const hero = getComputedStyle(document.querySelector('.q2-hero')).backgroundColor;
+    return bar === 'rgb(11, 11, 12)' && foot === 'rgb(11, 11, 12)' && hero === 'rgb(245, 245, 244)';
+  }));
+  const flat = await page.evaluate(() => {
+    const bad = { radius: [], shadow: [], gradient: [], heavy: [], bolt: 0 };
+    for (const el of document.querySelectorAll('#app *')) {
+      const cs = getComputedStyle(el);
+      if (el.closest('[data-testid="prototype-strip"]')) continue; // the strip is the landing's own skin
+      if (cs.display === 'none') continue;
+      const tag = (el.getAttribute('data-testid') || el.className || el.tagName).toString().slice(0, 40);
+      if (/[1-9]/.test(cs.borderTopLeftRadius + cs.borderBottomRightRadius)) bad.radius.push(tag + ' ' + cs.borderTopLeftRadius);
+      if (cs.boxShadow !== 'none' && !/^rgba?\([^)]*\) (0px 0px 0px 1px( inset)?|0px 1px 0px 0px|0px 0px 0px 2px inset|inset 0px 0px 0px (1|2)px)$/.test(cs.boxShadow) && !/^rgb[a]?\([^)]*\) 0px 0px 0px (1|2)px( inset)?$/.test(cs.boxShadow)) bad.shadow.push(tag + ' ' + cs.boxShadow);
+      if (/gradient/.test(cs.backgroundImage)) bad.gradient.push(tag);
+      if (parseInt(cs.fontWeight, 10) >= 800 && !el.classList.contains('lp-logovoice') && !el.closest('.lp-logovoice') && !el.closest('.u-sr-only') && el.childNodes.length && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) bad.heavy.push(tag + ' ' + cs.fontWeight);
+    }
+    bad.bolt = document.querySelectorAll('.ui-brandmark, [class*="bolt"], [class*="wiring"]').length;
+    return bad;
+  });
+  check('no rounded corner, no shadow beyond a 1px hairline, no gradient, no weight 800 outside the logo voice, no bolt anywhere on the page', flat.radius.length === 0 && flat.shadow.length === 0 && flat.gradient.length === 0 && flat.heavy.length === 0 && flat.bolt === 0, JSON.stringify(flat));
+  const lines = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('[data-testid="q2-line"]')];
+    const amt = rows.map((r) => getComputedStyle(r.querySelector('.q2-line__amt')));
+    const head = document.querySelector('.q2-lines__head');
+    const sum = getComputedStyle(document.querySelector('[data-testid="q2-lines-total"]'));
+    const first = rows[0].getBoundingClientRect();
+    const right = rows.map((r) => Math.round(r.querySelector('.q2-line__total').getBoundingClientRect().right));
+    return { n: rows.length, tab: amt.every((a) => /tabular-nums/.test(a.fontVariantNumeric)), right: new Set(right).size === 1, head: !!head && head.getAttribute('aria-hidden') === 'true' && /No\.\s*Line\s*Amount/i.test(head.textContent), nums: rows.map((r) => r.querySelector('.q2-line__n').textContent.trim()).join(','), rule: getComputedStyle(rows[1]).borderTopWidth + ' ' + getComputedStyle(rows[1]).borderTopStyle, sumStretch: sum.fontStretch, sumWeight: sum.fontWeight, bg: getComputedStyle(rows[0]).backgroundColor, first: first.width > 200 };
+  });
+  check('the lines are a ruled table: a No. / Line / Amount header, numbered rows split by 1px hairlines, the amounts right-aligned in one column in tabular figures, and the sum in the display voice', lines.n === 4 && lines.tab && lines.right && lines.head && lines.nums === '01,02,03,04' && lines.rule === '1px solid' && lines.sumStretch === '108%' && lines.sumWeight === '650' && lines.bg === 'rgba(0, 0, 0, 0)', JSON.stringify(lines));
+  // red is the one primary button: never two at a time, at any scroll stop
+  const reds = [];
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  for (const y of [0, 500, 1000, 1500, 2200, 3000, height]) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    await sleep(350);
+    reds.push(await page.evaluate(() => [...document.querySelectorAll('a, button')].filter((b) => { const r = b.getBoundingClientRect(); const cs = getComputedStyle(b); return cs.backgroundColor === 'rgb(225, 20, 20)' && cs.visibility !== 'hidden' && r.width > 0 && r.bottom > 0 && r.top < innerHeight && !b.closest('[inert]'); }).map((b) => b.getAttribute('data-testid'))));
+  }
+  check('at most ONE red button is on screen at every scroll stop (Accept in the card, or Accept in the sticky bar once the card has gone)', reds.every((r) => r.length <= 1) && reds.some((r) => r.length === 1), JSON.stringify(reds));
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const red = await page.evaluate(() => { const bad = []; for (const el of document.querySelectorAll('#app *')) { const cs = getComputedStyle(el); if (cs.display === 'none') continue; const isBtn = el.matches('.ui-btn--primary, .ui-btn--primary *'); const txt = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()); if (!isBtn && txt && cs.color === 'rgb(225, 20, 20)') bad.push(el.className); if (!isBtn && cs.backgroundColor === 'rgb(225, 20, 20)' && !el.matches('.q2-chip')) bad.push('bg:' + el.className); } return bad; });
+  check('red never appears as text or as a fill outside the primary button', red.length === 0, JSON.stringify(red));
+  { const css = fs.readFileSync(path.join(SITE_ROOT, 'css/quote.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const bad = css.split('\n').filter((l) => /var\(--(err|red)\b/.test(l) && !/\.ui-field__error|\.ui-btn--primary/.test(l));
+    check('T06: css/quote.css uses --err only for field errors and --red only for the primary button (no red or --err text, rule or fill anywhere else)', bad.length === 0, bad.join(' | ')); }
+  check('no console errors, off-site or failed requests', clean(log), dump(log));
   await ctx.close();
 });
 
@@ -417,6 +517,35 @@ await section('4. accept flow, confirmation, reload, calendar file', async () =>
   await tid(page, 'q2-accept-sheet').waitFor();
   check('the install-day sheet opens with a title', /Choose your install day/.test(await txt(page, 'q2-accept-sheet')));
   check('the page behind is inert while the sheet is open', await page.evaluate(() => document.getElementById('app').hasAttribute('inert')));
+  const chrome = () => page.evaluate(() => {
+    const sheet = document.querySelector('[data-testid="q2-accept-sheet"]');
+    const top = sheet.getBoundingClientRect().top;
+    const bar = sheet.querySelector('.q2-sheetbar__bar').getBoundingClientRect();
+    const close = sheet.querySelector('[data-testid="sheet-close"]').getBoundingClientRect();
+    const step = sheet.querySelector('[data-testid="q2-sheet-step"]');
+    return { bar: [Math.round(bar.top - top), Math.round(bar.height), Math.round(bar.width)], close: [Math.round(close.left), Math.round(close.top - top), Math.round(close.width), Math.round(close.height)], step: step ? step.innerText.trim() : '' };
+  });
+  const chrome1 = await chrome();
+  check('T13: the sheet is headed in the funnel\'s chrome: a black bar with his logo and "Close" as an underlined word (no X glyph, no icon button), then "STEP 1 OF 2" in the label voice and the title', await page.evaluate(() => {
+    const sheet = document.querySelector('[data-testid="q2-accept-sheet"]');
+    const bar = sheet.querySelector('.q2-sheetbar__bar');
+    const close = sheet.querySelector('[data-testid="sheet-close"]');
+    const step = sheet.querySelector('[data-testid="q2-sheet-step"]');
+    return getComputedStyle(bar).backgroundColor === 'rgb(11, 11, 12)' && !!bar.querySelector('.q2-logo') && close.innerText.trim() === 'Close' && getComputedStyle(close.querySelector('span')).textDecorationLine === 'underline' && getComputedStyle(close).fontSize === '14px' && !close.querySelector('svg') && !sheet.querySelector('.ui-icon-btn, .ui-sheet__close')
+      && /^STEP 1 OF 2$/.test(step.innerText.trim()) && getComputedStyle(step).fontSize === '13px' && getComputedStyle(step).textTransform === 'uppercase' && /Choose your install day/.test(sheet.querySelector('.q2-sheetbar__title').textContent) && sheet.querySelector('h2.u-sr-only').textContent === 'Choose your install day'
+      && close.getBoundingClientRect().height >= 43.5 && close.getBoundingClientRect().width >= 43.5;
+  }), JSON.stringify(chrome1));
+  check('T13: the day sheet has ONE intro sentence, no legend paragraph, no "Tap a day above" line, no black numeral squares, and a plain Free / Booked key', await page.evaluate(() => {
+    const sheet = document.querySelector('[data-testid="q2-accept-sheet"]');
+    const lead = sheet.querySelector('.q2-sheet__lead').textContent.trim();
+    const key = sheet.querySelector('[data-testid="q2-key"]');
+    return (lead.match(/[.!?](\s|$)/g) || []).length === 1 && !sheet.querySelector('.q2-sheet__small, .q2-slots__hint, .q2-pickstep__n') && !/AM is morning|crossed-out|Tap a day above|Showing the next two weeks/.test(sheet.innerText) && !!key && /Free/.test(key.textContent) && /Booked/.test(key.textContent) && key.querySelector('.is-booked') !== null && getComputedStyle(key.querySelector('.is-booked')).textDecorationLine === 'line-through';
+  }));
+  check('T13: "Soonest available" is a ruled row (a rule above and below, no box, no fill) and there is no checkbox anywhere in the sheet', await page.evaluate(() => {
+    const row = document.querySelector('[data-testid="q2-soonest"]');
+    const cs = getComputedStyle(row);
+    return cs.boxShadow === 'none' && cs.borderTopWidth === '1px' && cs.borderTopColor === 'rgb(11, 11, 12)' && cs.borderBottomWidth === '1px' && cs.borderLeftWidth === '0px' && cs.borderRightWidth === '0px' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && !document.querySelector('[data-testid="q2-accept-sheet"] input[type="checkbox"]');
+  }));
   await sleep(450); // let the sheet's slide-in finish before measuring contrast
   { const ax = await axeSerious(page); check('install-day sheet: axe zero serious/critical', ax.count === 0, ax.detail); }
 
@@ -425,15 +554,15 @@ await section('4. accept flow, confirmation, reload, calendar file', async () =>
   const days = chips.map((c) => c.id);
   check('every free day is a chip in ONE horizontal strip (same row, scrollable)', chips.length >= 4 && chips.every((c) => c.top === chips[0].top) && (await page.evaluate(() => { const s = document.querySelector('[data-testid="q2-strip"]'); return getComputedStyle(s).overflowX === 'auto' || getComputedStyle(s).overflowX === 'scroll'; })), JSON.stringify(chips.slice(0, 3)));
   check('day chips are at least 44px in both directions', chips.every((c) => c.h >= 44 && c.w >= 44));
-  check('the month is written where it changes (Oct, Nov)', await page.evaluate(() => [...document.querySelectorAll('.q2-strip__month')].map((e) => e.textContent).join(',') === 'Oct,Nov'));
+  check('T13: each month is named by a HORIZONTAL line above its own days (October, November), not rotated', await page.evaluate(() => { const m = [...document.querySelectorAll('.q2-strip__month')]; return m.map((e) => e.textContent).join(',') === 'October,November' && m.every((e) => getComputedStyle(e).writingMode === 'horizontal-tb' && !/rotate|matrix\(-1/.test(getComputedStyle(e).transform) && e.getBoundingClientRect().bottom <= e.closest('.q2-strip__group').querySelector('.q2-chip').getBoundingClientRect().top + 1); }));
   check('days are within the next 14 days, none in the past', days.every((d) => d >= '2026-10-23' && d <= '2026-11-05'), days.join(','));
   check('Sunday and closed days are not offered', !days.includes('2026-10-25') && !days.includes('2026-11-01'));
   // Nothing looks chosen until the customer chooses: no day is pre-selected, so no chip (and no half) wears the selected look.
   check('UX: on opening nothing is chosen: no chip is selected, no half is shown, "Soonest" is not pressed, Continue is off', await page.evaluate(() => !document.querySelector('.q2-chip.is-viewed') && !document.querySelector('.q2-chip.is-picked') && !document.querySelector('label.q2-slot') && !document.querySelector('.q2-soonest.is-selected')) && (await attr(page, 'q2-soonest', 'aria-pressed')) === 'false' && await tid(page, 'q2-slot-continue').isDisabled());
-  check('UX: the helper text names exactly what is missing: "Choose a day" (and the steps read "1 Choose a day")', (await txt(page, 'q2-slot-summary')) === 'Choose a day' && /Choose a day/.test(await txt(page, 'q2-pickstep-day')) && /Tap a day above/.test(await txt(page, 'q2-slots-hint')), await txt(page, 'q2-slot-summary'));
+  check('UX: the helper text names exactly what is missing: "Choose a day" (the label above the strip says it too), and there is no "Tap a day above" line', (await txt(page, 'q2-slot-summary')) === 'Choose a day' && /Choose a day/i.test(await txt(page, 'q2-pickstep-day')) && (await tid(page, 'q2-slots-hint').count()) === 0, await txt(page, 'q2-slot-summary'));
   check('UX: each day chip shows AM and PM marks (the word, not only a colour)', await page.$$eval('label.q2-chip', (els) => els.every((e) => [...e.querySelectorAll('.q2-chip__half')].map((h) => h.textContent).join(',') === 'AM,PM')));
   await tid(page, `q2-day-${days[0]}`).click();
-  check('UX: after tapping a day the helper text says "Choose morning or afternoon", nothing is ticked and Continue is still off', (await txt(page, 'q2-slot-summary')) === 'Choose morning or afternoon' && /Choose morning or afternoon/.test(await txt(page, 'q2-pickstep-half')) && (await page.$$eval('label.q2-slot input', (els) => els.every((e) => !e.checked))) && await tid(page, 'q2-slot-continue').isDisabled(), await txt(page, 'q2-slot-summary'));
+  check('UX: after tapping a day the helper text says "Choose morning or afternoon", nothing is ticked and Continue is still off', (await txt(page, 'q2-slot-summary')) === 'Choose morning or afternoon' && /Choose morning or afternoon/i.test(await txt(page, 'q2-pickstep-half')) && (await page.$$eval('label.q2-slot input', (els) => els.every((e) => !e.checked))) && await tid(page, 'q2-slot-continue').isDisabled(), await txt(page, 'q2-slot-summary'));
   check('UX: the tapped day chip is the one chosen day (selected look on that chip only, no tick mark yet)', await page.evaluate((d) => document.querySelectorAll('.q2-chip.is-viewed').length === 1 && document.querySelector(`[data-testid="q2-day-${d}"]`).classList.contains('is-viewed') && !document.querySelector('.q2-chip.is-picked'), days[0]));
   const halves = await page.$$eval('label.q2-slot', (els) => els.map((e) => ({ id: e.getAttribute('data-testid'), taken: e.classList.contains('is-taken'), text: e.innerText.replace(/\s+/g, ' ').trim(), w: e.getBoundingClientRect().width, off: e.parentElement.getBoundingClientRect().width })));
   check('the chosen day shows BOTH halves, Morning and Afternoon', halves.length === 2 && /Morning/.test(halves[0].text) && /Afternoon/.test(halves[1].text), JSON.stringify(halves));
@@ -468,14 +597,23 @@ await section('4. accept flow, confirmation, reload, calendar file', async () =>
   const pick = free[1]; // a second option, to make sure it is not just the first one that works
   await pickSlot(page, pick);
   check('choosing a slot ticks it (radio checked)', await page.evaluate((t) => document.querySelector(`[data-testid="${t}"] input`).checked, pick));
+  check('T13: morning and afternoon are radio-style rows with a square marker that fills when chosen (no checkbox, no tick glyph)', await page.evaluate((t) => {
+    const rows = [...document.querySelectorAll('label.q2-slot:not(.is-taken)')];
+    const row = document.querySelector(`[data-testid="${t}"]`);
+    const mark = row.querySelector('.q2-slot__tick');
+    const other = rows.find((r) => r !== row);
+    return rows.every((r) => r.querySelector('input').type === 'radio' && !r.querySelector('svg')) && getComputedStyle(mark).borderRadius === '0px' && getComputedStyle(mark, '::after').opacity === '1' && getComputedStyle(mark, '::after').backgroundColor === 'rgb(11, 11, 12)' && (!other || getComputedStyle(other.querySelector('.q2-slot__tick'), '::after').opacity === '0');
+  }, pick));
   check('the chosen day chip is marked, and "Soonest" is no longer the choice', await page.evaluate((d) => document.querySelector(`[data-testid="q2-day-${d}"]`).classList.contains('is-picked'), slotDay(pick)) && (await attr(page, 'q2-soonest', 'aria-pressed')) === 'false');
   check('summary names the chosen slot', /· (Morning|Afternoon), /.test(await txt(page, 'q2-slot-summary')), await txt(page, 'q2-slot-summary'));
   check('Continue is enabled', !(await tid(page, 'q2-slot-continue').isDisabled()));
   await shot(page, 'quote-pick-375');
   // keyboard: arrow keys move through the radio group
   await tid(page, 'q2-slot-continue').click();
-  check('confirm step shows the day, the total and ONE promise (Daniel confirms), with no "pencilled" and no "provisional"', /Your install day/.test(await txt(page, 'q2-accept-sheet')) && /£1,286/.test(await txt(page, 'q2-accept-sheet')) && /Daniel will confirm your install day with you/.test(await txt(page, 'q2-accept-sheet')) && !/pencilled|provisional/i.test(await txt(page, 'q2-accept-sheet')));
+  check('confirm step shows the day, the total and ONE promise (we confirm), with no "pencilled" and no "provisional"', /Your install day/.test(await txt(page, 'q2-accept-sheet')) && /£1,286/.test(await txt(page, 'q2-accept-sheet')) && /We will confirm your install day with you/.test(await txt(page, 'q2-accept-sheet')) && !/Daniel/.test(await txt(page, 'q2-accept-sheet')) && !/pencilled|provisional/i.test(await txt(page, 'q2-accept-sheet')));
   check('focus moved to the new step heading', await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-testid') === 'q2-confirm-heading'));
+  { const chrome2 = await chrome();
+    check('T13: the confirm sheet wears the SAME header chrome as the day sheet (same bar, same Close position) and says "STEP 2 OF 2"', JSON.stringify(chrome2.bar) === JSON.stringify(chrome1.bar) && JSON.stringify(chrome2.close) === JSON.stringify(chrome1.close) && chrome2.step === 'STEP 2 OF 2' && /^Accept quote$/.test(await txt(page, 'q2-slot-confirm')), JSON.stringify([chrome1, chrome2])); }
   await shot(page, 'quote-confirm-375');
   check('confirm step: the summary card is at most three lines, the date on one line', await page.evaluate(() => {
     const lines = (el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
@@ -483,10 +621,10 @@ await section('4. accept flow, confirmation, reload, calendar file', async () =>
     const part = document.querySelector('.q2-confirm__part');
     return lines(day) === 1 && lines(day) + lines(part) <= 3;
   }));
-  check('confirm step: Change sits below the text, as a small pencil button', await page.evaluate(() => {
+  check('confirm step: Change sits below the text, as a text link (underlined word, no icon)', await page.evaluate(() => {
     const part = document.querySelector('.q2-confirm__part').getBoundingClientRect();
     const btn = document.querySelector('[data-testid="q2-slot-change"]');
-    return btn.getBoundingClientRect().top >= part.bottom - 1 && !!btn.querySelector('svg') && /^Change$/.test(btn.innerText.trim());
+    return btn.getBoundingClientRect().top >= part.bottom - 1 && !btn.querySelector('svg') && /^Change$/.test(btn.innerText.trim()) && getComputedStyle(btn.querySelector('span')).textDecorationLine === 'underline';
   }));
   check('confirm step: Accept sits directly under the agreement text (no void)', await page.evaluate(() => {
     const fine = document.querySelector('.q2-confirm__fine').getBoundingClientRect();
@@ -501,11 +639,11 @@ await section('4. accept flow, confirmation, reload, calendar file', async () =>
   await tid(page, 'q2-slot-continue').click();
   await tid(page, 'q2-slot-confirm').click();
   await tid(page, 'q2-confirm').waitFor({ timeout: WAIT });
-  check('the confirmation says the quote is accepted and Daniel will confirm the day (he has not yet): no "pencilled", no "provisional"', (await txt(page, 'q2-confirm-title')) === 'Thanks Sean, quote accepted' && !/pencilled|provisional/i.test(await txt(page, 'q2-confirm')), await txt(page, 'q2-confirm-title'));
+  check('the confirmation says the quote is accepted and we will confirm the day (not yet confirmed): no "pencilled", no "provisional", no "Daniel"', (await txt(page, 'q2-confirm-title')) === 'Thanks Sean, quote accepted' && !/pencilled|provisional/i.test(await txt(page, 'q2-confirm')) && !/Daniel/.test(await txt(page, 'q2-confirm')), await txt(page, 'q2-confirm-title'));
   check('the sheet is gone', (await tid(page, 'q2-accept-sheet').count()) === 0);
   check('the headline has focus', await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-testid') === 'q2-confirm-title'));
   const [dayKey, win] = [pick.split('-').slice(2, 5).join('-'), Number(pick.split('-')[5])];
-  check('D2: the install day shows ONE status, "To be confirmed", and the day', (await txt(page, 'q2-install-status')) === 'To be confirmed' && (await txt(page, 'q2-install-part')).startsWith(win === 0 ? 'Morning' : 'Afternoon'), await txt(page, 'q2-install-part'));
+  check('D2: the install day shows ONE status, "To be confirmed", and the day', (await txt(page, 'q2-install-status')).toLowerCase() === 'to be confirmed' && (await txt(page, 'q2-install-part')).startsWith(win === 0 ? 'Morning' : 'Afternoon'), await txt(page, 'q2-install-part'));
   check('install booking reference and quote reference shown', /^EL-\d+$/.test(await txt(page, 'q2-install-ref')) && (await txt(page, 'q2-quote-ref')) === id);
 
   const st = await stateInStore(page);
@@ -516,28 +654,31 @@ await section('4. accept flow, confirmation, reload, calendar file', async () =>
   check('store: install carries the quote and its price', install.quoteId === id && install.quotedPrice === TOTAL);
   check('store: owner and customer messages logged', st.messages.some((m) => m.kind === 'owner_quote_accepted' && m.bookingId === install.id) && st.messages.some((m) => m.kind === 'customer_quote_accepted' && m.bookingId === install.id));
   check('the page says it is a prototype (nobody was really notified)', /not really notified/.test(await txt(page, 'q2-simnote')));
-  check('accepted: the ring, the tick and "Quote accepted" are success green, not red', await page.evaluate(() => {
-    const green = (c) => { const [r, g, b] = c.match(/\d+/g).map(Number); return g > r + 60 && g > b; };
-    const st = (sel, prop) => getComputedStyle(document.querySelector(sel))[prop];
-    return green(st('.q2-mark__ring', 'stroke')) && green(st('.q2-mark__check', 'stroke')) && green(st('.q2-hero--done .q2-eyebrow', 'color'));
+  check('T05: accepted: no black square above the label (no .q2-mark, no svg in the hero), and "Quote accepted" is an ink label over the headline', await page.evaluate(() => {
+    const hero = document.querySelector('.q2-hero--done .q2-hero__body');
+    return !document.querySelector('.q2-mark') && !document.querySelector('[data-testid="q2-mark"]') && !hero.querySelector('svg') && hero.firstElementChild.classList.contains('q2-eyebrow') && getComputedStyle(hero.querySelector('.q2-eyebrow')).color === 'rgb(11, 11, 12)' && /^QUOTE ACCEPTED$/.test(hero.querySelector('.q2-eyebrow').innerText.trim());
   }));
-  check('accepted: one amber pill for the pending state, and no red pill', await page.evaluate(() => {
-    const pills = [...document.querySelectorAll('.q2-status')];
-    const amber = (c) => { const [r, g, b] = c.match(/\d+/g).map(Number); return r > b + 20 && g > b; };
-    return pills.length === 1 && pills[0].classList.contains('q2-status--wait') && amber(getComputedStyle(pills[0]).backgroundColor);
+  check('T05: the install-day heading is ONE label-voice line with the status beside it in sentence case: no underline, no pill, never red', await page.evaluate(() => {
+    const label = document.querySelector('#q2-install-h');
+    const st = document.querySelector('[data-testid="q2-install-status"]');
+    const cs = getComputedStyle(st);
+    const lines = (el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
+    return lines(label) === 1 && lines(st) === 1 && Math.abs((label.getBoundingClientRect().top + label.getBoundingClientRect().bottom) / 2 - (st.getBoundingClientRect().top + st.getBoundingClientRect().bottom) / 2) < 8 && cs.textDecorationLine === 'none' && cs.borderBottomWidth === '0px' && cs.textTransform === 'none' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && cs.borderRadius === '0px' && cs.fontSize === '15px' && st.classList.contains('q2-status--wait') && !/225, 20, 20|176, 14, 18/.test(cs.color) && document.querySelectorAll('.q2-status').length === 1 && st.innerText.trim() === 'To be confirmed';
   }));
-  check('accepted: the timeline nodes already done are green (the enquiry confirmation\'s green)', await page.evaluate(() => {
+  check('accepted: the steps are logo-voice numerals, the ones already done muted (not green)', await page.evaluate(() => {
     const done = [...document.querySelectorAll('.q2-step.is-done .q2-step__num')];
-    const green = (c) => { const [r, g, b] = c.match(/\d+/g).map(Number); return g > r + 40 && g > b; };
-    return done.length >= 1 && done.every((n) => green(getComputedStyle(n).backgroundColor));
+    const next = document.querySelector('.q2-step:not(.is-done) .q2-step__num');
+    return done.length >= 1 && done.every((n) => n.classList.contains('lp-logovoice') && /^0\d$/.test(n.textContent.trim()) && getComputedStyle(n).color === 'rgb(107, 107, 112)') && getComputedStyle(next).color === 'rgb(11, 11, 12)';
   }));
-  check('accepted: exactly one filled button (Add to calendar), Call and WhatsApp as a side-by-side pair, Done as a text button', await page.evaluate(() => {
+  check('accepted: exactly one filled button (Add to calendar), Call us and WhatsApp as a side-by-side pair, Done as an underlined text link flush with the 24px margin', await page.evaluate(() => {
     const card = document.querySelector('[data-testid="q2-install"]');
     const filled = [...card.querySelectorAll('.ui-btn--primary')];
     const call = card.querySelector('[data-testid="q2-call"]').getBoundingClientRect();
     const wa = card.querySelector('[data-testid="q2-whatsapp"]').getBoundingClientRect();
     const done = card.querySelector('[data-testid="q2-done"]');
-    return filled.length === 1 && filled[0].getAttribute('data-testid') === 'q2-ics' && Math.abs(call.top - wa.top) < 2 && call.right <= wa.left + 1 && call.height < 60 && wa.height < 60 && done.classList.contains('ui-btn--ghost') && /^Done$/.test(done.innerText.trim());
+    const dr = done.getBoundingClientRect();
+    return filled.length === 1 && filled[0].getAttribute('data-testid') === 'q2-ics' && Math.abs(call.top - wa.top) < 2 && call.right <= wa.left + 1 && call.height < 60 && wa.height < 60 && /^Call us$/.test(card.querySelector('[data-testid="q2-call"]').innerText.trim())
+      && done.tagName === 'A' && done.classList.contains('lp-link') && /^Done$/.test(done.innerText.trim()) && Math.abs(dr.left - 24) <= 0.5 && Math.abs(dr.left - call.left) <= 0.5 && dr.height >= 43.5 && getComputedStyle(done, '::after').height === '1px';
   }));
   await shot(page, 'quote-accepted-375', true);
 
@@ -558,10 +699,10 @@ await section('4. accept flow, confirmation, reload, calendar file', async () =>
   check('the same day is still shown', (await txt(page, 'q2-install-part')).startsWith(win === 0 ? 'Morning' : 'Afternoon'));
   check('the owner confirming the day flips the page to Confirmed', await (async () => {
     await page.evaluate(async (bid) => { const s = await import('/js/core/store.js'); s.confirmBooking(bid, 'owner'); }, install.id);
-    return until(async () => (await txt(page, 'q2-install-status')) === 'Confirmed');
+    return until(async () => (await txt(page, 'q2-install-status')).toLowerCase() === 'confirmed');
   })());
   check('once he confirms, the headline is "You\'re all set"', await until(async () => /You're all set, Sean\./.test(await txt(page, 'q2-confirm-title'))), await txt(page, 'q2-confirm-title'));
-  check('and the install booking reference is still there, with no "to be confirmed" left', (await tid(page, 'q2-install-ref').count()) === 1 && !/To be confirmed/.test(await txt(page, 'q2-install')));
+  check('and the install booking reference is still there, with no "to be confirmed" left', (await tid(page, 'q2-install-ref').count()) === 1 && !/To be confirmed/i.test(await txt(page, 'q2-install')));
   const ax = await axeSerious(page);
   check('confirmation: axe zero serious/critical', ax.count === 0, ax.detail);
   check('confirmation: no horizontal overflow, tap targets fine', (await noOverflow(page)) && (await smallTargets(page)).length === 0, (await smallTargets(page)).join(' ; '));
@@ -670,7 +811,7 @@ await section('7. decline', async () => {
   await tid(page, 'q2-reason-note').fill('Got one a bit cheaper.');
   await tid(page, 'q2-decline-confirm').click();
   await tid(page, 'q2-declined').waitFor({ timeout: WAIT });
-  check('a thank-you state replaces the quote', /Thanks for letting Daniel know/.test(await txt(page, 'q2-title')));
+  check('a thank-you state replaces the quote (in our voice)', /Thanks for letting us know/.test(await txt(page, 'q2-title')) && !/Daniel/.test(await txt(page, 'q2-declined')));
   check('the reason is shown back to the customer', /Too expensive: Got one a bit cheaper\./.test(await txt(page, 'q2-declined-reason')), await txt(page, 'q2-declined-reason'));
   const st = await stateInStore(page);
   check('store: declined with the reason and the owner message', st.quotes[id].status === 'declined' && st.quotes[id].declineReason === 'Too expensive: Got one a bit cheaper.' && st.messages.some((m) => m.kind === 'owner_quote_declined' && /Too expensive/.test(m.body)));
@@ -707,17 +848,21 @@ await section('8. expired and last-day quotes', async () => {
   await open(page, expired);
   await tid(page, 'q2-expired').waitFor();
   check('an expired quote says so', (await stateOf(page)) === 'expired' && /This quote has expired/.test(await txt(page, 'q2-expired')));
-  check('the expired banner is the first thing on the page (above the logo header, under the prototype strip), in the danger treatment (an icon, words and an orange-red outline: not the brand red)', await page.evaluate(() => {
+  check('T06: the black header is the first thing under the prototype strip on an expired quote; the expired row sits inside the decision card directly above the total, in ink with a 2px ink rule on its left (no --err, no red text)', await page.evaluate(() => {
+    const strip = document.querySelector('[data-testid="prototype-strip"]').getBoundingClientRect();
+    const bar = document.querySelector('[data-testid="q2-header"]').getBoundingClientRect();
     const b = document.querySelector('[data-testid="q2-expired"]');
-    const bar = document.querySelector('[data-testid="q2-header"]');
+    const card = document.querySelector('[data-testid="q2-decision"]');
     const cs = getComputedStyle(b);
-    const danger = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim().toLowerCase();
-    const rgb = (hex) => { const h = hex.replace('#', ''); return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`; };
-    return b.getBoundingClientRect().bottom <= bar.getBoundingClientRect().top + 1 && !!b.querySelector('svg') && cs.borderBottomColor === rgb(danger) && cs.borderBottomColor !== 'rgb(225, 20, 20)';
+    const strong = getComputedStyle(b.querySelector('strong'));
+    const total = document.querySelector('[data-testid="q2-total"]').getBoundingClientRect();
+    return Math.abs(bar.top - strip.bottom) <= 1.5 && card.contains(b) && b.getBoundingClientRect().top >= bar.bottom && b.getBoundingClientRect().bottom <= total.top && cs.borderLeftWidth === '2px' && cs.borderLeftColor === 'rgb(11, 11, 12)' && cs.color === 'rgb(11, 11, 12)' && strong.color === 'rgb(11, 11, 12)' && strong.fontWeight === '600' && !b.querySelector('svg');
   }));
+  check('T06: the expired row, "Valid until" and the status line are ink: no text on the page is red (--err or the brand red) outside the primary button', await page.evaluate(() => { const bad = []; for (const el of document.querySelectorAll('#app *')) { const cs = getComputedStyle(el); if (cs.display === 'none' || el.closest('.ui-btn--primary')) continue; if ([...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && /^rgb\((225, 20, 20|176, 14, 18)\)$/.test(cs.color)) bad.push(el.className || el.tagName); } return bad.length === 0; }));
+  check('T06: "Valid until" in the facts row reads "Thu 20 Oct"-style with "Expired" under it, in ink', await page.evaluate(() => { const li = document.querySelector('[data-testid="q2-fixed"]'); return /Expired/.test(li.innerText) && getComputedStyle(li.querySelector('.q2-meta__v')).color === 'rgb(11, 11, 12)' && getComputedStyle(li.querySelector('.q2-meta__note')).color === 'rgb(11, 11, 12)'; }));
   check('an expired quote has NO Accept button at all (not even a disabled one), no sticky bar and no "Not for me"', (await tid(page, 'q2-accept').count()) === 0 && (await tid(page, 'q2-sticky').count()) === 0 && (await tid(page, 'q2-decline').count()) === 0 && (await tid(page, 'q2-accept-sheet').count()) === 0);
   const ask = decodeURIComponent((await attr(page, 'q2-ask', 'href')) || '');
-  check('the one primary action is "Ask Daniel for an updated quote" and it opens WhatsApp with a prefilled request', (await txt(page, 'q2-ask')) === 'Ask Daniel for an updated quote' && (await page.evaluate(() => document.querySelector('[data-testid="q2-ask"]').classList.contains('ui-btn--primary'))) && /wa\.me\/447885496800\?text=Hi Daniel, it's Una Kerr\. My EV charger quote Q-EL-\d+ has expired/.test(ask), ask);
+  check('the one primary action is "Ask us for an updated quote" and it opens WhatsApp with a prefilled request to him', (await txt(page, 'q2-ask')) === 'Ask us for an updated quote' && (await page.evaluate(() => document.querySelector('[data-testid="q2-ask"]').classList.contains('ui-btn--primary'))) && /wa\.me\/447885496800\?text=Hi Daniel, it's Una Kerr\. My EV charger quote Q-EL-\d+ has expired/.test(ask) && !/Daniel/.test(await txt(page, 'q2-page')), ask);
   check('the expired total is MUTED (grey, smaller than a live total) and carries no ticks', await page.evaluate(() => {
     const t = document.querySelector('[data-testid="q2-total"]');
     const [r, g, b] = getComputedStyle(t).color.match(/\d+/g).map(Number);
@@ -861,15 +1006,20 @@ await section('11. keyboard, reduced motion, owner preview', async () => {
     const hero = document.querySelector('.q2-hero').getBoundingClientRect();
     return card.left >= h1.right && card.top < h1.bottom && card.top > hero.top && card.top < hero.bottom - 120 && card.left > innerWidth / 2 - 40;
   }), await page.evaluate(() => JSON.stringify([document.querySelector('[data-testid="q2-decision"]').getBoundingClientRect().toJSON(), document.querySelector('[data-testid="q2-title"]').getBoundingClientRect().toJSON()])));
-  check('desktop (T08): the header, the hero copy and the cards share one 1000px column', await page.evaluate(() => {
+  check('desktop (T08): the logo, the hero copy and the sections share one left edge, Call and the decision card one right edge, inside the 1280px page', await page.evaluate(() => {
     const r = (sel) => document.querySelector(sel).getBoundingClientRect();
     const mark = r('[data-testid="q2-header"] .q2-logo');
     const title = r('[data-testid="q2-title"]');
     const lines = r('[data-testid="q2-lines-card"]');
     const call = r('[data-testid="q2-top-call"]');
     const card = r('[data-testid="q2-decision"]');
-    return Math.abs(mark.left - lines.left) <= 1.5 && Math.abs(title.left - lines.left) <= 1.5 && Math.abs(call.right - card.right) <= 1.5 && card.right - lines.left <= 1001;
+    return Math.abs(mark.left - lines.left) <= 1.5 && Math.abs(title.left - lines.left) <= 1.5 && Math.abs(call.right - card.right) <= 1.5 && card.right - lines.left <= 1281;
   }));
+  check('T08 at 1280: below the total there is exactly ONE display-size heading ("What\'s included", the landing H2 size 52px), body copy is 18px and "Accredited and qualified" is the 13px label', await page.evaluate(() => {
+    const big = [...document.querySelectorAll('.q2-main h2')].filter((h) => parseFloat(getComputedStyle(h).fontSize) >= 30 && h.getBoundingClientRect().width > 1);
+    return big.length === 1 && big[0].id === 'q2-lines-h' && getComputedStyle(big[0]).fontSize === '52px' && getComputedStyle(document.querySelector('.q2-line__label')).fontSize === '18px' && getComputedStyle(document.querySelector('.q2-step__text')).fontSize === '18px' && getComputedStyle(document.querySelector('#q2-trust-h')).fontSize === '13px';
+  }));
+  check('T12 at 1280: the table sits beside the card (which stays in view), so the jump link is not shown and the four facts are in one row', await page.evaluate(() => { const li = [...document.querySelectorAll('.q2-meta li')].map((e) => Math.round(e.getBoundingClientRect().top)); return getComputedStyle(document.querySelector('[data-testid="q2-see-breakdown"]')).display === 'none' && li.length === 4 && new Set(li).size === 1; }));
   check('desktop (T08): the Accept button is on the first screen (no scrolling)', await page.evaluate(() => document.querySelector('[data-testid="q2-accept"]').getBoundingClientRect().bottom < innerHeight));
   check('desktop: no sticky bar (the card stays in view instead)', await tid(page, 'q2-sticky').evaluate((el) => getComputedStyle(el).display === 'none'));
   await page.evaluate(() => window.scrollTo(0, 500));
@@ -906,9 +1056,11 @@ await section('11. keyboard, reduced motion, owner preview', async () => {
   const [pick] = await firstFreeSlots(page, 1);
   await pickSlot(page, pick);
   await tid(page, 'q2-slot-continue').click();
-  await tid(page, 'q2-slot-confirm').click();
+  await tid(page, 'q2-slot-confirm').focus();
+  await page.keyboard.press('Enter');
   await tid(page, 'q2-confirm').waitFor();
-  check('reduced motion: the tick and ring are drawn, not animated', await page.evaluate(() => getComputedStyle(document.querySelector('.q2-mark__check')).animationName === 'none' && getComputedStyle(document.querySelector('.q2-mark')).animationName === 'none'));
+  check('T05: accepting from the keyboard puts focus on the headline and draws NO ring around it (it is not a control)', await until(async () => page.evaluate(() => { const a = document.activeElement; const cs = getComputedStyle(a); return a.getAttribute('data-testid') === 'q2-confirm-title' && a.matches(':focus-visible') && cs.outlineStyle === 'none'; })), await page.evaluate(() => { const a = document.activeElement; return a.tagName + ' ' + a.getAttribute('data-testid') + ' ' + a.matches(':focus-visible') + ' ' + getComputedStyle(a).outlineStyle; }));
+  check('reduced motion: the accepted page has no tick mark to animate, and its hero copy does not animate either', await page.evaluate(() => !document.querySelector('.q2-mark') && getComputedStyle(document.querySelector('.q2-title')).animationName === 'none'));
   await shot(page, 'quote-accepted-1280');
 
   // The owner's preview does not count as a view.
@@ -994,10 +1146,10 @@ await section('13. the quote link is self-contained (opens on another phone, in 
   await b.goto(withClock(link), { waitUntil: 'load' });
   await tid(b, 'q2-page').waitFor({ timeout: WAIT });
   check('the full quote renders on a device that never saw it, in link mode', (await stateOf(b)) === 'open' && (await attr(b, 'q2-page', 'data-mode')) === 'link', String(await stateOf(b)));
-  check('greeting and customer name come from the link', (await txt(b, 'q2-greeting')) === 'Hi Sean,' && /Sean/.test(await txt(b, 'q2-for')) && (await txt(b, 'q2-ref')) === id);
+  check('greeting and customer name come from the link', (await txt(b, 'q2-greeting')).toLowerCase() === 'hi sean,' && /Sean/.test(await txt(b, 'q2-for')) && (await txt(b, 'q2-ref')) === id);
   check('the four lines, the charger and the total', (await tid(b, 'q2-line').count()) === 4 && (await txt(b, 'q2-total')) === '£1,286' && /OHME home charger/.test(await txt(b, 'q2-brand')) && (await txt(b, 'q2-lines-total')) === '£1,286');
   check('quantities and line detail survive the trip', /6 × £12/.test(await txt(b, 'q2-lines')) && /Cable run planned at the survey/.test(await txt(b, 'q2-lines')));
-  check('valid-until, the quote date, the postcode and his name are there', /^Valid until [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/.test(await txt(b, 'q2-valid-until')) && /Fri 23 Oct/.test(await txt(b, 'q2-quote-date')) && /BT9 6QP/.test(await txt(b, 'q2-postcode')) && (await txt(b, 'q2-owner-name')) === 'Daniel');
+  check('valid-until, the quote date, the postcode and our call button are there', /^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/.test(await txt(b, 'q2-valid-until')) && /Fri 23 Oct/.test(await txt(b, 'q2-quote-date')) && /BT9 6QP/.test(await txt(b, 'q2-postcode')) && (await txt(b, 'q2-top-call')) === 'Call us' && !/Daniel/.test(await txt(b, 'q2-page')));
   check('the notes come with it, without the placeholder sentence', /The price covers the work listed above/.test(await txt(b, 'q2-notes')) && !/to be replaced/i.test(await txt(b, 'q2-page')));
   check('credentials, call and WhatsApp to his real number are there', /Level 3 Electrical Installation/.test(await txt(b, 'q2-credentials')) && (await attr(b, 'q2-call', 'href')) === 'tel:+447885496800' && /^https:\/\/wa\.me\/447885496800\?text=/.test((await attr(b, 'q2-whatsapp', 'href')) || ''));
   check('an honest small note "Prototype: sample prices" (tagged data-proto) is shown because the link flags its prices as samples', /Prototype: sample prices/.test(await txt(b, 'q2-sample-note')) && (await attr(b, 'q2-sample-note', 'data-proto')) !== null);
@@ -1037,9 +1189,9 @@ await section('13. the quote link is self-contained (opens on another phone, in 
   check('and it ends with the link Daniel taps: dashboard.html#import=<payload>', /dashboard\.html#import=[A-Za-z0-9_-]+$/.test(sentA.link), sentA.link);
   await tid(b, 'q2-reply-sent').waitFor({ timeout: WAIT });
   check('the page then shows the calm "ready in WhatsApp" view', (await stateOf(b)) === 'reply' && (await txt(b, 'q2-sent-title')) === 'Your message is ready in WhatsApp', await txt(b, 'q2-sent-title'));
-  check('"Tap send and Daniel will confirm your install day."', /Tap send and Daniel will confirm your install day\./.test(await txt(b, 'q2-reply-sent')));
+  check('"Tap send and we will confirm your install day."', /Tap send and we will confirm your install day\./.test(await txt(b, 'q2-reply-sent')) && !/Daniel/.test(await txt(b, 'q2-steps')));
   const sentText = await txt(b, 'q2-reply-sent');
-  check('it never claims the message was sent', !/\b(has|have|was|been|got) sent\b|\bsent to Daniel\b|Message sent|Sent\./i.test(sentText.replace(/Nothing reaches Daniel until you do\./, '').replace(/whether you sent it/, '')), sentText.match(/.{30}\bsent\b.{30}/i) + '');
+  check('it never claims the message was sent', !/\b(has|have|was|been|got) sent\b|\bsent to Daniel\b|Message sent|Sent\./i.test(sentText.replace(/Nothing reaches us until you do\./, '').replace(/whether you sent it/, '')), sentText.match(/.{30}\bsent\b.{30}/i) + '');
   check('the preview shows the message, with the long link as a short chip', /Best: Thu or Fri mornings/.test(await txt(b, 'q2-reply-message')) && /Link to your reply/.test(await txt(b, 'q2-reply-message')) && !/dashboard\.html#import=/.test(await txt(b, 'q2-reply-message')));
   check('"Open WhatsApp again" has the same address', sameWa(await attr(b, 'q2-reopen', 'href'), sentA) && (await attr(b, 'q2-reopen', 'target')) === '_blank' && /noopener/.test((await attr(b, 'q2-reopen', 'rel')) || ''));
   check('the "prototype" note says the page cannot tell whether it was sent (tagged data-proto)', /cannot tell whether you sent it/.test(await txt(b, 'q2-simnote')) && (await attr(b, 'q2-simnote', 'data-proto')) !== null);
@@ -1049,7 +1201,7 @@ await section('13. the quote link is self-contained (opens on another phone, in 
   // Copy fallback (a pop-up blocker, or a phone that will not open the app).
   await tid(b, 'q2-copy').click();
   check('Copy message puts the whole message on the clipboard', await until(async () => (await b.evaluate(() => navigator.clipboard.readText())) === sentA.text), (await b.evaluate(() => navigator.clipboard.readText().catch(() => 'no clipboard'))).slice(0, 80));
-  check('and says so, with what to do next', /Copied\. In WhatsApp, open your chat with Daniel and paste it\./.test(await txt(b, 'q2-copy-status')), await txt(b, 'q2-copy-status'));
+  check('and says so, with what to do next', /Copied\. In WhatsApp, open your chat with 180 Electrical and paste it\./.test(await txt(b, 'q2-copy-status')), await txt(b, 'q2-copy-status'));
   await tid(b, 'q2-fulltext-disclosure').locator('summary').click();
   check('the whole message is also there to select by hand', (await tid(b, 'q2-reply-fulltext').inputValue()) === sentA.text);
   check('sent view: no overflow, tap targets >= 44px', (await noOverflow(b)) && (await smallTargets(b)).length === 0, (await smallTargets(b)).join(' ; '));
@@ -1058,7 +1210,7 @@ await section('13. the quote link is self-contained (opens on another phone, in 
   // A reload remembers it was opened, in words that do not claim delivery.
   await b.reload({ waitUntil: 'load' });
   await tid(b, 'q2-reply-sent').waitFor({ timeout: WAIT });
-  check('after a reload it still shows the message that is ready, "Opened in WhatsApp on Fri 23 Oct"', /Opened in WhatsApp on Fri 23 Oct/.test(await txt(b, 'q2-reply-sent')) && sameWa(await attr(b, 'q2-reopen', 'href'), sentA));
+  check('after a reload it still shows the message that is ready, "Opened in WhatsApp on Fri 23 Oct"', /Opened in WhatsApp on Fri 23 Oct/i.test(await txt(b, 'q2-reply-sent')) && sameWa(await attr(b, 'q2-reopen', 'href'), sentA));
   // The owner changes the price and sends the same quote again: the old "ready in WhatsApp" view must not hide the updated quote.
   const link2 = await a.evaluate(async (qid) => {
     const quotes = await import('/js/core/quotes.js');
@@ -1100,7 +1252,7 @@ await section('13. the quote link is self-contained (opens on another phone, in 
   const sentC = await tapWhatsApp(ctxC, c, 'q2-decline-whatsapp');
   check('the decline message: who, the quote and total, "won\'t be going ahead", the reason, and the import link', new RegExp(`^Hi Daniel, it's Sean\\. Thanks for the quote ${id} \\(£1,286\\), but I won't be going ahead this time\\.\\nReason: I need more time: Back in the spring\\.`).test(sentC.text) && /dashboard\.html#import=[A-Za-z0-9_-]+$/.test(sentC.link), sentC.text.slice(0, 200));
   await tid(c, 'q2-reply-sent').waitFor({ timeout: WAIT });
-  check('declining shows the same calm view, worded for a decline', (await attr(c, 'q2-reply-sent', 'data-kind')) === 'dec' && /Tap send so Daniel knows/.test(await txt(c, 'q2-reply-sent')) && (await tid(c, 'q2-steps').count()) === 0);
+  check('declining shows the same calm view, worded for a decline', (await attr(c, 'q2-reply-sent', 'data-kind')) === 'dec' && /Tap send so we know/.test(await txt(c, 'q2-reply-sent')) && (await tid(c, 'q2-steps').count()) === 0);
   check('nothing is written to the customer\'s quote store', !(await storedIds(c)).includes(id));
   await shot(c, 'quote-link-decline-sent-375-dark', true);
   check('no console errors (decline from the link)', clean(logC), dump(logC));
@@ -1119,7 +1271,7 @@ await section('13. the quote link is self-contained (opens on another phone, in 
   await d.goto(withClock(lateLink), { waitUntil: 'load' });
   await tid(d, 'q2-page').waitFor({ timeout: WAIT });
   await tid(d, 'q2-expired').waitFor({ timeout: WAIT });
-  check('an expired link says so (banner on top), there is no Accept at all and no "Not for me", and "Ask Daniel for an updated quote" is the primary action', (await stateOf(d)) === 'expired' && /This quote has expired/.test(await txt(d, 'q2-expired')) && (await tid(d, 'q2-accept').count()) === 0 && (await txt(d, 'q2-ask')) === 'Ask Daniel for an updated quote' && (await tid(d, 'q2-decline').count()) === 0 && (await attr(d, 'q2-page', 'data-mode')) === 'link');
+  check('an expired link says so (the row above the total), there is no Accept at all and no "Not for me", and "Ask us for an updated quote" is the primary action', (await stateOf(d)) === 'expired' && /This quote has expired/.test(await txt(d, 'q2-expired')) && (await tid(d, 'q2-accept').count()) === 0 && (await txt(d, 'q2-ask')) === 'Ask us for an updated quote' && (await tid(d, 'q2-decline').count()) === 0 && (await attr(d, 'q2-page', 'data-mode')) === 'link');
   check('it offers to ask for an updated quote on WhatsApp', /^https:\/\/wa\.me\/447885496800\?text=/.test((await attr(d, 'q2-ask', 'href')) || ''));
   await shot(d, 'quote-link-expired-375-dark', true);
   await ctxD.close();
@@ -1157,7 +1309,7 @@ await section('13. the quote link is self-contained (opens on another phone, in 
   const logL = watch(l);
   await l.goto(withClock(legacy), { waitUntil: 'load' });
   await tid(l, 'q2-page').waitFor({ timeout: WAIT });
-  check('a v3 link still opens in a fresh browser, in link mode', (await stateOf(l)) === 'open' && (await attr(l, 'q2-page', 'data-mode')) === 'link' && (await txt(l, 'q2-total')) === '£1,286' && (await txt(l, 'q2-greeting')) === 'Hi Sean,');
+  check('a v3 link still opens in a fresh browser, in link mode', (await stateOf(l)) === 'open' && (await attr(l, 'q2-page', 'data-mode')) === 'link' && (await txt(l, 'q2-total')) === '£1,286' && (await txt(l, 'q2-greeting')).toLowerCase() === 'hi sean,');
   await tid(l, 'q2-accept').click();
   await tid(l, 'q2-days-sheet').waitFor();
   const sentL = await tapWhatsApp(ctxL, l, 'q2-reply-open');
@@ -1181,7 +1333,7 @@ await section('13. the quote link is self-contained (opens on another phone, in 
     await tid(f, 'q2-page').waitFor({ timeout: WAIT });
     await f.reload({ waitUntil: 'load' });
     await tid(f, 'q2-total').waitFor({ timeout: WAIT });
-    check('a link wins over another customer\'s quote with the same number (the page shows Sean, in link mode)', (await txt(f, 'q2-greeting')) === 'Hi Sean,' && (await attr(f, 'q2-page', 'data-mode')) === 'link');
+    check('a link wins over another customer\'s quote with the same number (the page shows Sean, in link mode)', (await txt(f, 'q2-greeting')).toLowerCase() === 'hi sean,' && (await attr(f, 'q2-page', 'data-mode')) === 'link');
     await tid(f, 'q2-accept').click();
     await tid(f, 'q2-days-sheet').waitFor();
     await tapWhatsApp(ctxF, f, 'q2-reply-open');
@@ -1230,7 +1382,7 @@ await section('14. a bare link opened in the owner\'s browser becomes a link tha
   const logB = watch(b);
   await b.goto(href, { waitUntil: 'load' });
   await tid(b, 'q2-page').waitFor({ timeout: WAIT });
-  check('context B: the full quote renders from the address-bar URL', (await stateOf(b)) === 'open' && (await txt(b, 'q2-total')) === '£1,286' && (await tid(b, 'q2-line').count()) === 4 && /Hi Sean,/.test(await txt(b, 'q2-greeting')));
+  check('context B: the full quote renders from the address-bar URL', (await stateOf(b)) === 'open' && (await txt(b, 'q2-total')) === '£1,286' && (await tid(b, 'q2-line').count()) === 4 && /Hi Sean,/i.test(await txt(b, 'q2-greeting')));
   await shot(b, 'quote-address-bar-fresh-375-dark', true);
   await tid(b, 'q2-accept').click();
   await tid(b, 'q2-days-sheet').waitFor();
@@ -1406,12 +1558,12 @@ await section('16. possible extras, the ideas switch, the quiet page', async () 
   await tid(page, 'q2-total').waitFor();
   check('a quote that still carries the default "Sample terms: ..." note shows no "Notes from" card (the tagged idea block says it)', /^Sample terms/.test(stored.notes) && (await tid(page, 'q2-notes-card').count()) === 0, stored.notes);
 
-  // The hero panel fades out: no hard horizontal seam at its bottom edge.
-  check('the hero has no hard seam: its tint fades out (a mask) and it carries no hairline shadow', await page.evaluate(() => {
+  // The hero is flat paper: no tint, no mask, no gradient, no watermark, no shadow, no bolt.
+  check('the hero is flat paper in the page colour: no background image, no gradient, no pseudo-element art, no shadow, and no hero-wiring picture on the page', await page.evaluate(() => {
     const hero = document.querySelector('.q2-hero');
+    const cs = getComputedStyle(hero);
     const before = getComputedStyle(hero, '::before');
-    const mask = before.maskImage || before.webkitMaskImage || '';
-    return /linear-gradient/.test(mask) && getComputedStyle(hero).boxShadow === 'none';
+    return cs.backgroundImage === 'none' && cs.boxShadow === 'none' && before.content === 'none' && cs.backgroundColor === getComputedStyle(document.body).backgroundColor && !document.documentElement.outerHTML.includes('hero-wiring');
   }));
 
   // "Show: With ideas | Only my content" (on a quote that is still open: the one just accepted shows the confirmation instead)
@@ -1420,21 +1572,21 @@ await section('16. possible extras, the ideas switch, the quiet page', async () 
   const ideasState = () => page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-clean'), stored: (() => { try { return localStorage.getItem('ec_clean'); } catch (e) { return 'blocked'; } })(), pressed: document.querySelector('[data-testid="ideas-only"]').getAttribute('aria-pressed') }));
   const visibleText = () => page.evaluate(() => document.getElementById('app').innerText);
   const st0 = await ideasState();
-  check('D1: the default is "With ideas" (no data-clean on <html>); the sample terms and their tag show', !st0.attr && st0.pressed === 'false' && /Sample terms \(Daniel sets these\)/.test(await visibleText()) && /Idea from us, not on your site today/.test(await visibleText()));
+  check('D1: the default is "With ideas" (no data-clean on <html>); the sample terms and their tag show', !st0.attr && st0.pressed === 'false' && /\bTerms\b/.test(await visibleText()) && /Payment\. Due when/.test(await visibleText()) && !/\(Daniel sets these\)|Example:/.test(await visibleText()) && /Idea from us, not on your site today/.test(await visibleText()));
   await tid(page, 'ideas-only').click();
   const st1 = await ideasState();
   const hidden = await page.evaluate(() => [...document.querySelectorAll('[data-proto]')].every((el) => el.getClientRects().length === 0));
   check('D1: "Only my content" sets <html data-clean>, remembers it per device in localStorage ec_clean, and hides EVERY [data-proto]', st1.attr === '1' && st1.stored === '1' && st1.pressed === 'true' && hidden, JSON.stringify(st1));
   const clean1 = await visibleText();
-  check('D1: in "Only my content" the page shows no sample terms, no idea tag and no payment term, but still the total, the lines and Accept', !/Sample terms|Idea from us|pay after|SAMPLE PRICE/i.test(clean1) && /£1,286|£1,214/.test(clean1) && (await tid(page, 'q2-accept').isVisible()));
+  check('D1: in "Only my content" the page shows no sample terms, no idea tag and no payment term, but still the total, the lines and Accept', !/Terms|Idea from us|pay after|SAMPLE PRICE|Due when/i.test(clean1) && /£1,286|£1,214/.test(clean1) && (await tid(page, 'q2-accept').isVisible()));
   await page.reload({ waitUntil: 'load' });
   await tid(page, 'q2-total').waitFor();
   const st2 = await ideasState();
-  check('D1: the choice survives a reload (before the first paint: <html data-clean> is already set)', st2.attr === '1' && st2.pressed === 'true' && !/Sample terms/.test(await visibleText()), JSON.stringify(st2));
+  check('D1: the choice survives a reload (before the first paint: <html data-clean> is already set)', st2.attr === '1' && st2.pressed === 'true' && !/Payment\. Due when/.test(await visibleText()), JSON.stringify(st2));
   check('D1: the strip itself is still there in "Only my content" (it holds the way back)', await tid(page, 'ideas-with').isVisible() && await tid(page, 'prototype-tools').isVisible());
   await tid(page, 'ideas-with').click();
   const st3 = await ideasState();
-  check('D1: "With ideas" brings them back and is remembered', !st3.attr && st3.stored === '0' && /Sample terms \(Daniel sets these\)/.test(await visibleText()), JSON.stringify(st3));
+  check('D1: "With ideas" brings them back and is remembered', !st3.attr && st3.stored === '0' && /\bTerms\b/.test(await visibleText()) && /Payment\. Due when/.test(await visibleText()), JSON.stringify(st3));
   check('no console errors', clean(log), dump(log));
   await ctx.close();
 

@@ -1,5 +1,6 @@
 // js/dashboard/views/insights.js: Money (route id stays "insights"): what he is owed, what he has collected, quotes out, reply time, lead sources, ad cost, funnel.
 // Owner: P1 (was WP7; rebuilt for v3 around money and the Facebook ads he pays for; round 2, T09: "Money", owed first, one win rate, ads and results folded away)
+import { STORAGE_FULL_TEXT } from '../../ui/util.js';
 import { html, useMemo, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Card, Disclosure, EmptyState, Field, Icon, IconButton, MoneyInput, PageHeader, ProgressRing, SampleTag, Segmented,
@@ -63,7 +64,8 @@ function failToast(res) {
   toast({
     message: res && res.reason === 'not_found'
       ? 'That booking no longer exists.'
-      : 'That did not work: the diary changed. Please check and try again.',
+      : res && res.reason === 'storage_full' ? STORAGE_FULL_TEXT
+        : 'That did not work: the diary changed. Please check and try again.',
     tone: 'danger'
   });
 }
@@ -212,7 +214,7 @@ function Tiles({ ins, quotes, sla, sample }) {
     <${Tile} label="Quotes out" value=${pounds(quotes.waitingValue)} testid="p1-quotes-out" valueTestid="p1-quotes-out-value"
       caption=${quotes.waitingCount > 0 ? `${plural(quotes.waitingCount, 'quote')} waiting` : quotes.draftCount ? `None sent, ${plural(quotes.draftCount, 'draft')}` : 'None waiting'}
       href=${routeHref('quotes', {}, { f: 'waiting' })} sample=${sample} />
-    <${Tile} label="Reply rate" value=${pct === null ? '—' : `${pct}%`} testid="p1-reply-rate" valueTestid="p1-reply-rate-value"
+    <${Tile} label="Reply rate" value=${pct === null ? '–' : `${pct}%`} testid="p1-reply-rate" valueTestid="p1-reply-rate-value"
       tone=${tone === 'ok' ? 'ok' : tone === 'neutral' ? '' : 'warn'}
       caption=${pct === null ? 'Nothing to measure yet' : `within ${sla.replyHours} hours`} />
     <${Tile} label="Next 14 days" value=${pounds(ins.bookedNext14)} testid="insights-booked-next" valueTestid="insights-booked-next-value"
@@ -272,7 +274,7 @@ function ReplySection({ sla }) {
             </div>
           </div>
           <div class="in-avg" data-testid="p1-reply-avg">
-            <div class="in-avg__row"><span>Average reply</span><strong>${sla.avgReplyMinutes === null ? '—' : spanText(sla.avgReplyMinutes)}</strong></div>
+            <div class="in-avg__row"><span>Average reply</span><strong>${sla.avgReplyMinutes === null ? '–' : spanText(sla.avgReplyMinutes)}</strong></div>
             <div class="in-avg__track" aria-hidden="true"><span class=${cx('in-avg__fill', `in-avg__fill--${avgTone}`)} style=${{ '--p': avgP }}></span></div>
             <div class="in-avg__scale" aria-hidden="true"><span>0</span><span>${hours} h promise</span></div>
           </div>`}
@@ -342,7 +344,7 @@ function CostRow({ label, value, hint, blank, blankHint, testid }) {
   return html`<li class="in-cost__row" data-testid=${testid}>
     <span class="in-cost__text"><span class="in-cost__label">${label}</span><span class="in-cost__hint">${value === null ? blankHint : hint}</span></span>
     <span class=${cx('in-figure', 'in-cost__value', value === null && 'is-blank')}>${value === null
-      ? html`<span aria-hidden="true">—</span><span class="u-sr-only">${blank}</span>`
+      ? html`<span aria-hidden="true">–</span><span class="u-sr-only">${blank}</span>`
       : pounds(value)}</span>
   </li>`;
 }
@@ -437,9 +439,9 @@ function AdsSection({ state, stamp, month, onMonth }) {
           <thead><tr><th scope="col">Channel</th><th scope="col" class="is-num">Spent</th><th scope="col" class="is-num">Enquiries</th><th scope="col" class="is-num">Per enquiry</th></tr></thead>
           <tbody>${channelRows.map((c) => html`<tr key=${c.channel}>
             <th scope="row">${c.label}</th>
-            <td class="is-num">${c.spend > 0 ? pounds(c.spend) : '—'}</td>
+            <td class="is-num">${c.spend > 0 ? pounds(c.spend) : '–'}</td>
             <td class="is-num">${c.enquiries}</td>
-            <td class="is-num">${c.costPerEnquiry === null ? '—' : pounds(c.costPerEnquiry)}</td>
+            <td class="is-num">${c.costPerEnquiry === null ? '–' : pounds(c.costPerEnquiry)}</td>
           </tr>`)}</tbody>
         </table>
       </div>` : null}
@@ -487,14 +489,14 @@ function FunnelSection({ data, period }) {
         : asTable
           ? html`<${ChartTable} caption="Enquiry to install funnel" testid="p1-funnel-table"
               columns=${[{ key: 'step', header: 'Step' }, { key: 'n', header: 'Count' }, { key: 'conv', header: 'Of the step before' }]}
-              rows=${steps.map((s) => ({ key: s.id, step: s.label, n: s.n, conv: s.of === null ? '—' : (conv(s) === null ? '—' : `${conv(s)}% of ${s.ofLabel}`) }))} />`
+              rows=${steps.map((s) => ({ key: s.id, step: s.label, n: s.n, conv: s.of === null ? '–' : (conv(s) === null ? '–' : `${conv(s)}% of ${s.ofLabel}`) }))} />`
           : html`<ol class="in-fun" data-testid="p1-funnel-list">
           ${steps.map((s) => {
             const c = conv(s);
             return html`<li class="in-fun__row" key=${s.id} data-testid=${`p1-funnel-${s.id}`}>
               <div class="in-fun__head">
                 <span class="in-fun__label">${s.label}</span>
-                <span class="in-fun__num"><strong class="in-figure">${s.n}</strong>${s.of === null ? null : html` <span class="in-fun__pct">${c === null ? '—' : `${c}%`} of ${s.ofLabel}</span>`}</span>
+                <span class="in-fun__num"><strong class="in-figure">${s.n}</strong>${s.of === null ? null : html` <span class="in-fun__pct">${c === null ? '–' : `${c}%`} of ${s.ofLabel}</span>`}</span>
               </div>
               <div class="in-bar in-bar--full" aria-hidden="true"><span class="in-bar__fill" style=${{ '--p': s.n / max }}></span></div>
             </li>`;

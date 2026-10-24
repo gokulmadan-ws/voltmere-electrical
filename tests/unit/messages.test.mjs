@@ -141,7 +141,7 @@ test('placeholder values: when, whenLong, serviceWhen, line1, address, receivedR
   assert.equal(half.whenLong, 'Mon 26 Oct, morning, arriving between 8 and 10am');
   assert.equal(half.serviceFull, 'EICR safety report (House, 2–3 bed)');
   assert.equal(half.priceLine, 'Fixed price £195.');
-  assert.equal(half.certLine, 'Your certificate follows today.');
+  assert.equal(half.certLine, '', 'no certificate promise: his site makes none');
   assert.equal(half.customerFirst, 'Aoife');
   assert.equal(half.address, '14 Larkfield Gardens, BT9 6QP');
   assert.equal(half.receivedReason, '');
@@ -162,7 +162,7 @@ test('placeholder values: when, whenLong, serviceWhen, line1, address, receivedR
   assert.equal(evJob.priceLine, 'The price is as per your agreed quote.', 'quote-led: no "From" price and no payment terms for the installation');
   assert.equal(evJob.price, '£899', 'the amount the owner agreed is shown once there is one');
   assert.equal(buildContext(sampleBooking({ serviceId: 'ev', serviceName: 'EV charger installation', variantId: null, variantLabel: '', quotedPrice: 0 }), state).price, 'Quoted for your home');
-  assert.equal(evJob.certLine, 'Your installation certificate follows today.');
+  assert.equal(evJob.certLine, '', 'an install message promises no certificate');
   const urgent = buildContext(sampleBooking({ serviceId: 'emergency', serviceName: 'Emergency visit', urgent: true, status: 'new', address: { line1: '', postcode: 'BT42 6JN' } }), state);
   assert.equal(urgent.when, 'as soon as possible');
   assert.equal(urgent.whenLong, 'as soon as possible');
@@ -224,7 +224,7 @@ test('declined and cancelled messages: serviceWhen, reasonLine and nextFree', ()
 
 test('completed message: paid and unpaid wording', () => {
   const unpaid = buildMessage('customer_completed', sampleBooking({ status: 'done', finalPrice: 195 }), stateOf());
-  assert.equal(unpaid.body, "Hi Aoife, it's Daniel from 180 Electrical. All done at 14 Larkfield Gardens, thanks. The total is £195. Your certificate follows today. Ref EL-1043");
+  assert.equal(unpaid.body, "Hi Aoife, it's Daniel from 180 Electrical. All done at 14 Larkfield Gardens, thanks. The total is £195. Ref EL-1043");
   const paid = buildMessage('customer_completed', sampleBooking({ status: 'done', finalPrice: 210, paid: true, paidMethod: 'cash' }), stateOf());
   assert.ok(paid.body.includes('Paid with thanks, £210.'));
 });

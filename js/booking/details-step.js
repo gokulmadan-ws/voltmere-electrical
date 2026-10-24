@@ -28,13 +28,14 @@ export function focusField(key) {
  */
 export function CustomerFields({ ctx, urgent = false }) {
   const { form, setForm, shown, setShown, brand } = ctx;
+  const who = ctx.ownerMode ? brand.ownerFirst : 'us'; // the customer hears the business ("we"), the owner's own New booking screen keeps his name
   const err = (key, fn) => (shown.has(key) ? fn(form[key]) : '');
   const touch = (key) => () => setShown((prev) => new Set([...prev, key]));
   const zone = postcodeZone(form.postcode, brand);
   const noteOpen = form.noteOpen || !!form.note;
   const hints = {
     covered: { icon: 'circle-check', text: `In ${brand.areaName}` },
-    edge: { icon: 'info', text: `On the edge of the area: ${brand.ownerFirst} will confirm any travel charge` },
+    edge: { icon: 'info', text: ctx.ownerMode ? `On the edge of the area: ${brand.ownerFirst} will confirm any travel charge` : 'On the edge of the area: we will confirm any travel charge' },
     outside: { icon: 'info', text: `Outside ${brand.areaName}: you can still add it` }
   };
   const hint = hints[zone];
@@ -58,10 +59,10 @@ export function CustomerFields({ ctx, urgent = false }) {
       <${Input} id="bk-line1" value=${form.line1} onInput=${(e) => setForm({ line1: e.target.value })} onBlur=${touch('line1')}
         type="text" autocomplete="address-line1" enterkeyhint="next" maxlength="80" data-testid="field-line1" />
     <//>
-    ${noteOpen ? html`<${Field} label=${`Note for ${brand.ownerFirst} (optional)`} id="bk-note">
+    ${noteOpen ? html`<${Field} label=${ctx.ownerMode ? `Note for ${who} (optional)` : 'Note (optional)'} id="bk-note">
       <${Textarea} id="bk-note" rows=${3} value=${form.note} onInput=${(e) => setForm({ note: e.target.value })}
         placeholder="e.g. flat 3, buzzer broken, dog is friendly" enterkeyhint="done" maxlength="300" data-testid="field-note" />
-    <//>` : html`<button type="button" class="bk-linkbtn" onClick=${() => setForm({ noteOpen: true })} data-testid="note-toggle" aria-expanded="false">+ Add a note for ${brand.ownerFirst}</button>`}
+    <//>` : html`<button type="button" class="bk-linkbtn" onClick=${() => setForm({ noteOpen: true })} data-testid="note-toggle" aria-expanded="false">${ctx.ownerMode ? `+ Add a note for ${who}` : '+ Add a note'}</button>`}
   </div>`;
 }
 
@@ -111,7 +112,7 @@ export function DetailsStep({ ctx }) {
   return html`<div class="bk-step">
     <${StepTitle} sub=${ownerMode ? 'Customer details for the diary.' : 'No account, four fields.'}>Your details<//>
     ${unavailable
-    ? html`<${Banner} tone="danger" class="bk-banner" data-testid="service-unavailable-banner">That service isn't available right now. Please call ${ctx.brand.ownerFirst}.<//>`
+    ? html`<${Banner} tone="danger" class="bk-banner" data-testid="service-unavailable-banner">That service isn't available right now. Please call ${ownerMode ? ctx.brand.ownerFirst : 'us'}.<//>`
     : html`<${SlotTakenBanner} banner=${banner} onPick=${pickAlternative} />`}
     <div class="bk-ticket" data-testid="booking-ticket">
       <div class="bk-ticket__main">
@@ -140,8 +141,7 @@ export function DetailsFooter({ ctx }) {
   else if (svc.priceType !== 'free' && !isQuoteLed(svc)) label = `Confirm booking · ${gbp(quoted)}`;
   return html`<div class="bk-footer">
     <${Button} variant="primary" size="lg" block loading=${submitting} onClick=${() => submitDetails(ctx)} data-testid="booking-submit">${label}<//>
-    ${ownerMode ? null : html`<p class="bk-footer__note">No payment now. You pay ${brand.ownerFirst} after the job.</p>
-    <p class="bk-footer__consent">By booking you agree ${brand.ownerFirst} may message you on this number about this visit.</p>`}
+    ${ownerMode ? null : html`<p class="bk-footer__consent">By booking you agree we may message you on this number about this visit.</p>`}
   </div>`;
 }
 
@@ -188,6 +188,8 @@ export function submitDetails(ctx) {
     const bad = ['name', 'phone', 'postcode', 'line1'].find((k) => keys.includes(k));
     if (bad) focusField(bad);
     else toast({ message: 'That did not work: the diary changed. Please check and try again.', tone: 'danger' });
+  } else if (res.reason === 'storage_full') {
+    toast({ message: 'This device has no room left to save your booking. Your details are still here: free up some space and try again, or call.', tone: 'danger' });
   } else if (res.reason === 'service_unavailable') {
     ctx.setBanner({ kind: 'unavailable', alternatives: [] });
   } else {

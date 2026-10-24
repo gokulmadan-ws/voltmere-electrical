@@ -218,7 +218,7 @@ function StageTiles({ stages, selected, onSelect, urgentCount }) {
           <span class="pl-tile__count" data-testid=${`p1-stage-count-${s.id}`}>${s.count}</span>
           <span class=${cx('pl-tile__value', s.value <= 0 && 'is-empty')} data-testid=${`p1-stage-value-${s.id}`}>${s.value > 0
             ? pounds(s.value)
-            : html`<span aria-hidden="true">—</span><span class="u-sr-only">Not quoted yet</span>`}</span>
+            : html`<span aria-hidden="true">–</span><span class="u-sr-only">Not quoted yet</span>`}</span>
         </span>
       </button>`;
     })}

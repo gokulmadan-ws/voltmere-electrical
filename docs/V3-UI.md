@@ -14,6 +14,8 @@ import { Wizard, CopyField, CodeBlock, ConnectionBadge, StatusDot, Tabs, TabPane
 import { routeHref, navigate, goBack } from '../router.js';
 ```
 
+Performance rule (PERF gate): the barrel imports every kit module, so a module that loads with a page (its static import graph: everything under `js/landing/`, `js/quote/`, `js/dashboard/shell.js` and the default view) imports from the module that defines the name instead (`import { Button } from '../ui/button.js'`; `Icon` is in `display.js`, hooks in `hooks.js`, `cx` and `uid` in `util.js`). Views that load on demand may keep using the barrel. `tests/unit/modulepreload.test.mjs` keeps the barrel out of the landing graph; after adding or removing an import run `node scripts/modulepreload.mjs`.
+
 Rules that apply to every component: it accepts `class` and spreads other props (`data-testid`, `aria-*`) onto its root; no `innerHTML`; no hex colours (use tokens); every control is >= 44px; status is never colour only (icon + word); all motion honours `prefers-reduced-motion` (the global rule in base.css). Sheet content is a separate Preact root, so inside `ConsentSheet`/`Sheet` children read the store with `useStore`, never context.
 
 CSS prefixes: new kit styles are `ui-*` in `css/components.css`; shell styles are `db-*` in `css/dashboard.css`. Never restyle another role's prefix; use the classes below.

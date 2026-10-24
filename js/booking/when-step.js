@@ -92,6 +92,6 @@ export function WhenFooter({ ctx }) {
     <p class="bk-footer__summary" data-testid="booking-summary">${can ? `${fmtDayShort(chosen.date)} · arrive ${chosen.arriveLabel}` : 'Choose a time to continue'}</p>
     <${Button} variant="primary" size="lg" block class=${can ? '' : 'is-disabled'} aria-disabled=${can ? undefined : 'true'}
       onClick=${() => { if (can) go({ serviceId: svc.id, date: chosen.date, windowId: chosen.windowId }); }} data-testid="booking-continue">Continue<//>
-    ${ownerMode ? null : html`<p class="bk-footer__note">No payment now. Free to change up to ${PROMISES.freeChangeHours} hours before.</p>`}
+    ${/* his site states no payment or change terms, so this classic flow (shown only if a service is switched on for the website) states none either */ null}
   </div>`;
 }

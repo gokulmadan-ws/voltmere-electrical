@@ -1,5 +1,6 @@
 // js/dashboard/views/calendar.js: Calendar view (week strip, window rows, block / unblock / day off, add a booking from a free window; week grid from 768px).
 // Owner: E3 (v1 by WP6)
+import { STORAGE_FULL_TEXT } from '../../ui/util.js';
 import { html, h, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import {
   Banner, Button, Chip, ConfirmDialog, Field, Icon, IconButton, Input, PageHeader, Segmented, Sheet, StatusPill, Switch, TextLink,
@@ -48,7 +49,7 @@ function notify(message, undoToken) {
 }
 
 function failToast(res) {
-  toast({ message: GENERIC_FAIL, tone: 'danger' });
+  toast({ message: res && res.reason === 'storage_full' ? STORAGE_FULL_TEXT : GENERIC_FAIL, tone: 'danger' });
   return res;
 }
 

@@ -397,7 +397,7 @@ test('parseImport data: an enquiry (answers in his wording, outside Northern Ire
   assert.deepEqual([d.ref, d.name, d.firstName, d.phone, d.phoneDigits, d.email, d.postcode], ['EL-1043', 'Aoife Magee', 'Aoife', '07700 900231', '447700900231', 'aoife@example.com', 'DG9 8PQ']);
   assert.deepEqual([d.outside, d.outsideLabel, d.marketingOptIn, d.utmSource, d.notes], [true, 'Outside Northern Ireland', false, 'facebook', 'Hello']);
   assert.deepEqual(d.answerRows.map((r) => [r.key, r.heading, r.label]), [
-    ['postcode', 'Postcode', 'DG9 8PQ'], ['parking', 'Parking', 'Garage'], ['vehicle', 'Car', 'Yes'], ['timing', 'Timing', 'Just researching'], ['permission', 'Permission', 'I rent or lease and need permission']
+    ['postcode', 'Postcode', 'DG9 8PQ'], ['parking', 'Parking', 'Garage'], ['vehicle', 'Car', 'Yes'], ['timing', 'Timing', 'Just researching'], ['permission', 'Permission', 'I need landlord or freeholder approval']
   ]);
   assert.deepEqual([d.createdAt, d.sentAt], ['2026-10-23T18:42', '2026-10-23T18:42']);
   assert.equal(d.importId, 'EL-1043|2026-10-23T18:42|447700900231');

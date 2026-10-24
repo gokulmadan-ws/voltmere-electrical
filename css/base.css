@@ -27,6 +27,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-optical-sizing: auto;
+  overflow-wrap: break-word; /* a customer's own long word (a name, notes, an address) wraps at the edge instead of pushing the page wide */
 }
 
 /* Gutter grows with the screen (tokens.css sets the 16px base). */

@@ -3,7 +3,7 @@
 // Counts a stored quote's view once, and shows the right state (open, expired, accepted, declined, message ready, not ready, not found).
 // Owner: Q2 (customer quote page), link mode by Q4
 import { html, useEffect, useMemo, useRef, useState } from '../vendor/preact-htm.js';
-import { useNow, useStore } from '../ui/index.js';
+import { useNow, useStore } from '../ui/hooks.js';
 import { recordQuoteViewed } from '../core/store.js';
 import { selectBrand, selectQuoteDetail } from '../core/selectors.js';
 import { parseQuoteHash, replaceHash, shareHash, useQuoteRoute } from './route.js';

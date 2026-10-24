@@ -73,6 +73,8 @@ export function submitEmergency(ctx) {
     if (bad) focusField(bad);
   } else if (res.reason === 'emergencies_off') {
     toast({ message: `${ctx.brand.ownerFirst} is not taking emergency visits right now. Please call.`, tone: 'danger' });
+  } else if (res.reason === 'storage_full') {
+    toast({ message: `This device has no room left to save your request. Your details are still here: free up some space and try again, or call ${ctx.brand.ownerFirst} on ${ctx.brand.phone}.`, tone: 'danger' });
   } else {
     toast({ message: 'That did not work: the diary changed. Please check and try again.', tone: 'danger' });
   }

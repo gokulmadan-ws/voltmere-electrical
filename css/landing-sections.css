@@ -1,0 +1,295 @@
+/* css/landing-sections.css: every section between the hero and the closing band (B2): Why, About (+ brands), the work plate and its viewer, How it works (+ the earliest-visit idea),
+   Your quote (+ the example-quote and running-costs ideas), Area (postcode check), Questions. Loaded WITH the sections (js/landing/below.js), never with the first screen.
+   Uses only the tokens of css/public-tokens.css and the primitives of css/landing.css (.lp-wrap, .lp-lbl, .lp-display, .lp-logovoice, .lp-btn, .lp-link, .lp-cut-*, .lp-photo, .ui-idea-tag).
+   One section scaffold: a 1px ink rule at the top of the container, 16px (20px from 1024) below it the content. No section number, no repeated label: where a label is shown it is HIS wording and it
+   carries information. No card, no radius, no shadow, no gradient, nothing laid over a photograph. Red appears once here: the open marker of the FAQ. Breakpoints 720, 1024, 1200. Owner: B2 (LANDING-V5). */
+
+/* (lists, figures, tables, buttons and summaries are reset by the zero-specificity block at the top of css/landing.css) */
+.lp-sec table { border-spacing: 0; }
+
+.lp-sec { padding-top: var(--sec); }
+.lp-sec--l { padding-top: var(--sec-l); }
+.lp-sec__in { position: relative; padding-top: 16px; }
+.lp-sec__in::before { content: ''; position: absolute; top: 0; left: var(--m); right: var(--m); height: 1px; background: var(--ink); }
+.lp-h2 { font-size: var(--h2); line-height: 1.06; max-width: 16em; }
+.lp-h2--s { font-size: var(--h2-s); }
+.lp-statement { font-size: var(--statement); line-height: 1.4; letter-spacing: -0.012em; max-width: 30em; text-wrap: pretty; color: var(--ink); }
+@media (min-width: 1024px) {
+  .lp-sec__in { padding-top: 20px; }
+  .lp-h2--s { font-size: 44px; }
+}
+/* Quiet endings (phones only; from 720 the gaps are exactly as before, the tokens are untouched). A section that ends in a text link (Why), in the gallery's pager, or in a closed disclosure
+   does not need the full section gap after it, or the page reads as if something were missing. The next rule sits 48px under the last thing that is DRAWN (the link's underline, the pager's tick,
+   the closed "Change the rates" row's text), and 64px under the calculator's note. The 44px tap areas hang into the gap: a link's underline is 9px above its box, a pager tick 21px above its box. */
+@media (max-width: 719px) {
+  #why + .lp-sec, #work + .lp-sec { padding-top: 48px; }
+  #pricing + .lp-sec { padding-top: 64px; }
+  .lp-why__cta { margin-bottom: -9px; }
+  .lp-idea__grid:has(.lp-calc__more:not([open])) + .lp-calc__foot { margin-top: 32px; }
+}
+
+/* ================= Why: H2 left (sticky), three ruled rows right. The call to action is a text link, never a second red button ================= */
+.lp-why__rows { margin-top: 32px; }
+.lp-rows { border-top: 1px solid var(--rule); }
+.lp-rows li { padding: 24px 0; border-bottom: 1px solid var(--rule); }
+.lp-rows h3 { font: 600 var(--h3)/1.25 var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.lp-rows p { margin-top: 8px; max-width: 30em; color: var(--ink); }
+.lp-why__cta { margin-top: 24px; }
+@media (min-width: 1024px) {
+  .lp-why { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+  .lp-why .lp-h2 { grid-column: 1 / 6; position: sticky; top: calc(var(--hdr-h) + 32px); }
+  .lp-why__rows { grid-column: 6 / -1; margin-top: 0; }
+  .lp-rows { border-top: 0; }
+  .lp-rows li { padding: 32px 0; }
+  .lp-rows li:first-child { padding-top: 12px; }
+  .lp-why__cta { margin-top: 32px; }
+}
+
+/* ================= About: photo first (4:3, bottom-right cut), H2 and his two paragraphs beside it, then the brands in the logo voice ================= */
+.lp-about__photo { margin: 24px calc(-1 * var(--m)) 0; }
+.lp-about__photo .lp-photo { aspect-ratio: 4 / 3; }
+.lp-about__text { display: flex; flex-direction: column; gap: 32px; margin-top: 32px; }
+.lp-about__p1 { font-size: 20px; line-height: 1.4; letter-spacing: -0.01em; }
+.lp-about__p2 { margin-top: 16px; }
+.lp-brands { margin-top: 48px; border-top: 1px solid var(--rule); padding-top: 16px; }
+.lp-brands__list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lp-brands__list li { padding: 16px 0 12px; font-size: var(--brand-fs); line-height: 1; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.lp-brands__list li:not(:nth-child(3n+1)) { border-left: 1px solid var(--rule); padding-left: 16px; }
+.lp-brands__list li:nth-child(n+4) { border-top: 1px solid var(--rule); }
+@media (max-width: 359px) {   /* three cells of 90px: the names shrink a step so none ever breaks inside a word */
+  .lp-brands__list li { font-size: 16px; letter-spacing: 0; }
+  .lp-brands__list li:not(:nth-child(3n+1)) { padding-left: 10px; }
+}
+@media (min-width: 1024px) {
+  .lp-about { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; }
+  .lp-about__photo { grid-column: 1 / 8; grid-row: 1; margin: 0; }
+  .lp-about__text { grid-column: 9 / -1; grid-row: 1; margin-top: 0; justify-content: space-between; gap: 40px; }
+  .lp-about__p1 { font-size: 24px; line-height: 1.35; }
+  .lp-about__p2 { margin-top: 20px; }
+  .lp-brands { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; margin-top: 96px; padding-top: 0; align-items: baseline; }
+  .lp-brands__k { grid-column: 1 / 4; padding-top: 32px; }
+  .lp-brands__list { grid-column: 4 / -1; column-gap: 24px; }
+  .lp-brands__list li { padding: 24px 0 20px; }
+  .lp-brands__list li:not(:nth-child(3n+1)) { padding-left: 24px; }
+}
+
+/* ================= The work: a film strip on phones and tablets, a ruled plate from 1024 with the heading in a cell of its own ================= */
+.lp-plate__head { display: grid; gap: 16px; margin-bottom: 32px; }
+.lp-gal { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; margin: -6px calc(-1 * var(--m)) 0; padding: 6px var(--m) 8px; scroll-padding-inline: var(--m); scrollbar-width: none; }
+.lp-gal::-webkit-scrollbar { display: none; }
+.lp-gal__i { flex: none; scroll-snap-align: start; }
+.lp-gal__b { position: relative; display: block; overflow: hidden; height: 344px; aspect-ratio: var(--ar); padding: 0; border: 0; border-radius: 0; background: var(--paper-3); cursor: zoom-in; }
+.lp-gal__i--1 { --ar: 3 / 4; } .lp-gal__i--2 { --ar: 3 / 4; } .lp-gal__i--3 { --ar: 4 / 3; } .lp-gal__i--4 { --ar: 3 / 4; }
+.lp-gal__b .lp-gal__photo { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lp-gal__cap { display: flex; margin-top: 12px; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.lp-gal__n { display: inline-block; min-width: 2.2em; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (hover: hover) { .lp-gal__b:hover .lp-photo__img { opacity: 0.94; } }
+/* The pager: four drawn ticks (24 x 2) in 44px tap areas, then "1 of 4" at the right margin, so the row reads as an indicator and not as four unlabelled marks. Each area is 10px wider than its
+   tick on both sides, so the row starts 10px left of the page margin and the FIRST DRAWN TICK sits on the margin (the one control is no longer the only thing off the grid). */
+.lp-gal__dots { display: flex; align-items: center; gap: 0; margin: 0 0 0 -10px; }
+.lp-gal__dot { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; }
+.lp-gal__dot span { display: block; width: 24px; height: 2px; background: var(--rule-d); }
+.lp-gal__dot.is-current span { background: var(--ink); }
+.lp-gal__count { margin-left: auto; font-size: 14px; line-height: 20px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 719px) { .lp-gal__dots { margin-bottom: -21px; } }   /* the next rule counts from the drawn tick (see "Quiet endings" above), not from the 44px area */
+@media (min-width: 720px) { .lp-gal__b { height: 420px; } }
+@media (min-width: 1024px) {
+  .lp-plate { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 40px; }
+  .lp-plate__head { grid-column: 1 / 5; grid-row: 1; align-content: start; margin: 0; }
+  .lp-gal { display: contents; }
+  .lp-gal__i { display: flex; flex-direction: column; min-width: 0; }
+  .lp-gal__i figure { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .lp-gal__b { width: 100%; height: auto; aspect-ratio: auto; }
+  .lp-gal__i--1 .lp-gal__b, .lp-gal__i--2 .lp-gal__b, .lp-gal__i--4 .lp-gal__b { aspect-ratio: 3 / 4; }
+  .lp-gal__i--3 .lp-gal__b { flex: 1 1 auto; min-height: 0; }
+  .lp-gal__i--1 { grid-column: 5 / 9; grid-row: 1; }
+  .lp-gal__i--2 { grid-column: 9 / -1; grid-row: 1; }
+  .lp-gal__i--3 { grid-column: 1 / 9; grid-row: 2; }
+  .lp-gal__i--4 { grid-column: 9 / -1; grid-row: 2; }
+  .lp-gal__dots { display: none; }
+}
+
+/* the photo viewer (js/landing/gallery.js; same logic as before: focus trap, Esc, arrows, swipe, scroll lock): full-screen black, square, text controls, nothing over the photo */
+.lp-lb { position: fixed; inset: 0; z-index: var(--z-lightbox); display: flex; flex-direction: column; background: var(--black); color: var(--on-black); }
+.lp-lb__top { display: flex; align-items: center; justify-content: space-between; height: 64px; padding-inline: var(--m); border-bottom: 1px solid var(--rule-b); }
+.lp-lb__count { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--on-black-2); }
+.lp-lb__close { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; border: 0; border-radius: 0; background: none; color: var(--on-black); font: 600 14px/1 var(--f); cursor: pointer; }
+.lp-lb__close::after { content: ''; position: absolute; left: 2px; right: 2px; bottom: 12px; height: 1px; background: currentColor; }
+.lp-lb__figure { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr) auto auto; grid-template-areas: "fig fig" "cap cap" "prev next"; gap: 16px; padding: 16px var(--m) 24px; }
+.lp-lb__frame { display: contents; }
+.lp-lb__stage { grid-area: fig; min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 12px; }
+.lp-lb__img { max-height: 100%; min-height: 0; width: auto; max-width: 100%; object-fit: contain; flex: 0 1 auto; }
+.lp-lb__ph { display: block; max-height: 100%; max-width: 100%; height: 100%; border: 1px solid var(--rule-b); }      /* a photo that cannot load: the same shape, outlined, nothing drawn on it */
+.lp-lb__caption { grid-area: cap; justify-self: center; font-size: 14px; line-height: 20px; color: var(--on-black-2); }      /* under the photo, never over it */
+.lp-lb__nav { display: flex; align-items: center; justify-content: center; height: 56px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: inset 0 0 0 1px var(--rule-b); color: var(--on-black); cursor: pointer; }
+@media (hover: hover) { .lp-lb__nav:hover { box-shadow: inset 0 0 0 1px var(--on-black); } }
+.lp-lb__nav--prev { grid-area: prev; } .lp-lb__nav--next { grid-area: next; }
+.lp-lb__nav--prev .lp-glyph { transform: scaleX(-1); }
+@media (min-width: 720px) {
+  .lp-lb__figure { grid-template-columns: 72px 1fr 72px; grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "prev fig next" ". cap ."; }
+  .lp-lb__nav { align-self: center; height: 72px; }
+  .lp-lb__caption { align-self: start; }
+}
+
+/* ================= How it works: the logo's bold italic as numerals. Step 01 is the one the visitor does today: a red top rule ================= */
+.lp-steps { margin-top: 32px; border-top: 1px solid var(--rule); }
+.lp-step { display: grid; grid-template-columns: 88px minmax(0, 1fr); column-gap: 16px; padding: 24px 0; border-bottom: 1px solid var(--rule); }
+.lp-step:first-child { border-top: 2px solid var(--red); margin-top: -1px; }
+.lp-step__n { font-size: var(--step-n); line-height: 0.9; letter-spacing: -0.04em; }
+.lp-step__t { min-width: 0; }
+.lp-step h3 { font: 600 var(--h3)/1.25 var(--f); font-stretch: 104%; letter-spacing: -0.015em; }
+.lp-step p { margin-top: 8px; max-width: 28em; color: var(--ink); }
+@media (min-width: 1024px) {
+  .lp-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px; margin-top: 64px; border-top: 0; align-items: start; }
+  .lp-step { display: block; padding: 24px 0 0; border-bottom: 0; border-top: 2px solid var(--ink); }
+  .lp-step:first-child { margin-top: 0; border-top: 2px solid var(--red); }
+  .lp-step__n { display: block; margin-bottom: 32px; }
+  .lp-step p { margin-top: 12px; }
+}
+/* the earliest visit (an idea): an annotation in the margin of step 02 */
+.lp-visit { margin-top: 32px; padding-top: 20px; border-top: 1px dashed var(--rule-d); display: grid; gap: 8px; }
+.lp-visit__slot { display: grid; gap: 10px; }
+.lp-visit p { margin: 0; max-width: none; }
+.lp-visit__k { font-size: 14px; line-height: 20px; font-weight: 500; }
+.lp-visit .lp-visit__date { margin-left: -0.04em; font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+.lp-visit__conf { font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.lp-visit .ui-idea-tag { margin-top: 2px; }
+.lp-visit .lp-link { justify-self: start; }
+
+/* ================= Your quote: his H2 and paragraph, then two quiet ideas on the same ruled-row component ================= */
+.lp-pricing__head { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+@media (min-width: 1024px) {
+  .lp-pricing__head { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; align-items: end; }
+  .lp-pricing__head .lp-h2 { grid-column: 1 / 7; }
+  .lp-pricing__head .lp-statement { grid-column: 7 / -1; }
+}
+.lp-idea { margin-top: 64px; padding-top: 20px; border-top: 1px dashed var(--rule-d); }
+.lp-idea__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 24px; }
+.lp-idea h3 { font: 600 var(--h3-idea)/1.12 var(--f); font-stretch: 104%; letter-spacing: -0.03em; }
+.lp-idea__intro p { margin: 12px 0 8px; color: var(--ink); max-width: 24em; }
+@media (min-width: 1024px) {
+  .lp-idea { margin-top: 96px; }
+  .lp-idea__grid { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; margin-top: 32px; }
+  .lp-idea__intro { grid-column: 1 / 6; }
+  .lp-calc .lp-idea__intro { position: sticky; top: calc(var(--hdr-h) + 32px); align-self: start; }
+  .lp-idea__body { grid-column: 6 / -1; min-width: 0; }
+}
+.lp-idea__body { min-width: 0; }
+
+/* idea: see how a quote looks (names only, blank amount cells, no figures: it reads as a blank quote form) */
+.lp-qt { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.lp-qt caption { text-align: left; padding-bottom: 12px; }
+.lp-qt th { padding: 0 0 8px; text-align: left; font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.lp-qt td { padding: 14px 0; border-top: 1px solid var(--rule); font-weight: 500; }
+.lp-qt tr:last-child td { border-bottom: 1px solid var(--rule); }
+.lp-qt td:first-child, .lp-qt th:first-child { width: 44px; color: var(--ink-3); }
+.lp-qt .lp-qt__r { text-align: right; width: 120px; }
+.lp-qt__blank { display: inline-block; width: 72px; height: 0; border-bottom: 1px solid var(--ink-3); vertical-align: baseline; }
+
+/* idea: running costs. Underline-only fields (no box), a hairline slider, a result in the display voice, ruled bars, ruled rates */
+.lp-calc__in { height: 44px; min-width: 44px; padding: 0; border: 0; border-bottom: 1px solid var(--ink-3); border-radius: 0; background: none; color: var(--ink); font: 500 16px/1 var(--f); text-align: right; font-variant-numeric: tabular-nums; }
+:root[data-scope="public"] .lp-calc__in:focus-visible, :root[data-scope="public"] .lp-calc__in:focus { outline: none; border-bottom: 2px solid var(--ink); margin-bottom: -1px; }
+:root[data-scope="public"] .lp-calc__in[aria-invalid="true"] { border-bottom-color: var(--err); }
+.lp-calc__in--big { width: 176px; max-width: 100%; height: 56px; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; text-align: left; border-bottom: 2px solid var(--ink); }
+.lp-calc__mrow { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
+.lp-calc__unit { color: var(--ink-2); }
+.lp-calc__err { margin-top: 8px; max-width: 32em; font-size: 15px; line-height: 20px; font-weight: 500; color: var(--err); }
+.lp-range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 44px; margin: 8px 0 0; padding: 0; background: transparent; cursor: pointer; }
+.lp-range::-webkit-slider-runnable-track { height: 1px; background: var(--ink); }
+.lp-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -10px; background: var(--ink); border: 0; border-radius: 0; }
+.lp-range::-moz-range-track { height: 1px; background: var(--ink); }
+.lp-range::-moz-range-thumb { width: 20px; height: 20px; background: var(--ink); border: 0; border-radius: 0; }
+.lp-calc__res { margin-top: 32px; }
+.lp-calc__big { max-width: none; }
+.lp-calc__lead { display: block; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--ink-2); }
+.lp-calc__fig { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 12px; margin-top: 4px; }
+.lp-calc__num { font: 650 clamp(56px, 16vw, 72px)/1 var(--f-display); font-stretch: 108%; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.lp-calc__per { font-size: 20px; color: var(--ink-2); }
+.lp-calc__cmp { margin-top: 12px; color: var(--ink); max-width: 28em; }
+.lp-bars { width: 100%; border-collapse: collapse; margin-top: 32px; font-variant-numeric: tabular-nums; }
+.lp-bars caption { text-align: left; padding-bottom: 12px; }
+.lp-bars tr { border-top: 1px solid var(--rule); }
+.lp-bars tr:last-child { border-bottom: 1px solid var(--rule); }
+.lp-bars th { width: 38%; padding: 14px 16px 14px 0; text-align: left; font-size: 15px; font-weight: 500; }
+.lp-bars td { padding: 14px 0; }
+.lp-bars__t { display: block; height: 6px; }
+.lp-bars__f { display: block; height: 6px; width: var(--w, 0%); background: var(--ink); opacity: 0.28; transition: width 300ms ease; }
+.lp-bars__f--home { opacity: 1; }
+.lp-bars td.lp-bars__v { width: 76px; padding-left: 12px; text-align: right; font-weight: 600; }
+.lp-calc__more { margin-top: 32px; }
+.lp-calc__more > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; border-top: 1px solid var(--ink); font-weight: 600; cursor: pointer; list-style: none; }
+.lp-calc__more > summary::-webkit-details-marker { display: none; }
+.lp-calc__more[open] .lp-pm::after { transform: rotate(0); }
+.lp-calc__k { margin-top: 16px; }
+.lp-calc__k--w { margin-top: 24px; color: var(--ink-2); }
+.lp-rates { margin-top: 12px; }
+.lp-rates__r { display: grid; grid-template-columns: minmax(0, 1fr) 72px 112px; align-items: center; column-gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--rule); font-size: 15px; min-height: 52px; }
+.lp-rates__r:first-child { border-top: 1px solid var(--rule); }
+.lp-rates__r > span { font-size: 14px; line-height: 16px; color: var(--ink-2); }
+.lp-rates__r .lp-calc__err { grid-column: 1 / -1; margin: 0 0 8px; }
+@media (max-width: 379px) {   /* narrow phones: the label gets its own line, then the field and its unit */
+  .lp-rates__r { grid-template-columns: 72px minmax(0, 1fr); padding: 8px 0 4px; }
+  .lp-rates__r > label { grid-column: 1 / -1; }
+}
+.lp-calc__note { margin: 16px 0 4px; }
+.lp-workings { margin-top: 8px; color: var(--ink); font-size: 15px; line-height: 22px; max-width: 36em; }
+.lp-calc__more .lp-link--quiet { margin-top: 4px; }
+.lp-calc__foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--rule); display: flex; gap: 4px 16px; align-items: baseline; flex-wrap: wrap; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.lp-calc__foot p { max-width: 48em; }
+.lp-calc__badge { font: 600 13px/16px var(--f); font-stretch: 125%; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
+@media (min-width: 1200px) {
+  .lp-calc__more { margin-top: 40px; }
+  .lp-calc__more > summary { display: none; }   /* from 1200 the rates stay open (the page sets `open`) and need no switch */
+  .lp-calc__more .lp-calc__k:first-of-type { margin-top: 0; }
+}
+
+/* ================= Area: his H2, then a quiet statement beside the field. Field and button are one row from 720 ================= */
+.lp-area__row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 24px; }
+.lp-pc__row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 8px; }
+.lp-pc__in { height: 64px; width: 100%; min-width: 0; padding: 0 20px; background: var(--field); border: 1px solid var(--ink); border-radius: 0; color: var(--ink); font: 500 24px/1 var(--f); letter-spacing: -0.01em; text-transform: uppercase; }
+.lp-pc__in::placeholder { text-transform: none; color: var(--ink-3); opacity: 1; }
+:root[data-scope="public"] .lp-pc__in:focus-visible, :root[data-scope="public"] .lp-pc__in:focus { outline: 2px solid var(--ink); outline-offset: 0; }
+:root[data-scope="public"] .lp-pc__in[aria-invalid="true"], :root[data-scope="public"] .lp-pc__in[aria-invalid="true"]:focus-visible { border-color: var(--err); outline-color: var(--err); }
+.lp-pc__btn { width: 100%; }
+.lp-pc__note { margin-top: 12px; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.lp-pc__result { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; font-size: 15px; line-height: 20px; font-weight: 500; }
+.lp-pc__result:empty { margin: 0; }
+.lp-pc__result .lp-glyph { margin-top: 0; }
+.lp-pc__result.is-bad { color: var(--err); }
+.lp-pc__tel { color: inherit; font-variant-numeric: tabular-nums; text-underline-offset: 3px; }
+@media (min-width: 720px) {
+  .lp-pc__row { grid-template-columns: minmax(0, 1fr) auto; gap: 0; }
+  .lp-pc__btn { width: auto; }
+}
+@media (min-width: 1024px) {
+  .lp-area__row { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; margin-top: 48px; align-items: start; }
+  .lp-area__row .lp-statement { grid-column: 1 / 6; }
+  .lp-pc { grid-column: 6 / -1; }
+  .lp-pc__in { font-size: 28px; }
+}
+
+/* ================= Questions: native details, one open at a time. The cost question opens first ================= */
+.lp-faq__list { margin-top: 32px; border-bottom: 1px solid var(--rule); }
+.lp-faq__item { border-top: 1px solid var(--rule); }
+.lp-faq__q { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; min-height: 48px; padding: 18px 0; cursor: pointer; list-style: none; font-size: 19px; line-height: 1.3; letter-spacing: -0.015em; font-weight: 600; }
+.lp-faq__q::-webkit-details-marker { display: none; }
+.lp-pm { position: relative; flex: none; width: 20px; height: 20px; margin-top: 3px; color: var(--ink-2); }
+.lp-pm::before, .lp-pm::after { content: ''; position: absolute; left: 2px; right: 2px; top: 9px; height: 2px; background: currentColor; transition: transform var(--t-base) ease, background-color var(--t-base) ease; }
+.lp-pm::after { transform: rotate(90deg); }
+@media (hover: hover) { .lp-faq__q:hover .lp-pm, .lp-calc__more > summary:hover .lp-pm { color: var(--ink); } }
+.lp-faq__item[open] .lp-pm { color: var(--red); }
+.lp-faq__item[open] .lp-pm::after { transform: rotate(0); }
+.lp-faq__a { padding: 0 44px 28px 0; max-width: 40em; }
+.lp-faq__a p { color: var(--ink); }
+.lp-faq__item::details-content { block-size: 0; overflow: hidden; transition: block-size var(--t-slow) ease, content-visibility var(--t-slow) allow-discrete; }
+.lp-faq__item[open]::details-content { block-size: auto; }
+:root[data-scope="public"] { interpolate-size: allow-keywords; }
+@media (prefers-reduced-motion: reduce) { .lp-faq__item::details-content { transition: none !important; } .lp-bars__f { transition: none !important; } }
+@media (min-width: 1024px) {
+  .lp-faq { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+  .lp-faq .lp-h2 { grid-column: 1 / 5; position: sticky; top: calc(var(--hdr-h) + 32px); }
+  .lp-faq__list { grid-column: 5 / -1; margin-top: 0; border-top: 0; }
+  .lp-faq__q { font-size: 22px; padding: 28px 0; }
+  .lp-faq__a { padding-bottom: 36px; }
+  .lp-pm { margin-top: 5px; }
+}

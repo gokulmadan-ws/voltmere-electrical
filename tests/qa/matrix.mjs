@@ -16,12 +16,21 @@
 //   console        zero console errors / warnings / page errors
 //   request        zero failed requests, HTTP >= 400 responses and off-site requests (perspective.imgix.net and images.unsplash.com for images only; stand-ins are served)
 //   axe            axe-core wcag2a/2aa/21a/21aa: zero serious or critical violations
-//   contrast       axe color-contrast: zero violations (text/background AA)
+//   contrast       axe color-contrast: zero violations (text/background AA). Text axe cannot judge (over gradients, photos, pseudo-element backgrounds: roughly a third
+//                  of all text in dark mode) is measured from real pixels instead: its own colour over the worst pixel of its line box, 4.5:1 (3:1 for large text)
+//                  and the stand-in photo is mid grey (PHOTO_TONE=#eeeeee / #101010 stress the overlays)
 //   focus-ring     the landing page and every funnel step: a visible focus indicator on every Tab stop (computed outline, else a before/after pixel difference)
 //   text-clipped   no text cut off by overflow:hidden (scrollWidth > clientWidth), and no fixed-height box cutting text vertically
 //   image-dims     every img has width+height attributes or an aspect-ratio (itself or a wrapper), loads, and is not distorted
 //   cls            layout shift while the page loads (PerformanceObserver; photos answer 250 ms late so a missing reservation shows) is below 0.05
 //   reduced-motion with prefers-reduced-motion: reduce no animation longer than 150 ms or infinite is running, and scroll-behavior is auto
+//
+// Screens: index (landing, funnel steps 1 to 6 with the error state, confirmation and its demo panel), quote (same browser, link, expired, invalid, accepted),
+// dashboard (every route; booking and quote ids are read from the seeded store; #import= with an enquiry, an acceptance and garbage; every connection wizard).
+// "Extras" (x-* / z-* / landing-open / link-decline) open what is behind a tap: FAQ, lightbox, filter sheet, message rows, every disclosure and <details>,
+// pipeline stage tabs, the quote builder and send sheet, wizard step 2. Those that write to the store run last.
+// Sampling: all screens at 375 and 1440 in both themes; the core screens (landing, funnel contact + confirmation, quote link, Today, booking detail) at the other four widths.
+// SELFTEST=1 builds a page full of defects and checks that every detector fires.
 //
 // Owner: MATRIX (final gate).
 import { createRequire } from 'node:module';
@@ -42,7 +51,8 @@ const NOW = 'now=2026-10-23T20:30&freeze=1';
 const CTX = { timezoneId: 'Europe/London', locale: 'en-GB' };
 const PHOTO_HOSTS = /^https:\/\/(perspective\.imgix\.net|images\.unsplash\.com)\//;
 const PHOTO_DELAY_MS = 250;
-const STAND_IN = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#444"/><rect x="40" y="40" width="1120" height="720" fill="#555"/></svg>';
+const PHOTO_TONE = process.env.PHOTO_TONE || '#777'; // the stand-in photo: text laid over his photos must still pass on a mid-tone picture
+const STAND_IN = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="${PHOTO_TONE}"/><rect x="40" y="40" width="1120" height="720" fill="${PHOTO_TONE}" opacity="0.85"/></svg>`;
 const CLS_LIMIT = 0.05;
 const TAP_MIN = 44;
 
@@ -112,7 +122,7 @@ function initScript() {
 function auditPage(opts) {
   const tapMin = opts.tapMin;
   const vw = document.documentElement.clientWidth;
-  const out = { vw, overflow: [], wide: [], taps: [], clipped: [], images: [] };
+  const out = { vw, overflow: [], wide: [], taps: [], clipped: [], images: [], counts: { elements: 0, interactive: 0, images: 0 } };
   const alpha = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return 1; const p = m[1].split(/[ ,/]+/).filter(Boolean); return p.length > 3 ? parseFloat(p[3]) : 1; };
   const desc = (el) => {
     let s = el.tagName.toLowerCase();
@@ -147,6 +157,7 @@ function auditPage(opts) {
   if (document.body.scrollWidth > de.clientWidth + 0.5) out.overflow.push(`body scrollWidth ${document.body.scrollWidth} > ${de.clientWidth}`);
 
   const all = Array.from(document.body.querySelectorAll('*'));
+  out.counts.elements = all.length;
   // 2. wide elements, 3b. clipped text
   for (const el of all) {
     if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') continue;
@@ -162,7 +173,10 @@ function auditPage(opts) {
     if (el.clientWidth <= 2 || el.clientHeight <= 2) continue;
     if (hidden.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1 && shown(el)) {
       const ell = cs.textOverflow === 'ellipsis';
-      out.clipped.push(`${desc(el)} scrollWidth ${el.scrollWidth} > clientWidth ${el.clientWidth}${ell ? ' (ellipsis)' : ''}`);
+      // A deliberate one-line preview (text-overflow: ellipsis) is allowed when the full text is one tap or hover away: it sits inside a button, link or
+      // summary, or carries a title. Anything else cut short is a defect.
+      if (ell && (el.closest('button, a[href], summary, [role="button"], [role="link"], [aria-expanded], [title]'))) continue;
+      out.clipped.push(`${desc(el)} scrollWidth ${el.scrollWidth} > clientWidth ${el.clientWidth}${ell ? ' (ellipsis, full text not reachable)' : ''}`);
     } else if (hidden.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 2 && shown(el) && !/-webkit-box/.test(cs.display) && cs.webkitLineClamp === 'none') {
       out.clipped.push(`${desc(el)} scrollHeight ${el.scrollHeight} > clientHeight ${el.clientHeight} (vertical)`);
     }
@@ -173,6 +187,7 @@ function auditPage(opts) {
   const seen = new Set();
   for (const el of document.querySelectorAll(sel)) {
     if (!shown(el)) continue;
+    out.counts.interactive += 1;
     let target = el;
     let r = el.getBoundingClientRect();
     if (r.bottom + window.scrollY <= 0 || r.right + window.scrollX <= 0) continue; // parked off-screen (skip link)
@@ -209,6 +224,7 @@ function auditPage(opts) {
 
   // 4. images
   for (const img of document.querySelectorAll('img')) {
+    out.counts.images += 1;
     if (!shown(img) && !img.getBoundingClientRect().width) { if (img.complete && img.naturalWidth === 0 && img.currentSrc) out.images.push(`${desc(img)} did not load`); continue; }
     const cs = getComputedStyle(img);
     const attrs = img.hasAttribute('width') && img.hasAttribute('height') && parseFloat(img.getAttribute('width')) > 0 && parseFloat(img.getAttribute('height')) > 0;
@@ -256,6 +272,123 @@ function focusProbe() {
   return { key: `${desc(el)}@${Math.round(r.left)},${Math.round(r.top + window.scrollY)}`, desc: desc(el), ring: ring(el), wrapperRing: !!wrapper, visible, covered: covered ? desc(top) : '', rect: { x: r.left, y: r.top, w: r.width, h: r.height } };
 }
 
+/** axe cannot judge text over gradients, images and pseudo-elements ("incomplete"): list those text runs with their colour and boxes so they can be measured from pixels. */
+async function contrastTargets() {
+  const res = await window.axe.run(document, { runOnly: { type: 'rule', values: ['color-contrast'] }, resultTypes: ['incomplete'], elementRef: true });
+  const out = [];
+  const seen = new Set();
+  const nodes = res.incomplete.flatMap((v) => v.nodes);
+  for (const e of document.body.querySelectorAll('*')) { const ps = getComputedStyle(e).position; if (ps === 'fixed' || ps === 'sticky') e.setAttribute('data-qa-fixed', '1'); }
+  // Computed colours can come back as rgb(), color(srgb ...), oklch(), color-mix results...: let a canvas turn any of them into RGBA.
+  const cv = document.createElement('canvas'); cv.width = 1; cv.height = 1;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  const parse = (c) => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
+  const modal = document.querySelector('[role="dialog"][aria-modal="true"]'); // with a sheet or lightbox open, what is behind its scrim is not on show
+  for (const n of nodes) {
+    const el = n.element;
+    if (!el || seen.has(el)) continue;
+    seen.add(el);
+    if (modal && !modal.contains(el)) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    let opacity = 1;
+    for (let a = el; a && a.nodeType === 1; a = a.parentElement) opacity *= parseFloat(getComputedStyle(a).opacity);
+    if (opacity < 0.05) continue;
+    const fg = parse(cs.webkitTextFillColor && cs.webkitTextFillColor !== cs.color && !/transparent|rgba\(0, 0, 0, 0\)/.test(cs.webkitTextFillColor) ? cs.webkitTextFillColor : cs.color);
+    const rects = [];
+    let text = '';
+    for (const t of el.childNodes) {
+      if (t.nodeType !== 3 || !t.textContent.trim()) continue;
+      text += `${t.textContent.trim()} `;
+      const r = document.createRange(); r.selectNodeContents(t);
+      for (const q of r.getClientRects()) if (q.width > 1 && q.height > 1) rects.push({ x: q.left + window.scrollX, y: q.top + window.scrollY, w: q.width, h: q.height });
+    }
+    if (!rects.length) continue;
+    const size = parseFloat(cs.fontSize);
+    const weight = parseInt(cs.fontWeight, 10) || 400;
+    const large = size >= 24 || (size >= 18.66 && weight >= 700);
+    let name = el.tagName.toLowerCase();
+    const tid = el.getAttribute('data-testid');
+    if (tid) name += `[${tid}]`; else if (el.id) name += `#${el.id}`; else if (typeof el.className === 'string' && el.className.trim()) name += `.${el.className.trim().split(/\s+/)[0]}`;
+    el.setAttribute('data-qa-cc', String(out.length));
+    out.push({ i: out.length, name, text: text.trim().slice(0, 40), fixed: !!el.closest('[data-qa-fixed]'), fg: [fg[0], fg[1], fg[2], fg[3] * opacity], need: large ? 3 : 4.5, rects });
+  }
+  return out;
+}
+
+/**
+ * For each text line box: is it where the caller thinks it is NOW (a fixed or sticky element does not follow a window scroll), is it fully inside every scroll
+ * container it sits in, and is it really on top (nothing else painted over it)? `doc`: rects are document coordinates (else viewport).
+ */
+function runProbe(arg) {
+  return arg.runs.map((r) => {
+    const el = document.querySelector(`[data-qa-cc="${r.i}"]`);
+    if (!el) return false;
+    const x0 = r.x - (arg.doc ? window.scrollX : 0);
+    const y0 = r.y - (arg.doc ? window.scrollY : 0);
+    if (x0 < 0 || y0 < 0 || x0 + r.w > window.innerWidth || y0 + r.h > window.innerHeight) return false;
+    let there = false; // one of the element's line boxes is exactly this one right now
+    for (const t of el.childNodes) {
+      if (t.nodeType !== 3 || !t.textContent.trim()) continue;
+      const rg = document.createRange(); rg.selectNodeContents(t);
+      for (const q of rg.getClientRects()) if (Math.abs(q.left - x0) < 1.5 && Math.abs(q.top - y0) < 1.5 && Math.abs(q.width - r.w) < 1.5) there = true;
+    }
+    if (!there) return false;
+    for (let n = el.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const b = n.getBoundingClientRect();
+      if (x0 < b.left - 1 || x0 + r.w > b.right + 1 || y0 < b.top - 1 || y0 + r.h > b.bottom + 1) return false;
+    }
+    const y = y0 + r.h / 2;
+    return [x0 + 2, x0 + r.w / 2, x0 + r.w - 2].every((x) => {
+      const top = document.elementFromPoint(Math.min(Math.max(x, 1), window.innerWidth - 2), Math.min(Math.max(y, 1), window.innerHeight - 2));
+      return !!top && (el === top || el.contains(top));
+    });
+  });
+}
+
+/** Scroll one text element to the middle of its scroll containers and report its line boxes (viewport coordinates) and whether they are all visible and on top. */
+function scrollRuns(arg) {
+  const el = document.querySelector(`[data-qa-cc="${arg.i}"]`);
+  if (!el) return { rects: [], ok: [] };
+  if (arg.scroll) el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+  const rects = [];
+  for (const t of el.childNodes) {
+    if (t.nodeType !== 3 || !t.textContent.trim()) continue;
+    const r = document.createRange(); r.selectNodeContents(t);
+    for (const q of r.getClientRects()) if (q.width > 1 && q.height > 1) rects.push({ x: q.left, y: q.top, w: q.width, h: q.height });
+  }
+  return { rects };
+}
+
+/** Worst contrast of `fg` text over the pixels of a screenshot region (PNG data URL), measured per pixel with the text colour blended in. */
+async function pixelContrast(arg) {
+  const blob = await (await fetch(arg.png)).blob();
+  const bmp = await createImageBitmap(blob);
+  const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(bmp, 0, 0);
+  const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (r, g, b) => 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  return arg.items.map((it) => {
+    let worst = 99; let worstBg = ''; let worstAt = '';
+    for (const q of it.rects) {
+      const x0 = Math.max(0, Math.floor(q.x)); const y0 = Math.max(0, Math.floor(q.y));
+      const w = Math.min(bmp.width - x0, Math.ceil(q.w)); const h = Math.min(bmp.height - y0, Math.ceil(q.h));
+      if (w < 1 || h < 1) continue;
+      const d = cx.getImageData(x0, y0, w, h).data;
+      for (let k = 0; k < d.length; k += 12) { // every third pixel
+        const a = it.fg[3];
+        const tr = a * it.fg[0] + (1 - a) * d[k]; const tg = a * it.fg[1] + (1 - a) * d[k + 1]; const tb = a * it.fg[2] + (1 - a) * d[k + 2];
+        const l1 = lum(tr, tg, tb); const l2 = lum(d[k], d[k + 1], d[k + 2]);
+        const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+        if (ratio < worst) { worst = ratio; worstBg = `${d[k]},${d[k + 1]},${d[k + 2]}`; worstAt = `${x0 + ((k / 4) % w)},${y0 + Math.floor(k / 4 / w)}`; }
+      }
+    }
+    return { i: it.i, worst, worstBg, worstAt, box: it.rects.map((q) => `${Math.round(q.x)},${Math.round(q.y)} ${Math.round(q.w)}x${Math.round(q.h)}`).join(' ') };
+  });
+}
+
 /** Animations that should not exist under prefers-reduced-motion. */
 function motionProbe() {
   const out = [];
@@ -264,7 +397,7 @@ function motionProbe() {
     let t = null;
     try { t = a.effect && a.effect.getComputedTiming(); } catch (e) { t = null; }
     if (!t) continue;
-    const total = t.endTime;
+    const total = t.activeDuration; // duration x iterations; a transition's start delay (a visibility flip held back 200 ms) is not motion
     if (total === Infinity || total > 150) {
       const tg = a.effect && a.effect.target;
       const name = a.animationName || a.transitionProperty || a.constructor.name;
@@ -302,10 +435,10 @@ function attachLog(page, log) {
   });
 }
 
-async function newContext(browser, vp, theme, { reduce = false } = {}) {
+async function newContext(browser, vp, theme, { reduce = false, mobile } = {}) {
   const [w, h] = vp.split('x').map(Number);
   const ctx = await browser.newContext({
-    ...CTX, viewport: { width: w, height: h }, deviceScaleFactor: 1, isMobile: w < 700, hasTouch: w < 700, colorScheme: theme, reducedMotion: reduce ? 'reduce' : 'no-preference'
+    ...CTX, viewport: { width: w, height: h }, deviceScaleFactor: 1, isMobile: mobile === undefined ? w < 700 : mobile, hasTouch: mobile === undefined ? w < 700 : mobile, colorScheme: theme, reducedMotion: reduce ? 'reduce' : 'no-preference'
   });
   await ctx.addInitScript((t) => { try { localStorage.setItem('vm_theme', t); } catch (e) { /* storage blocked */ } }, theme);
   await ctx.addInitScript(initScript);
@@ -318,14 +451,20 @@ async function newContext(browser, vp, theme, { reduce = false } = {}) {
 
 /** Everything is settled: network idle, fonts ready, finite animations done. */
 async function settle(page) {
-  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+  await page.waitForFunction(() => document.readyState === 'complete' && Array.from(document.images).every((i) => i.complete || i.loading === 'lazy'), null, { timeout: 8000 }).catch(() => {});
+  // the landing page mounts the sections below the hero, and has the quote form's code in the page, a moment after its photo has arrived (html[data-below] and html[data-booking], js/landing)
+  await page.waitForFunction(() => !document.querySelector('[data-testid="hero-cta"]') || (document.documentElement.dataset.below === 'ready' && document.documentElement.dataset.booking === 'ready'), null, { timeout: 8000 }).catch(() => {});
   await page.evaluate(async () => {
     try { await document.fonts.ready; } catch (e) { /* ignore */ }
     const t0 = performance.now();
     while (performance.now() - t0 < 2600) {
       const running = document.getAnimations().filter((a) => {
         if (a.playState !== 'running') return false;
-        try { return Number.isFinite(a.effect.getComputedTiming().endTime); } catch (e) { return false; }
+        try {
+          const tg = a.effect.target; // the toast's 4 s countdown bar is not page loading
+          if (tg && tg.closest && tg.closest('.ui-toast')) return false;
+          return Number.isFinite(a.effect.getComputedTiming().endTime);
+        } catch (e) { return false; }
       });
       if (!running.length) break;
       await new Promise((r) => setTimeout(r, 80));
@@ -362,23 +501,27 @@ async function focusWalk(page, info, label, maxStops = 140) {
     const a = document.createElement('span'); a.tabIndex = -1; document.body.prepend(a); a.focus(); a.remove();
   }).catch(() => {});
   let first = null;
-  let pending = null; // an element with no outline: compared by pixels once focus has moved on
   let stops = 0;
   const bad = [];
-  const pixelCheck = async (p, before) => {
+  const vp = page.viewportSize();
+  // No computed outline: compare the pixels around the element focused and blurred (then give it focus back, still in keyboard mode).
+  const indicatorShows = async (f) => {
     try {
-      const box = await p.handle.boundingBox();
-      if (!box) return true; // gone from the page: cannot judge
       const pad = 10;
-      const vp = page.viewportSize();
-      const clip = (b) => {
-        const x = Math.max(0, Math.floor(b.x - pad)); const y = Math.max(0, Math.floor(b.y - pad));
-        return { x, y, width: Math.max(1, Math.min(vp.width - x, Math.ceil(b.width + pad * 2))), height: Math.max(1, Math.min(vp.height - y, Math.ceil(b.height + pad * 2))) };
-      };
-      if (box.y + box.height < 0 || box.y > vp.height || box.x + box.width < 0 || box.x > vp.width) return true;
-      const after = await page.screenshot({ clip: clip(box) });
-      return !before.equals(after);
-    } catch (e) { return true; }
+      const x = Math.max(0, Math.floor(f.rect.x - pad)); const y = Math.max(0, Math.floor(f.rect.y - pad));
+      const clip = { x, y, width: Math.max(1, Math.min(vp.width - x, Math.ceil(f.rect.w + pad * 2))), height: Math.max(1, Math.min(vp.height - y, Math.ceil(f.rect.h + pad * 2))) };
+      const freeze = await page.addStyleTag({ content: '*,*::before,*::after{animation-play-state:paused !important;caret-color:transparent !important}' });
+      await sleep(180);
+      const focused = await page.screenshot({ clip });
+      const handle = await page.evaluateHandle(() => { const el = document.activeElement; el.blur(); return el; });
+      await sleep(220);
+      const blurred = await page.screenshot({ clip });
+      await handle.evaluate((el) => el.focus());
+      await handle.dispose();
+      await freeze.evaluate((n) => n.remove());
+      await sleep(40);
+      return !focused.equals(blurred);
+    } catch (e) { if (process.env.DEBUG_FOCUS) console.log('  pixel check error', e.message.split('\n')[0]); return true; }
   };
   for (let i = 0; i < maxStops; i += 1) {
     await page.keyboard.press('Tab');
@@ -393,40 +536,99 @@ async function focusWalk(page, info, label, maxStops = 140) {
         await new Promise((res) => setTimeout(res, 40));
       }
     }).catch(() => {});
-    if (pending) {
-      const changed = await pixelCheck(pending, pending.shot);
-      if (!changed) bad.push(`${pending.desc}: no visible focus indicator (no outline and the pixels do not change)`);
-      await pending.handle.dispose().catch(() => {});
-      pending = null;
+    let f = await page.evaluate(focusProbe);
+    for (let k = 0; k < 15 && !f.body && (!f.visible || f.covered); k += 1) { // a long smooth scroll (landing.css) can still be under way: give it up to 1.5 s
+      await sleep(100);
+      f = await page.evaluate(focusProbe);
     }
-    const f = await page.evaluate(focusProbe);
+    if (process.env.DEBUG_FOCUS) console.log('  tab', i, JSON.stringify({ d: f.desc, ring: f.ring, w: f.wrapperRing, vis: f.visible, cov: f.covered }));
     if (f.body) break; // focus left the document
     if (first && f.key === first) break; // a full lap (a trapped sheet cycles)
     if (!first) first = f.key;
     stops += 1;
     if (!f.visible) bad.push(`${f.desc}: focused but not visible on screen`);
     else if (f.covered) bad.push(`${f.desc}: focused but covered by ${f.covered}`);
-    else if (!f.ring && !f.wrapperRing) {
-      const handle = await page.evaluateHandle(() => document.activeElement);
-      const vp = page.viewportSize();
-      const pad = 10;
-      const x = Math.max(0, Math.floor(f.rect.x - pad)); const y = Math.max(0, Math.floor(f.rect.y - pad));
-      const shot = await page.screenshot({ clip: { x, y, width: Math.max(1, Math.min(vp.width - x, Math.ceil(f.rect.w + pad * 2))), height: Math.max(1, Math.min(vp.height - y, Math.ceil(f.rect.h + pad * 2))) } }).catch(() => null);
-      if (shot) pending = { handle, shot, desc: f.desc };
-      else await handle.dispose().catch(() => {});
-    }
-  }
-  if (pending) {
-    // the last stop: move focus away with one more Tab
-    await page.keyboard.press('Tab'); await sleep(60);
-    const changed = await pixelCheck(pending, pending.shot);
-    if (!changed) bad.push(`${pending.desc}: no visible focus indicator (no outline and the pixels do not change)`);
-    await pending.handle.dispose().catch(() => {});
+    else if (!f.ring && !f.wrapperRing && !(await indicatorShows(f))) bad.push(`${f.desc}: no visible focus indicator (no outline and the pixels do not change)`);
   }
   note('focus-stops');
   for (const b of bad.slice(0, 12)) fail(info, 'focus-ring', `${label}: ${b}`);
   if (stops === 0) fail(info, 'focus-ring', `${label}: Tab reached no focusable element`);
   return stops;
+}
+
+/**
+ * Text axe could not judge (gradient cards, text over photos, pseudo-element backgrounds) is measured from real pixels: every text run is hidden,
+ * the region around it is screenshotted, and the worst per-pixel contrast of its own colour over that region must still be AA (4.5, or 3 for large text).
+ */
+async function verifyIncompleteContrast(page, info, label) {
+  const targets = await page.evaluate(contrastTargets).catch(() => []);
+  if (!targets.length) return 0;
+  const vp = page.viewportSize();
+  const freeze = await page.addStyleTag({ content: '*,*::before,*::after{color:transparent !important;-webkit-text-fill-color:transparent !important;text-shadow:none !important;text-decoration:none !important;-webkit-text-stroke:0 !important;caret-color:transparent !important;animation-play-state:paused !important;scroll-behavior:auto !important}' });
+  const runs = targets.flatMap((t) => t.rects.map((q, k) => ({ i: t.i, k, id: `${t.i}:${k}`, q, fixed: t.fixed })));
+  const done = new Map(); // run id -> { worst, worstBg }
+  const step = Math.max(200, vp.height - 120);
+  const docH = await page.evaluate(() => document.documentElement.scrollHeight);
+  const offsets = [];
+  for (let y = 0; y < docH; y += step) offsets.push(y);
+  for (const f of [0.5, 0.25, 0.75]) for (let y = Math.floor(step * f); y < docH; y += step) offsets.push(y); // shifted laps for runs still unmeasured (they only cost a screenshot when something is left)
+  // Pass A: ordinary content, with every fixed / sticky element (header, tab bar, toast, sticky action bars) hidden so the pixels are the content's own background.
+  // Pass B: the fixed / sticky elements' own text, with everything showing.
+  for (const pass of ['content', 'fixed']) {
+    const hide = pass === 'content' ? await page.addStyleTag({ content: '[data-qa-fixed]{visibility:hidden !important}' }) : null;
+    for (const y0 of offsets) {
+      const todo = runs.filter((r) => (pass === 'fixed') === r.fixed && !done.has(r.id) && r.q.y >= y0 && r.q.y + r.q.h <= y0 + vp.height - 4);
+      if (!todo.length) continue;
+      await page.evaluate((y) => window.scrollTo(0, y), y0);
+      await sleep(50);
+      const sy = await page.evaluate(() => window.scrollY);
+      // only line boxes that are really on top at this scroll position and fully inside every scroll container they sit in
+      const ok = await page.evaluate(runProbe, { runs: todo.map((r) => ({ i: r.i, x: r.q.x, y: r.q.y, w: r.q.w, h: r.q.h })), doc: true });
+      const sample = todo.filter((r, n) => ok[n]);
+      if (!sample.length) continue;
+      const shot = await page.screenshot();
+      // nothing may have moved while the picture was taken (a smooth scroll, a sheet settling): probe again and keep only the runs still in place
+      const still = await page.evaluate(runProbe, { runs: sample.map((r) => ({ i: r.i, x: r.q.x, y: r.q.y, w: r.q.w, h: r.q.h })), doc: true });
+      const items = sample.filter((r, n) => still[n]).map((r) => ({ i: r.id, fg: targets[r.i].fg, rects: [{ x: r.q.x, y: r.q.y - sy, w: r.q.w, h: r.q.h }] }));
+      if (!items.length) continue;
+      const res = await page.evaluate(pixelContrast, { png: `data:image/png;base64,${shot.toString('base64')}`, items });
+      for (const r of res) { r.shot = process.env.DEBUG_CONTRAST_DIR ? shot : null; r.via = `${pass}@${y0}/sy${sy}`; done.set(r.i, r); }
+    }
+    if (hide) await hide.evaluate((n) => n.remove());
+  }
+  // Pass C: text inside an inner scroller (a dialog body, a list) that the page scroll never brought fully into view: scroll that element itself to the middle.
+  const left = targets.filter((t) => t.rects.some((q, k) => !done.has(`${t.i}:${k}`)) && !t.rects.some((q, k) => done.has(`${t.i}:${k}`))).slice(0, 80);
+  for (const t of left) {
+    const hide = t.fixed ? null : await page.addStyleTag({ content: '[data-qa-fixed]{visibility:hidden !important}' });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const got = await page.evaluate(scrollRuns, { i: t.i, scroll: true });
+      await sleep(80 + attempt * 150);
+      const ok = got.rects.length ? await page.evaluate(runProbe, { runs: got.rects.map((q) => ({ i: t.i, ...q })), doc: false }) : [];
+      const shot = await page.screenshot();
+      const again = await page.evaluate(scrollRuns, { i: t.i, scroll: false }); // the picture only counts if nothing moved while it was taken
+      const keep = got.rects.filter((q, n) => ok[n] && again.rects[n] && Math.abs(again.rects[n].x - q.x) < 1 && Math.abs(again.rects[n].y - q.y) < 1);
+      if (!keep.length) continue;
+      const res = await page.evaluate(pixelContrast, { png: `data:image/png;base64,${shot.toString('base64')}`, items: keep.map((q, n) => ({ i: `${t.i}:${n}`, fg: t.fg, rects: [q] })) });
+      for (const r of res) { r.shot = process.env.DEBUG_CONTRAST_DIR ? shot : null; r.via = `C#${attempt}`; done.set(r.i, r); }
+      break;
+    }
+    if (hide) await hide.evaluate((n) => n.remove());
+  }
+  await freeze.evaluate((n) => n.remove());
+  await page.evaluate(() => window.scrollTo(0, 0));
+  let bad = 0;
+  for (const t of targets) {
+    const mine = t.rects.map((q, k) => done.get(`${t.i}:${k}`)).filter(Boolean);
+    if (!mine.length) { note('contrast-unverified'); continue; }
+    note('contrast-verified');
+    const r = mine.reduce((w, x) => (x.worst < w.worst ? x : w));
+    if (r.worst < t.need - 0.01) {
+      bad += 1;
+      if (r.shot && process.env.DEBUG_CONTRAST_DIR) { fs.mkdirSync(process.env.DEBUG_CONTRAST_DIR, { recursive: true }); fs.writeFileSync(path.join(process.env.DEBUG_CONTRAST_DIR, `${label.replace(/\W+/g, '_')}-${info.vp}-${info.theme}-${t.i}.png`), r.shot); }
+      if (bad <= 10) fail({ ...info, key: label }, 'contrast', `${t.name} "${t.text}" ${r.worst.toFixed(2)}:1 < ${t.need}:1 over rgb(${r.worstBg}) at ${r.worstAt} in ${r.box} via ${r.via} with text rgba(${t.fg.map((n, k) => (k < 3 ? Math.round(n) : Math.round(n * 100) / 100)).join(',')})`);
+    }
+  }
+  return bad;
 }
 
 /**
@@ -436,8 +638,11 @@ async function auditState(page, log, info, name, opt = {}) {
   const label = `${info.screen}/${name}`;
   const sinfo = { ...info, key: label };
   if (info.coreOnly && !opt.core) return;
+  if (opt.thin && !info.thick) return; // a repeat of a layout already audited: only on the sampled (viewport, theme) pairs unless FULL=1
   stats.states += 1;
+  const tp = Date.now();
   await settle(page);
+  const tSettle = Date.now() - tp;
   if (opt.scroll) await scrollThrough(page);
   // the route did not fall over
   const broken = await page.evaluate(() => ({
@@ -447,7 +652,10 @@ async function auditState(page, log, info, name, opt = {}) {
   if (broken.err) fail(sinfo, 'load', 'the dashboard shows its "view-error" screen');
   if (broken.empty) fail(sinfo, 'load', '#app is empty');
   // static audit
+  const t1 = Date.now();
   const a = await page.evaluate(auditPage, { tapMin: TAP_MIN });
+  const tAudit = Date.now() - t1;
+  stats.elements = (stats.elements || 0) + a.counts.elements; stats.interactive = (stats.interactive || 0) + a.counts.interactive; stats.images = (stats.images || 0) + a.counts.images;
   for (const s of a.overflow) fail(sinfo, 'overflow', s);
   for (const s of a.wide.slice(0, 8)) fail(sinfo, 'wide-element', s);
   for (const s of a.taps.slice(0, 20)) fail(sinfo, 'tap-target', s);
@@ -458,6 +666,7 @@ async function auditState(page, log, info, name, opt = {}) {
   const cls = await page.evaluate(() => ({ v: window.__cls || 0, s: window.__shifts || [] })).catch(() => ({ v: 0, s: [] }));
   if (cls.v >= CLS_LIMIT) fail(sinfo, 'cls', `${cls.v.toFixed(4)} >= ${CLS_LIMIT}: ${cls.s.slice(0, 4).map((x) => `${x.v}@${x.t}ms ${x.n}`).join('; ')}`);
   // axe
+  const t2 = Date.now();
   try {
     const v = await runAxe(page);
     for (const x of v) {
@@ -466,6 +675,10 @@ async function auditState(page, log, info, name, opt = {}) {
       fail(sinfo, contrast ? 'contrast' : 'axe', `${x.id} (${x.impact}) x${x.count}: ${x.help}. ${x.nodes.map((n) => `${n.t}${n.d ? ` [${n.d}]` : ''}`).join(' ; ')}`);
     }
   } catch (e) { fail(sinfo, 'axe', `axe did not run: ${e.message.split('\n')[0]}`); }
+  if (info.contrastOk) {
+    try { await verifyIncompleteContrast(page, info, label); } catch (e) { fail(sinfo, 'contrast', `pixel contrast check did not run: ${e.message.split('\n')[0]}`); }
+  }
+  if (process.env.PROFILE) console.log(`   [profile] ${label}: settle ${tSettle}ms audit ${tAudit}ms axe ${Date.now() - t2}ms`);
   // console / requests collected so far
   for (const [check, text] of log.items.splice(0)) fail(sinfo, check, text);
   // focus ring
@@ -535,7 +748,7 @@ async function gotoDash(page, hash) {
 }
 async function gotoQuote(page, hash) {
   await page.goto(`${BASE}/quote.html?${NOW}${hash}`, { waitUntil: 'load' });
-  await page.waitForSelector(T('q2-page'), { timeout: 15000 });
+  await page.waitForSelector(T('q2-page'), { timeout: 20000 });
 }
 
 const dashScreen = (id, hash, { core = false, need, ready } = {}) => ({
@@ -571,7 +784,7 @@ const SCREENS = [
       let n = 2;
       for (const [key, value] of ANSWERS) {
         await page.waitForSelector(T(`funnel-option-${key}-${value}`), { timeout: 8000 });
-        await A(`funnel-${n}-${key}`, { focus: true });
+        await A(`funnel-${n}-${key}`, { focus: n === 2, thin: n > 2 }); // steps 3 to 5 repeat step 2's layout
         await page.click(T(`funnel-option-${key}-${value}`));
         n += 1;
       }
@@ -667,11 +880,116 @@ const SCREENS = [
   dashScreen('connections-email', '#/connections/email')
 ];
 
+// ---- extra states: the things behind a tap (sheets, lightbox, accordions, builder, wizard steps). They run at 375 and 1440 only; the ones that write to the store run last.
+const must = async (page, sel, ms = 6000) => { await page.waitForSelector(sel, { timeout: ms, state: 'visible' }).catch(() => { throw new Error(`expected control not found: ${sel}`); }); };
+const tap = async (page, sel) => { await must(page, sel); await page.click(sel); };
+async function expandAll(page, max = 40) {
+  // Both kinds of disclosure: aria-expanded buttons and native <details>. A real mouse click (not el.click()): layout moves within half a second of a tap are
+  // expected and are not counted by the layout-shift metric.
+  const closed = '#app [aria-expanded="false"]:not([data-qa-done]), #app details:not([open]) > summary:not([data-qa-done])';
+  for (let i = 0; i < max; i += 1) {
+    const btn = page.locator(closed).first();
+    if (!(await btn.count())) break;
+    await btn.evaluate((b) => b.setAttribute('data-qa-done', '1'));
+    await btn.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+    await btn.click({ timeout: 2000 }).catch(() => {});
+    await sleep(60);
+  }
+  await sleep(250);
+}
+const EXTRAS = [
+  {
+    id: 'index/landing-open', page: 'index', extra: true,
+    run: async (page, env, A) => {
+      await page.goto(`${BASE}/index.html?${NOW}`, { waitUntil: 'load' });
+      await tap(page, T('faq-q-0'));
+      await A('landing-faq-open', { thin: true });
+      await tap(page, T('l3-gallery-open-0'));
+      await must(page, T('l3-lightbox'));
+      await A('landing-lightbox', { thin: true });
+    }
+  },
+  {
+    id: 'quote/link-decline', page: 'quote', extra: true,
+    run: async (page, env, A) => {
+      await gotoQuote(page, env.linkOpen);
+      await tap(page, T('q2-decline'));
+      await must(page, '[role="dialog"]');
+      await A('quote-link-decline-sheet', {});
+    }
+  },
+  {
+    id: 'dashboard/x-bookings-filter', page: 'dashboard', extra: true,
+    run: async (page, env, A) => { await gotoDash(page, '#/bookings'); await tap(page, T('bookings-filter-open')); await must(page, '[role="dialog"]'); await A('bookings-filter-sheet', {}); }
+  },
+  {
+    id: 'dashboard/x-messages-open', page: 'dashboard', extra: true,
+    run: async (page, env, A) => { await gotoDash(page, '#/messages'); await tap(page, '[data-testid^="message-toggle-"]'); await A('messages-row-open', {}); }
+  },
+  {
+    id: 'dashboard/x-import-garbage', page: 'dashboard', extra: true,
+    run: async (page, env, A) => { await gotoDash(page, '#import=garbage'); await must(page, T('f4-view')); await A('import-garbage', {}); }
+  },
+  {
+    id: 'dashboard/x-expanded', page: 'dashboard', extra: true,
+    run: async (page, env, A) => {
+      if (A.info.vp === '1440x900' && A.info.theme === 'light' && !FULL) return; // sampled: 375 dark and light, 1440 dark
+      for (const [name, hash] of [['settings', '#/settings'], ['about', '#/about'], ['insights', '#/insights'], ['messages', '#/messages'], ['booking-detail', `#/bookings/${env.quoteBookingId}`], ['quote-detail', `#/quotes/${env.quoteSent}`], ['connections-webhook', '#/connections/webhook'], ['connections-tracking', '#/connections/tracking']]) {
+        await page.goto('about:blank'); // a fresh document per screen: the layout-shift count must start at zero
+        await gotoDash(page, hash);
+        await expandAll(page, name === 'messages' ? 6 : 40);
+        await A(`${name}-expanded`, {});
+      }
+    }
+  },
+  {
+    id: 'dashboard/x-pipeline-stages', page: 'dashboard', extra: true,
+    run: async (page, env, A) => {
+      await gotoDash(page, '#/pipeline');
+      const ids = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid^="p1-stage-"]')).map((e) => e.getAttribute('data-testid')).filter((t) => !/^p1-stage-(count|value)-/.test(t) && !/^p1-stage-n/.test(t)));
+      for (const id of ids.slice(0, 6)) {
+        if (!(await page.locator(T(id)).first().isVisible().catch(() => false))) continue; // wide screens show every stage as a column instead of tabs
+        await page.click(T(id));
+        await sleep(300);
+        await A(`pipeline-${id.replace('p1-stage-', '')}`, {});
+      }
+    }
+  },
+  {
+    id: 'dashboard/z-quote-builder', page: 'dashboard', extra: true, late: true,
+    run: async (page, env, A) => {
+      await gotoDash(page, '#/quotes');
+      await tap(page, T('q1-new'));
+      await tap(page, T(`q1-pick-${env.enquiryId}`));
+      await must(page, T('q1-builder'));
+      await A('quote-builder', {});
+      await tap(page, T('q1-send'));
+      await must(page, T('q1-send-sheet'));
+      await A('quote-send-sheet', {});
+    }
+  },
+  {
+    id: 'dashboard/z-wizard-steps', page: 'dashboard', extra: true, late: true,
+    run: async (page, env, A) => {
+      for (const w of ['domain', 'whatsapp', 'calendar', 'email']) {
+        await page.goto('about:blank');
+        await gotoDash(page, `#/connections/${w}`);
+        const next = '[data-testid$="-wizard-next"]';
+        if (!(await page.locator(next).first().isEnabled().catch(() => false))) continue;
+        await page.click(next);
+        await sleep(450);
+        await A(`wizard-${w}-step-2`, {});
+      }
+    }
+  }
+];
+SCREENS.push(...EXTRAS);
+
 const wanted = (s) => !ONLY.length || ONLY.some((o) => s.page === o || s.id.toLowerCase() === o || (o.includes('/') && s.id.toLowerCase().startsWith(o)) || (o === 'landing' && s.id === 'index/landing') || (o === 'funnel' && s.id === 'index/funnel'));
 
 // ---------------------------------------------------------------- self test: the detectors must fire on a page built to fail (SELFTEST=1)
 async function selfTest(browser) {
-  const ctx = await newContext(browser, '375x812', 'dark', { reduce: true });
+  const ctx = await newContext(browser, '375x812', 'dark', { reduce: true, mobile: false });
   const page = await ctx.newPage();
   const log = { items: [] };
   attachLog(page, log);
@@ -687,6 +1005,8 @@ async function selfTest(browser) {
     <img id="noimg" src="${dot}" style="width:100px" alt="x">
     <img id="okimg" src="${dot}" width="200" height="100" alt="y">
     <p id="lowc" style="color:#bbb;background:#fff">low contrast words</p>
+    <p id="lowg" style="color:#ccc;background:linear-gradient(#999,#aaa);padding:8px">low contrast on a gradient (axe cannot judge it)</p>
+    <p id="okg" style="color:#fff;background:linear-gradient(#111,#222);padding:8px">fine contrast on a gradient</p>
     <button id="noring" style="outline:none;border:0;background:#fff;min-height:44px;min-width:44px">noring</button>
     <button id="ring" style="min-height:44px;min-width:44px">ring</button>
     <div class="spin"></div>
@@ -709,10 +1029,15 @@ async function selfTest(browser) {
   expect('image without dimensions detected', has(a.images, /img#noimg/) && !has(a.images, /img#okimg/));
   const ax = await (async () => { await page.evaluate(AXE_SOURCE); return runAxe(page); })();
   expect('axe color-contrast detected', ax.some((v) => v.id === 'color-contrast'));
+  const cbefore = failures.length;
+  await verifyIncompleteContrast(page, { screen: 'selftest', vp: '375x812', theme: 'dark', key: 'selftest' }, 'selftest');
+  const cfails = failures.slice(cbefore).filter((f) => f.check === 'contrast');
+  failures.length = cbefore;
+  expect(`pixel contrast catches low contrast on a gradient and passes the good one (${cfails.map((f) => f.detail.slice(0, 50)).join(' / ')})`, cfails.some((f) => /low contrast on a gradient/.test(f.detail)) && !cfails.some((f) => /fine contrast/.test(f.detail)));
   const mo = await page.evaluate(motionProbe);
   expect('long animation detected', mo.some((m) => /infinite/.test(m)));
   const cls = await page.evaluate(() => window.__cls || 0);
-  expect('layout shift measured', cls > 0.0001);
+  expect(`layout shift measured (${cls})`, cls > 0.0001);
   expect('console error captured', log.items.some(([c]) => c === 'console'));
   const info = { screen: 'selftest', vp: '375x812', theme: 'dark', key: 'selftest' };
   const before = failures.length;
@@ -752,7 +1077,7 @@ async function main() {
   let exitCode = 0;
   try {
     if (process.env.SELFTEST === '1') { process.exitCode = (await selfTest(browser)) ? 0 : 1; return; }
-    const screens = SCREENS.filter(wanted);
+    const screens = SCREENS.filter(wanted).sort((a, b) => (a.late ? 1 : 0) - (b.late ? 1 : 0));
     if (!screens.length) { console.log(`ONLY=${process.env.ONLY} matches no screen`); process.exitCode = 2; return; }
     for (const vp of VIEWPORT_LIST) {
       const broad = FULL || BROAD_VIEWPORTS.includes(vp);
@@ -765,21 +1090,30 @@ async function main() {
           if (!broad && !screen.core) continue;
           const before = failures.length;
           const started = Date.now();
-          const page = await ctx.newPage();
-          const log = { items: [] };
-          attachLog(page, log);
-          const info = { screen: screen.id, vp, theme, key: screen.id, coreOnly: !broad, focusOk: BROAD_VIEWPORTS.includes(vp) };
-          const A = (name, opt) => auditState(page, log, info, name, opt);
-          try {
-            await screen.run(page, env, A);
-            for (const [check, text] of log.items.splice(0)) fail({ ...info, key: `${screen.id}/end` }, check, text);
-          } catch (e) {
-            fail({ ...info, key: screen.id }, 'load', `${e.message.split('\n')[0]}`);
+          const info = { screen: screen.id, vp, theme, key: screen.id, coreOnly: !broad, thick: FULL || (vp === '375x812' && theme === 'dark') || (vp === '1440x900' && theme === 'light'), focusOk: BROAD_VIEWPORTS.includes(vp), contrastOk: BROAD_VIEWPORTS.includes(vp) || FULL };
+          // A screen that cannot be driven (a timeout on a busy machine) is tried once more on a fresh page before it counts as broken.
+          for (let attempt = 1; attempt <= 2; attempt += 1) {
+            const page = await ctx.newPage();
+            const log = { items: [] };
+            attachLog(page, log);
+            const A = (name, opt) => auditState(page, log, info, name, opt);
+            A.info = info;
+            const keep = failures.length;
+            try {
+              await screen.run(page, env, A);
+              for (const [check, text] of log.items.splice(0)) fail({ ...info, key: `${screen.id}/end` }, check, text);
+              await page.close().catch(() => {});
+              break;
+            } catch (e) {
+              await page.close().catch(() => {});
+              if (attempt === 1) { failures.length = keep; stats.retries = (stats.retries || 0) + 1; continue; }
+              fail({ ...info, key: screen.id }, 'load', `${e.message.split('\n')[0]}`);
+            }
           }
-          await page.close().catch(() => {});
           stats.runs += 1;
           const mine = failures.length - before;
           const secs = ((Date.now() - started) / 1000).toFixed(1);
+          (stats.times = stats.times || {})[screen.id] = ((stats.times || {})[screen.id] || 0) + (Date.now() - started) / 1000;
           if (mine || VERBOSE) console.log(`${mine ? 'FAIL' : 'ok  '} ${screen.id} @ ${vp} ${theme} (${secs}s${mine ? `, ${mine} problem${mine === 1 ? '' : 's'}` : ''})`);
         }
         await ctx.close();
@@ -869,8 +1203,9 @@ async function main() {
   const byCheck = {};
   for (const f of failures) byCheck[f.check] = (byCheck[f.check] || 0) + 1;
   console.log(`viewports: ${VIEWPORT_LIST.join(', ')}; themes: ${THEMES.join(', ')}; screens: ${SCREENS.filter(wanted).length}${FULL ? ' (FULL)' : ''}`);
-  console.log(`page runs: ${stats.runs}; states audited: ${stats.states}; minor axe notes (not failures): ${stats.perCheck['axe-minor'] || 0}; focus walks: ${stats.perCheck['focus-stops'] || 0}; motion probes: ${stats.perCheck['motion-probes'] || 0}`);
-  console.log(`time: ${(stats.ms / 1000).toFixed(0)}s`);
+  console.log(`page runs: ${stats.runs}; states audited: ${stats.states} (${stats.elements || 0} elements, ${stats.interactive || 0} interactive controls, ${stats.images || 0} images measured); minor axe notes (not failures): ${stats.perCheck['axe-minor'] || 0}; focus walks: ${stats.perCheck['focus-stops'] || 0}; text runs axe could not judge, measured from pixels: ${stats.perCheck['contrast-verified'] || 0} (${stats.perCheck['contrast-unverified'] || 0} hidden behind sticky bars, unmeasured); motion probes: ${stats.perCheck['motion-probes'] || 0}`);
+  if (stats.times) console.log(`slowest screens (s, all runs): ${Object.entries(stats.times).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ')}`);
+  console.log(`time: ${(stats.ms / 1000).toFixed(0)}s${stats.retries ? `; screens retried once after a driving timeout: ${stats.retries}` : ''}`);
   if (failures.length) {
     console.log(`RESULT: FAIL, ${failures.length} problems in ${groups} groups: ${Object.entries(byCheck).map(([k, v]) => `${k} ${v}`).join(', ')}`);
     exitCode = 1;

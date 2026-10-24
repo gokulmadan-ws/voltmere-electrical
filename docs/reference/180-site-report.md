@@ -63,5 +63,5 @@ CONFIRMATION page: H1 "Thanks, your enquiry has been received." P: "The team at 
 - Fonts: Inter 400/500/600 (body), Manrope 600/700/800 (headings).
 - Favicon: #111111 rounded square with a red #E11414 lightning bolt.
 - Logo: white "180" with a lightning bolt in the zero, red "ELECTRICAL", red and white corner slashes, on near-black.
-- Images (his): logo, an EV charger hero photo (stock), an "about" photo, four gallery photos of recent installations. Optimised copies are being placed in img/180/ (branch 180-assets) when available.
+- Images (his): logo, an EV charger hero photo (stock), an "about" photo, four gallery photos of recent installations. The prototype hot-links them from his two image hosts (see docs/reference/180-images.md); nothing is copied into the repo, and there is no img/180/ folder.
 - Our earlier crop of the logo from a phone screenshot: img/logo-180.png. Screenshot of his hero: docs/reference/180-funnel-hero.png.

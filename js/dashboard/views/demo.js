@@ -1,5 +1,6 @@
 // js/dashboard/views/demo.js: Demo tools (demo phone, sample enquiries with photos, customer quote actions, webhook and DNS shortcuts, reset, script).
 // Owner: E3 (v1 by WP8, EV enquiry script by E2)
+import { STORAGE_FULL_TEXT } from '../../ui/util.js';
 import { html, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Card, ConfirmDialog, Field, Icon, Input, PageHeader, TextLink,
@@ -21,23 +22,22 @@ export const css = ['css/settings.css'];
 
 const selectDemoDigits = (state) => state.settings.demoPhoneDigits || '';
 
-// The short script (prep, then the three minutes). Plain text, nothing dated.
+// The short script (prep, then the five minutes). Plain text, nothing dated. The full version, with every tap and what to say, is docs/DEMO-SCRIPT.md.
 const PREP_STEPS = [
-  'On the phone, in a normal browser tab (not an installed home-screen app), open the customer site and tap Owner login (demo) in the footer. Both pages share one store.',
-  'Here in Demo tools, type your own mobile under Try on your phone and tap Save. Every Open in WhatsApp link then opens your WhatsApp.',
-  'Optional: open Settings and check the business details, photos and the sample price list.',
-  'Tap Reset diary and messages for a fresh diary, then switch to the customer site tab.',
-  'Two phones? Open the customer site on one and this dashboard on the other. On the customer phone the enquiry goes to the business WhatsApp number, or to the demo mobile saved there: save the owner\'s number in Demo tools on the customer phone to send it to the owner\'s phone.'
+  'Two phones, each in a normal browser tab (not an installed home-screen app): phone A is the customer, phone B is the owner. Both open this site.',
+  'Care: the customer\'s Send my enquiry to Daniel on WhatsApp button opens a chat to the real number, 07885 496800. On each phone, here in Demo tools, type the OTHER phone\'s mobile under Try on your phone and tap Save, so nothing goes to the real owner. (If phone B is the owner\'s own phone, leave phone B pointing at phone A and phone A at the default.)',
+  'On phone B tap Reset diary and messages for a fresh diary, then put phone A on the customer site.',
+  'One phone only? Use Add a sample website enquiry and the A customer... buttons below instead of the second phone.'
 ];
 const SCRIPT_STEPS = [
-  'Customer site: show the hero, the credentials and the "Get my installation quote" button. Say: this is your funnel, now connected to your diary.',
-  'Tap the button and answer the six steps: a BT postcode such as BT9 6QP, Private driveway, "It\'s ordered or arriving soon", As soon as possible, Yes, then a name and mobile. No price is shown and nothing is charged.',
-  'The confirmation says the survey visit is pencilled in and that he will be in touch within 24 hours. Say: the customer is never left waiting.',
-  'Two phones: on the confirmation the customer taps Send my enquiry to Daniel on WhatsApp, then presses send. On Daniel\'s phone, tap the link in that WhatsApp message: the Import screen shows exactly what they typed. Tap Add to my dashboard. In a live build this happens by itself through the website webhook.',
-  'Open the dashboard. Today shows the enquiry under Needs you, with a countdown against your reply promise and where it came from. Tap Confirm survey visit.',
-  'Open the job: their answers, photos, the quote card and the story from enquiry to install. Tap Request photos, then Build quote, add a charger, and send it by WhatsApp (simulated).',
-  'Here in Demo tools tap A customer opens a quote, then A customer accepts a quote. Today now shows the accepted quote under Needs you, with an install day pencilled in. Confirm it.',
-  'Share and promote: copy a Facebook link, show the QR card, then flip to dark mode and open What\'s real for the honest list of what is simulated.'
+  'Phone A, customer site: show the hero, his credentials and the "Get my installation quote" button. In the strip at the top, tap Only my content, then With ideas: anything we added is tagged "Idea from us". Say: this is your site, word for word.',
+  'Phone A: tap the button and answer the six steps: a BT postcode such as BT9 6QP, Private driveway, "It\'s ordered or arriving soon", As soon as possible, Yes, then a name, the phone\'s real mobile and an email. No price is shown and nothing is charged.',
+  'Phone A: the confirmation says "Thanks, your enquiry has been received." Tap Send my enquiry to Daniel on WhatsApp and press send. Say: in a live build his funnel webhook does this with no tapping.',
+  'Phone B: in WhatsApp tap the link in the customer\'s message. The Import screen shows exactly what they typed. Tap Add to my dashboard, then Open the enquiry and Confirm survey visit.',
+  'Phone B: More, Quotes, New quote, pick the enquiry, tap Send, then WhatsApp, and press send. Every price is a labelled sample.',
+  'Phone A: tap the link in the quote message. The quote opens on a phone that never saw it. Tap Accept quote, choose the days that suit (for example Thu, Fri, Morning), tap Open WhatsApp and press send.',
+  'Phone B: tap the link in the reply. Tap Mark quote accepted and plan the install, then Plan the install day, choose a day and Set this day, then Confirm install day. Open More, Pipeline to show the whole process.',
+  'Finish on More, What\'s real: the honest list of what is simulated, and what a live build replaces (his funnel webhook, a database, a login and automatic delivery).'
 ];
 
 export default function DemoView() {
@@ -135,7 +135,7 @@ export default function DemoView() {
       setConnResult(null);
       toast({ message: keepSettings ? 'Diary, quotes and messages reset.' : 'Everything reset to the defaults.' });
     } else {
-      toast({ message: 'That did not work: the diary changed. Please check and try again.', tone: 'danger' });
+      toast({ message: res.reason === 'storage_full' ? STORAGE_FULL_TEXT : 'That did not work: the diary changed. Please check and try again.', tone: 'danger' });
     }
   };
 
@@ -260,7 +260,7 @@ export default function DemoView() {
 
     <section class="db-section">
       <details class="dm-script" data-testid="demo-script">
-        <summary class="dm-script__summary">The 3-minute demo script<${Icon} name="chevron-down" size=${22} class="dm-script__chev" /></summary>
+        <summary class="dm-script__summary">The 5-minute demo script<${Icon} name="chevron-down" size=${22} class="dm-script__chev" /></summary>
         <div class="dm-script__body">
           <h3 class="dm-script__title">Before you start</h3>
           <ol class="dm-script__list">${PREP_STEPS.map((s, i) => html`<li key=${i}>${s}</li>`)}</ol>

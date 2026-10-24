@@ -87,8 +87,11 @@ export function focusTitle() {
   return !!el;
 }
 
+/** What to say when the browser's storage is full and a change could not be saved (nothing was changed). */
+export const STORAGE_FULL_TEXT = 'This device has no room left to save that. Free some space and try again.';
+
 const REASON_TEXT = {
-  storage_full: 'This device has no room left to save that. Free some space and try again.',
+  storage_full: STORAGE_FULL_TEXT,
   bad_code: 'That code is not right. Check it and try again.',
   not_found: 'That no longer exists. Reload the page and try again.',
   not_connected: 'Connect it first, then try again.',

@@ -1,26 +1,30 @@
 // js/ui/theme.js: theme choice (auto / light / dark): getTheme, setThemeChoice, applyTheme, initTheme and ThemeToggle.
 // Owner: WP2 (dark is the default look for 180 Electrical, set by role B2: no saved choice means dark; an explicit Auto follows the OS)
+// Two scopes (docs/LANDING-V5.md 8.1): the owner dashboard (dark by default, key 'vm_theme') and the PUBLIC pages (index.html, quote.html: <html data-scope="public">, light by default,
+// their own key 'vm_theme_public', never mirrored into the store), so a choice made on one can never leak into the other. B1.
 import { h, useReducer } from '../vendor/preact-htm.js';
 import { setTheme as storeSetTheme, subscribe } from '../core/store.js';
 import { IconButton } from './button.js';
 import { Segmented } from './form.js';
 import { useStore } from './hooks.js';
 
-// localStorage['vm_theme'] is the single source of truth (the inline <head> script reads it before first paint).
-// settings.theme in the store is only a mirror that lets the OTHER page notice a change (7.7).
-// Nothing saved means DARK (the brand look). 'auto' is only ever an explicit choice, saved by the Auto option.
-const KEY = 'vm_theme';
-const DEFAULT_CHOICE = 'dark';
+// localStorage[KEY] is the single source of truth (the inline <head> script reads it before first paint).
+// settings.theme in the store is only a mirror that lets the OTHER dashboard tab notice a change (7.7); the public scope does not use it.
+// Dashboard: nothing saved means DARK (the brand look). Public pages: nothing saved means LIGHT. 'auto' is only ever an explicit choice, saved by the Auto option.
+const PUBLIC = typeof document !== 'undefined' && document.documentElement.getAttribute('data-scope') === 'public';
+const KEY = PUBLIC ? 'vm_theme_public' : 'vm_theme';
+const DEFAULT_CHOICE = PUBLIC ? 'light' : 'dark';
 const LIGHT_COLOR = '#F6F5F3'; // same as --bg in tokens.css; the theme-color metas need a literal
 const DARK_COLOR = '#0B0B0C'; // same as --bg in the dark block
 const CHOICES = ['auto', 'light', 'dark'];
+const SEGMENT_ORDER = PUBLIC ? ['light', 'dark', 'auto'] : CHOICES; // the public popover reads Light, Dark, Auto (LANDING-V5 4.11)
 const ICON = { auto: 'sun-moon', light: 'sun', dark: 'moon' };
 const LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
 
 let memoryChoice = null; // used only when localStorage is blocked
 let started = false;
 
-/** The saved choice: 'auto' | 'light' | 'dark'. Missing (or junk) means dark. */
+/** The saved choice: 'auto' | 'light' | 'dark'. Missing (or junk) means the scope's default: dark on the dashboard, light on the public pages. */
 export function getTheme() {
   try {
     const v = localStorage.getItem(KEY);
@@ -43,7 +47,8 @@ export function applyTheme(choice) {
   else root.removeAttribute('data-theme');
   document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
     let color;
-    if (choice === 'light') color = LIGHT_COLOR;
+    if (PUBLIC) color = DARK_COLOR; // the public pages' header is black in every theme, so the browser bar is too
+    else if (choice === 'light') color = LIGHT_COLOR;
     else if (choice === 'dark') color = DARK_COLOR;
     else color = osPrefersDark(meta.getAttribute('media')) ? DARK_COLOR : LIGHT_COLOR; // auto: follow the OS
     meta.setAttribute('content', color);
@@ -54,7 +59,7 @@ export function applyTheme(choice) {
 export function setThemeChoice(choice) {
   if (!CHOICES.includes(choice)) choice = DEFAULT_CHOICE;
   memoryChoice = choice;
-  try { storeSetTheme(choice); } catch (e) { /* store not ready: the localStorage write below still works */ }
+  if (!PUBLIC) { try { storeSetTheme(choice); } catch (e) { /* store not ready: the localStorage write below still works */ } }
   try { localStorage.setItem(KEY, choice); } catch (e) { /* blocked: memoryChoice keeps this tab right */ }
   applyTheme(choice);
 }
@@ -64,7 +69,7 @@ export function initTheme() {
   applyTheme(getTheme());
   if (started) return;
   started = true;
-  try { subscribe(() => applyTheme(getTheme())); } catch (e) { /* no store: nothing to follow */ }
+  if (!PUBLIC) { try { subscribe(() => applyTheme(getTheme())); } catch (e) { /* no store: nothing to follow */ } }
   window.addEventListener('storage', (e) => {
     if (e.key === KEY || e.key === null) applyTheme(getTheme());
   });
@@ -84,7 +89,7 @@ export function ThemeToggle({ variant = 'icon', ...rest }) {
   if (variant === 'segmented') {
     return h(Segmented, {
       ariaLabel: 'Theme', value: current, onChange: choose,
-      options: CHOICES.map((c) => ({ value: c, label: LABEL[c], icon: ICON[c], testid: `theme-${c}` })),
+      options: SEGMENT_ORDER.map((c) => ({ value: c, label: LABEL[c], icon: ICON[c], testid: `theme-${c}` })),
       ...rest
     });
   }

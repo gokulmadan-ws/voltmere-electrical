@@ -1,10 +1,16 @@
 // js/dashboard/shell.js: the dashboard shell (strip, header, tab bar, sidebar, FAB) and the lazy view loader with page transitions.
 // Owner: B3 (was WP2; brand lockup for 180 Electrical by role B2; V3 shell polish by B3)
 import { html, h, useEffect, useErrorBoundary, useLayoutEffect, useReducer, useRef, useState } from '../vendor/preact-htm.js';
-import {
-  BrandMark, Button, Card, Icon, IconButton, PrototypeNotice, Skeleton, StorageNote, ThemeToggle,
-  cx, focusTitle, loadCss, pageHref, pageTarget, startEdgeFade, useStore
-} from '../ui/index.js';
+import { BrandMark, Card, EmptyState, Icon, PageHeader, Skeleton } from '../ui/display.js';
+import { Button, IconButton } from '../ui/button.js';
+import { PrototypeNotice } from '../ui/notice.js';
+import { ResetDataButton } from '../ui/reset.js';
+import { StorageNote } from '../ui/storage-note.js';
+import { ThemeToggle } from '../ui/theme.js';
+import { cx, focusTitle, pageHref, pageTarget } from '../ui/util.js';
+import { loadCss } from '../ui/load-css.js';
+import { startEdgeFade } from '../ui/edge-fade.js';
+import { useStore } from '../ui/hooks.js';
 import { selectBrand, selectNeedsYou, selectUnseenBookings, selectUnreadMessageCount } from '../core/selectors.js';
 import { routeMeta } from './routes.js';
 import { useRoute, isImmersive, routeHref } from './router.js';
@@ -182,19 +188,36 @@ function Fab() {
 const loaded = new Map();   // route name -> { mod, error? }
 const loading = new Map();  // route name -> Promise
 
+const attempts = new Map(); // route name -> how many times its file has been fetched again (a failed import is remembered by the browser per URL)
+
+/** What shows when a screen cannot be fetched AND the stub screen cannot either (the network is gone): built in, so it needs nothing from the network. */
+function OfflineStub({ route, onRetry }) {
+  const meta = routeMeta(route && route.name);
+  return html`<div class="db-page" data-testid="view-stub">
+    <${PageHeader} title=${meta ? meta.title : 'Dashboard'} />
+    <${EmptyState} icon="plug" title="This screen could not load." body="Check your connection and try again. Nothing you saved is lost."
+      action=${onRetry ? html`<${Button} variant="primary" icon="rotate-ccw" onClick=${onRetry} data-testid="view-retry">Try again<//>` : undefined} />
+  </div>`;
+}
+
 /** Import a view module (and its CSS). A missing or broken view falls back to StubView, so every route always opens. */
 function loadView(name) {
   if (loading.has(name)) return loading.get(name);
   const meta = routeMeta(name);
+  const retries = attempts.get(name) || 0;
   const task = (async () => {
     try {
-      const mod = await import(meta.module);
+      const mod = await import(retries ? `${meta.module}?retry=${retries}` : meta.module);
       if (typeof mod.default !== 'function') throw new Error(`${meta.module} has no default export`);
-      if (Array.isArray(mod.css)) await Promise.all(mod.css.map((href) => loadCss(href)));
+      if (Array.isArray(mod.css)) {
+        const sheets = await Promise.all(mod.css.map((href) => loadCss(href)));
+        if (sheets.some((ok) => !ok)) throw new Error('A stylesheet for this screen did not load.'); // an unstyled screen is a failed load: Try again fetches it again
+      }
       loaded.set(name, { mod });
     } catch (error) {
-      console.warn(`View "${name}" did not load, showing the stub:`, error);
-      const stub = await import('./views/stub.js');
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) console.warn(`View "${name}" did not load, showing the stub:`, error);
+      let stub;
+      try { stub = await import('./views/stub.js'); } catch (e) { stub = { default: OfflineStub }; }
       loaded.set(name, { mod: stub, error });
     } finally {
       loading.delete(name);
@@ -211,7 +234,7 @@ function Boundary({ children }) {
     return html`<div class="db-page" data-testid="view-error">
       <${Card} tone="danger" class="db-stack">
         <p class="db-error__text">Something went wrong on this screen. Reload.</p>
-        <div><${Button} variant="primary" onClick=${() => location.reload()}>Reload<//></div>
+        <div class="db-error__actions"><${Button} variant="primary" onClick=${() => location.reload()}>Reload<//> <${ResetDataButton} /></div>
       <//>
     </div>`;
   }
@@ -285,8 +308,10 @@ function ViewHost({ route }) {
 
   if (!entry) return html`<${ViewSkeleton} />`;
   const View = entry.mod.default;
+  // A screen whose file could not be fetched (a dropped connection) is not remembered as broken: Try again fetches it again.
+  const retry = entry.error ? () => { attempts.set(route.name, (attempts.get(route.name) || 0) + 1); loaded.delete(route.name); loading.delete(route.name); rerender(); loadView(route.name).then(() => rerender()); } : undefined;
   return html`<${ViewFrame} key=${route.name} immersive=${immersive}>
-    <${Boundary}>${h(View, { route, error: entry.error })}<//>
+    <${Boundary}>${h(View, { route, error: entry.error, onRetry: retry })}<//>
   <//>`;
 }
 

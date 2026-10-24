@@ -1,45 +1,88 @@
 <!doctype html>
-<!-- index.html: customer landing page entry (head boilerplate, #app, boot module). Owner: B3 for this head, L3 for the body (#app only) -->
-<html lang="en-GB">
+<!-- index.html: customer landing page entry (head boilerplate, #app, boot module). Owner: B3 for this head, L3 for the body (#app only); the V5 head (public scope, light default, Archivo) by B1 -->
+<html lang="en-GB" data-scope="public" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>180 Electrical: Home EV charger installation in Northern Ireland</title>
+  <title>180 Electrical: Home EV charger installation across Northern Ireland</title>
   <meta name="description" content="Home EV charger installation across Northern Ireland. Answer a few short questions and get a free, no-obligation quote from 180 Electrical. Prototype with sample data.">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#0B0B0C">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-  <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- His two photo hosts (the only off-site origins, images only): open the connections now, and start the first screen's two pictures (the hero photo at the width this phone
+       will pick, from the same srcset and sizes as the <img> in js/landing/hero.js, and the logo) before the scripts have drawn the page. The URLs are the defaults of
+       js/core/config.js (tests/unit/modulepreload.test.mjs keeps them equal); a photo changed in Settings is simply fetched again by the page. -->
+  <link rel="preconnect" href="https://images.unsplash.com">
+  <link rel="preconnect" href="https://perspective.imgix.net">
+  <link rel="preload" as="image" fetchpriority="high" referrerpolicy="no-referrer" href="https://images.unsplash.com/photo-1704475386627-dcfcd97ed51a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wyMjcwN3wwfDF8YWxsfHx8fHx8fHx8MTc4OTI5NjM4Nnw&ixlib=rb-4.1.0&q=80&w=960" imagesrcset="https://images.unsplash.com/photo-1704475386627-dcfcd97ed51a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wyMjcwN3wwfDF8YWxsfHx8fHx8fHx8MTc4OTI5NjM4Nnw&ixlib=rb-4.1.0&q=80&w=640 640w, https://images.unsplash.com/photo-1704475386627-dcfcd97ed51a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wyMjcwN3wwfDF8YWxsfHx8fHx8fHx8MTc4OTI5NjM4Nnw&ixlib=rb-4.1.0&q=80&w=960 960w, https://images.unsplash.com/photo-1704475386627-dcfcd97ed51a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wyMjcwN3wwfDF8YWxsfHx8fHx8fHx8MTc4OTI5NjM4Nnw&ixlib=rb-4.1.0&q=80&w=1100 1100w, https://images.unsplash.com/photo-1704475386627-dcfcd97ed51a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wyMjcwN3wwfDF8YWxsfHx8fHx8fHx8MTc4OTI5NjM4Nnw&ixlib=rb-4.1.0&q=80&w=1280 1280w" imagesizes="(min-width: 1024px) 65vw, 100vw">
+  <link rel="preload" as="image" referrerpolicy="no-referrer" href="https://perspective.imgix.net/6ac64662b8d25e3fced4de9e.jpeg?w=360&q=70">
+  <!-- One family on the public pages: Archivo (weight and width axes). Only the upright file is preloaded; the italic one (the credential figures, step numerals, brand names) is fetched when the hero lays out. -->
+  <link rel="preload" href="fonts/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- modulepreload:begin (generated: node scripts/modulepreload.mjs) -->
   <link rel="modulepreload" href="js/vendor/preact-htm.js">
-  <link rel="modulepreload" href="js/ui/index.js">
+  <link rel="modulepreload" href="js/core/format.js">
+  <link rel="modulepreload" href="js/core/config.js">
+  <link rel="modulepreload" href="js/ui/icons.js">
+  <link rel="modulepreload" href="js/core/clock.js">
+  <link rel="modulepreload" href="js/ui/util.js">
+  <link rel="modulepreload" href="js/ui/display.js">
+  <link rel="modulepreload" href="js/ui/button.js">
+  <link rel="modulepreload" href="js/ui/reset.js">
+  <link rel="modulepreload" href="js/core/dates.js">
+  <link rel="modulepreload" href="js/core/availability.js">
+  <link rel="modulepreload" href="js/core/utm.js">
+  <link rel="modulepreload" href="js/core/handoff.js">
+  <link rel="modulepreload" href="js/core/quotes.js">
+  <link rel="modulepreload" href="js/core/messages.js">
+  <link rel="modulepreload" href="js/core/connections.js">
+  <link rel="modulepreload" href="js/core/pipeline.js">
+  <link rel="modulepreload" href="js/core/selectors.js">
+  <link rel="modulepreload" href="js/core/seed.js">
+  <link rel="modulepreload" href="js/core/photos.js">
+  <link rel="modulepreload" href="js/core/repair.js">
   <link rel="modulepreload" href="js/core/store.js">
+  <link rel="modulepreload" href="js/ui/form.js">
+  <link rel="modulepreload" href="js/ui/hooks.js">
+  <link rel="modulepreload" href="js/ui/theme.js">
+  <link rel="modulepreload" href="js/ui/toast.js">
+  <link rel="modulepreload" href="js/ui/clean.js">
+  <link rel="modulepreload" href="js/ui/boot.js">
+  <link rel="modulepreload" href="js/ui/ideas.js">
+  <link rel="modulepreload" href="js/booking/draft.js">
+  <link rel="modulepreload" href="js/booking/nav.js">
+  <link rel="modulepreload" href="js/ui/load-css.js">
+  <link rel="modulepreload" href="js/landing/booking-host.js">
+  <link rel="modulepreload" href="js/ui/notice.js">
+  <link rel="modulepreload" href="js/landing/content.js">
+  <link rel="modulepreload" href="js/landing/fx.js">
+  <link rel="modulepreload" href="js/landing/ready.js">
+  <link rel="modulepreload" href="js/landing/media.js">
+  <link rel="modulepreload" href="js/landing/glyphs.js">
+  <link rel="modulepreload" href="js/landing/ui.js">
+  <link rel="modulepreload" href="js/landing/header.js">
+  <link rel="modulepreload" href="js/booking/bk-shared.js">
+  <link rel="modulepreload" href="js/landing/hero.js">
   <link rel="modulepreload" href="js/landing/app.js">
+  <!-- modulepreload:end -->
   <link rel="stylesheet" href="css/fonts.css">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/public-tokens.css"> <!-- AFTER tokens.css: same specificity on the auto-dark block, later wins -->
   <link rel="stylesheet" href="css/landing.css">
-  <link rel="stylesheet" href="css/booking.css">
+  <!-- css/booking.css (the quote funnel, 12 KB gzipped) is not here: it loads with the booking sheet (js/landing/booking-host.js), when the visitor asks for a quote. -->
   <script>
     (function () {
-      // Dark is the default look: nothing saved means dark. 'auto' (explicit) follows the OS. Keeps the theme-color meta in step.
-      var t = 'dark';
-      try { var s = localStorage.getItem('vm_theme'); if (s === 'light' || s === 'dark' || s === 'auto') t = s; } catch (e) {}
-      var c = '#0B0B0C';
-      if (t === 'auto') {
-        var dark = true;
-        try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
-        c = dark ? '#0B0B0C' : '#F6F5F3';
-      } else {
-        document.documentElement.setAttribute('data-theme', t);
-        if (t === 'light') c = '#F6F5F3';
-      }
-      var m = document.querySelectorAll('meta[name="theme-color"]');
-      for (var i = 0; i < m.length; i++) m[i].setAttribute('content', c);
+      // The public pages are LIGHT. Only an explicit choice saved by Prototype tools > Appearance (localStorage vm_theme_public: 'light', 'dark' or 'auto') changes that: nothing saved,
+      // or anything else, means light (never dark, never Auto). 'auto' removes data-theme so the OS decides. The owner dashboard has its own key (vm_theme) and stays dark by default.
+      // theme-color stays #0B0B0C in every case: the header is black at the top of the page.
+      var t = 'light';
+      try { var s = localStorage.getItem('vm_theme_public'); if (s === 'light' || s === 'dark' || s === 'auto') t = s; } catch (e) {}
+      if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
 </head>

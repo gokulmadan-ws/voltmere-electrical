@@ -20,7 +20,10 @@ export const css = ['css/settings.css'];
 
 const FAIL_TEXT = 'That did not work: the diary changed. Please check and try again.';
 const FULL_TEXT = 'This device has no room left to save that. Free some space, or reset the demo in Demo tools.';
-const failToast = (res) => toast({ message: res && res.reason === 'storage_full' ? FULL_TEXT : FAIL_TEXT, tone: 'danger' });
+// What to tell the owner when a save did not happen: a full browser has its own plain words (and nothing was written), anything else is the generic line.
+const problem = (res) => (res && res.reason === 'storage_full' ? FULL_TEXT : FAIL_TEXT);
+// `res` is a store result, or the message a save helper already worked out (a string).
+const failToast = (res) => toast({ message: typeof res === 'string' && res ? res : problem(res), tone: 'danger' });
 
 // Business lists (credentials, brands) are stored as arrays and edited as one comma-separated line.
 const listText = (list) => (Array.isArray(list) ? list.join(', ') : String(list || ''));
@@ -118,13 +121,13 @@ function BusinessSection({ onSaved }) {
   const saveBiz = (storeKey) => (text) => {
     const res = updateSettings({ business: { [storeKey]: text } });
     if (res.ok) { onSaved(); return ''; }
-    return (res.errors && res.errors[storeKey]) || FAIL_TEXT;
+    return (res.errors && res.errors[storeKey]) || problem(res);
   };
   // Save a comma-separated line as a list (credentials, brands).
   const saveBizList = (storeKey, text) => {
     const res = updateSettings({ business: { [storeKey]: parseList(text) } });
     if (res.ok) { onSaved(); return ''; }
-    return (res.errors && res.errors[storeKey]) || FAIL_TEXT;
+    return (res.errors && res.errors[storeKey]) || problem(res);
   };
   // CONTRACT-GAP: the Area input edits areaName; areaText ("Across Northern Ireland") keeps its tail and follows the new name.
   const saveArea = (text) => {
@@ -133,7 +136,7 @@ function BusinessSection({ onSaved }) {
     if (tail !== null) patch.areaText = text + tail;
     const res = updateSettings({ business: patch });
     if (res.ok) { onSaved(); return ''; }
-    return FAIL_TEXT;
+    return problem(res);
   };
 
   return html`<${Card} class="st-fields" data-testid="settings-panel-business">
@@ -183,12 +186,12 @@ function ServiceRow({ service, onSaved }) {
   const save = (patch) => {
     const res = updateService(service.id, patch);
     if (res.ok) { onSaved(); return ''; }
-    return (res.errors && res.errors.price) || FAIL_TEXT;
+    return (res.errors && res.errors.price) || problem(res);
   };
   // The website switch is the service's showOnWebsite flag; an older store without the flag falls back to `active`.
   const hasFlag = service.showOnWebsite !== undefined;
   const onWebsite = hasFlag ? !!service.showOnWebsite : !!service.active;
-  const setWebsite = (checked) => { if (save(hasFlag ? { showOnWebsite: checked } : { active: checked })) failToast(); };
+  const setWebsite = (checked) => { const bad = save(hasFlag ? { showOnWebsite: checked } : { active: checked }); if (bad) failToast(bad); };
   const byVariant = service.variants.length > 0;
   const quoted = service.priceType === 'quoted' || service.priceType === 'quote';
   return html`<${Card} as="div" class=${`st-service${onWebsite ? '' : ' is-off'}`} role="group" aria-label=${service.name}>
@@ -248,7 +251,7 @@ function HoursGrid({ onSaved }) {
     const at = open.indexOf(windowId);
     if (at >= 0) open.splice(at, 1); else open.push(windowId);
     const res = updateSettings({ hours: next });
-    if (res.ok) onSaved(); else failToast();
+    if (res.ok) onSaved(); else failToast(res);
   };
   return html`<div class="st-matrix" role="group" aria-label="Which windows you work" data-testid="settings-hours">
     <div class="st-matrix__row st-matrix__row--head" aria-hidden="true">
@@ -279,7 +282,7 @@ function DaysOff({ onSaved }) {
 
   const add = (dates, name, msg) => {
     const res = addDaysOff(dates, name);
-    if (!res.ok) { failToast(); return false; }
+    if (!res.ok) { failToast(res); return false; }
     onSaved();
     const booked = res.bookedCount > 0 ? ` ${plural(res.bookedCount, 'booked job')} stay${res.bookedCount === 1 ? 's' : ''} in your diary.` : '';
     if (res.added.length === 0) toast({ message: 'Those days are already off.' });
@@ -300,7 +303,7 @@ function DaysOff({ onSaved }) {
   };
   const remove = (off) => {
     const res = removeDayOff(off.id);
-    if (!res.ok) { failToast(); return; }
+    if (!res.ok) { failToast(res); return; }
     onSaved();
     showUndoToast(`${fmtDayShort(off.date)} is open again.`, res.undoToken);
   };
@@ -340,7 +343,7 @@ function AvailabilitySection({ onSaved }) {
   const rules = useStore(selectRules);
   const setNum = (key) => (e) => {
     const res = updateSettings({ [key]: Number(e.target.value) });
-    if (res.ok) onSaved(); else failToast();
+    if (res.ok) onSaved(); else failToast(res);
   };
   return html`<div class="st-panel" data-testid="settings-panel-availability">
     <${Card} class="db-stack">
@@ -364,7 +367,7 @@ function AvailabilitySection({ onSaved }) {
 
 function RulesSection({ onSaved }) {
   const rules = useStore(selectRules);
-  const set = (patch) => { const res = updateSettings(patch); if (res.ok) onSaved(); else failToast(); };
+  const set = (patch) => { const res = updateSettings(patch); if (res.ok) onSaved(); else failToast(res); };
   return html`<div class="st-panel" data-testid="settings-panel-rules">
     <${Card} class="st-rules">
       <${Switch} id="rule-auto" checked=${rules.autoConfirm} label="Confirm other bookings instantly"
@@ -403,7 +406,7 @@ function ImageTile({ imgKey, onSaved }) {
     const res = updateSettings({ business: { images: { [imgKey]: text } } });
     if (res.ok) { onSaved(); return ''; }
     if (res.reason === 'storage_full') return FULL_TEXT;
-    return (res.errors && res.errors[`images.${imgKey}`]) || FAIL_TEXT;
+    return (res.errors && res.errors[`images.${imgKey}`]) || problem(res);
   };
   const onFile = async (e) => {
     const file = (e.target.files || [])[0];
@@ -464,7 +467,7 @@ function patchItem(id, patch, onSaved) {
   const items = getState().settings.quoteItems;
   const res = updateSettings({ quoteItems: items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
   if (res.ok) { onSaved(); return ''; }
-  return typeof (res.errors && res.errors.quoteItems) === 'string' ? res.errors.quoteItems : FAIL_TEXT;
+  return typeof (res.errors && res.errors.quoteItems) === 'string' ? res.errors.quoteItems : problem(res);
 }
 
 function QuoteItemRow({ item, open, onSaved, onRemove }) {
@@ -490,15 +493,15 @@ function QuoteItemRow({ item, open, onSaved, onRemove }) {
           inputProps=${{ inputmode: 'numeric', pattern: '[0-9]*' }} />
       </div>
       <${Field} label="Priced" id=${`quote-item-unit-${item.id}`}>
-        <${Select} id=${`quote-item-unit-${item.id}`} value=${item.unit} onChange=${(e) => { if (patchItem(item.id, { unit: e.target.value }, onSaved)) failToast(); }}
+        <${Select} id=${`quote-item-unit-${item.id}`} value=${item.unit} onChange=${(e) => { const bad = patchItem(item.id, { unit: e.target.value }, onSaved); if (bad) failToast(bad); }}
           options=${[{ value: 'each', label: 'Each' }, { value: 'metre', label: 'Per metre' }]} />
       <//>
       <${Switch} id=${`quote-item-suggested-${item.id}`} checked=${!!item.suggested} label="Include in every new quote"
         description="Switched off, it is still in the list when you build a quote."
-        onChange=${(c) => { if (patchItem(item.id, { suggested: c }, onSaved)) failToast(); }} data-testid=${`quote-item-suggested-${item.id}`} />
+        onChange=${(c) => { const bad = patchItem(item.id, { suggested: c }, onSaved); if (bad) failToast(bad); }} data-testid=${`quote-item-suggested-${item.id}`} />
       <${Switch} id=${`quote-item-optional-${item.id}`} checked=${item.optional === true} label="Possible extra"
         description="Listed on the quote, but not added into the total. For work that may or may not be needed."
-        onChange=${(c) => { if (patchItem(item.id, { optional: c }, onSaved)) failToast(); }} data-testid=${`quote-item-optional-${item.id}`} />
+        onChange=${(c) => { const bad = patchItem(item.id, { optional: c }, onSaved); if (bad) failToast(bad); }} data-testid=${`quote-item-optional-${item.id}`} />
       <${Button} variant="ghost" icon="trash-2" class="st-item__remove" onClick=${() => onRemove(item)} data-testid=${`quote-item-remove-${item.id}`}>Remove from the list<//>
     </div>
   </details>`;
@@ -514,7 +517,7 @@ function NotesField({ onSaved }) {
     focused.current = false;
     if (text.trim() === q.notes) return;
     const res = updateSettings({ quoteDefaults: { notes: text } });
-    if (res.ok) { setError(''); onSaved(); } else setError((res.errors && res.errors.notes) || FAIL_TEXT);
+    if (res.ok) { setError(''); onSaved(); } else setError((res.errors && res.errors.notes) || problem(res));
   };
   return html`<${Field} label="Terms on every quote" id="setting-quote-notes" error=${error}
     hint="Sample wording. Replace it with your own terms: payment, validity, what is not included.">
@@ -533,7 +536,7 @@ function QuotesSection({ onSaved }) {
   const add = () => {
     const before = getState().settings.quoteItems;
     const res = updateSettings({ quoteItems: [...before, { label: 'New item', detail: '', unit: 'each', unitPrice: 0, defaultQty: 1, kind: 'extra', suggested: false }] });
-    if (!res.ok) { failToast(); return; }
+    if (!res.ok) { failToast(res); return; }
     onSaved();
     const added = res.settings.quoteItems[res.settings.quoteItems.length - 1];
     if (added) setOpenId(added.id);
@@ -544,13 +547,13 @@ function QuotesSection({ onSaved }) {
     if (!item) return;
     const before = getState().settings.quoteItems;
     const res = updateSettings({ quoteItems: before.filter((it) => it.id !== item.id) });
-    if (!res.ok) { failToast(); return; }
+    if (!res.ok) { failToast(res); return; }
     onSaved();
     toast({ message: `${item.label} removed from your price list.`, actionLabel: 'Undo', onAction: () => { updateSettings({ quoteItems: before }); onSaved(); } });
   };
   const setSla = (e) => {
     const res = updateSettings({ sla: { replyHours: Number(e.target.value) } });
-    if (res.ok) onSaved(); else failToast();
+    if (res.ok) onSaved(); else failToast(res);
   };
   const hours = [2, 4, 8, 12, 24, 48, 72];
   if (!hours.includes(replyHours)) hours.push(replyHours);
@@ -574,7 +577,7 @@ function QuotesSection({ onSaved }) {
         normalise=${(t) => String(parseInt(t, 10))} commit=${(t) => {
           const res = updateSettings({ quoteDefaults: { validDays: parseInt(t, 10) } });
           if (res.ok) { onSaved(); return ''; }
-          return (res.errors && res.errors.validDays) || FAIL_TEXT;
+          return (res.errors && res.errors.validDays) || problem(res);
         }} inputProps=${{ inputmode: 'numeric', pattern: '[0-9]*' }} />
       <${NotesField} onSaved=${onSaved} />
     <//>

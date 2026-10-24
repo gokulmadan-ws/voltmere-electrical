@@ -231,7 +231,7 @@ function VisitRow({ booking: b, first, replyHours }) {
   const pencilled = isPencilled(b);
   const note = !pencilled ? ''
     : install ? `${first} accepted the quote and picked this day for the install. It is pencilled in until you confirm it.`
-      : `You'll confirm within ${replyHours} h. ${first} has been told it's provisional.`;
+      : `You'll confirm within ${replyHours} h. ${first} has been told you will confirm it.`;
   return html`<div class=${`bd-visit${pencilled ? ' is-pencilled' : ''}`} data-testid=${pencilled ? 'detail-pencilled' : 'detail-visit'}>
     <${Icon} name=${pencilled ? 'clock' : 'calendar-check'} size=${20} class="bd-visit__icon" />
     <div class="bd-visit__text">

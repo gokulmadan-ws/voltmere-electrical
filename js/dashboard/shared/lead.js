@@ -1,7 +1,9 @@
 // js/dashboard/shared/lead.js: lead source helpers and the LeadChip (where an enquiry came from).
 // Owner: E3
 import { html } from '../../vendor/preact-htm.js';
-import { Icon, cx, loadCss } from '../../ui/index.js';
+import { Icon } from '../../ui/display.js';
+import { cx } from '../../ui/util.js';
+import { loadCss } from '../../ui/load-css.js';
 import { LEAD_SOURCE_LABELS } from '../../core/config.js';
 import { leadSourceOf } from '../../core/selectors.js';
 

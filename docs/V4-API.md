@@ -184,6 +184,8 @@ selectQuoteLinkInfo(state, quoteId) -> { url, portable, chars, reason, notesTrun
 - The `{quoteLink}` placeholder fills with `quoteLink(quote, { booking: <the quote's enquiry> })`. The default `customer_quote_sent` text is unchanged.
 - `bubbleActions` gives `owner_new_booking` and `owner_quote_accepted` bubbles of a booking with NO day yet the buttons Open job and Call (no Confirm: `confirmBooking` refuses an unscheduled booking with `unscheduled`). A booking that has a day is unchanged.
 - An install booking that is still unscheduled (the WhatsApp acceptance) uses two extra defaults, `DEFAULT_UNSCHEDULED_TEMPLATES` in config.js (`customer_quote_accepted`: "Hi Aoife, thanks for accepting your quote (£1,394). I will be in touch shortly to agree your installation day. Quote Q-EL-1043"; `owner_quote_accepted`: heading, who accepted what, "Install day to be agreed.", the preference line, address and job link). A template the owner customised in Settings still wins, filled with `installWhen` = "a day to be agreed".
+- `DEFAULT_UNSCHEDULED_TEMPLATES.customer_rescheduled` is used when an owner gives an unscheduled install its first day (`extra.oldWhen` is `'To be arranged'`): "Hi Aoife, it's Daniel from 180 Electrical. I can do your EV charger installation on Thu 29 Oct, afternoon, arriving between 1 and 3pm at ... Does that day suit you?", never "moved from To be arranged". The owner's own `customer_rescheduled` template still wins.
+- In the dashboard, "Confirm install day" (and "Confirm survey visit") on a booking with no day opens the reschedule sheet (titled "Choose a day", button "Set this day"); on a Today card or from an enquiry it opens the booking first. `confirmBooking` still refuses an unscheduled booking.
 
 ## 7. Import map for the UI roles
 
@@ -205,8 +207,8 @@ import { quoteDetailFromLink } from '../core/quotes.js';
 
 ## 8. Not done / for the orchestrator
 
-- `js/core/pipeline.js` is not in this role's file list, so its Accepted-stage summary is untouched: for an unscheduled install it reads "Accepted £1,394. Install pencilled in To be arranged". The one-line fix is in `summaryFor`, case `'accepted'`: use `i && i.status === 'new' && !isUnscheduled(i)` for the "pencilled in" wording, so an install with no day reads "Install day to arrange". (`isUnscheduled` is already imported there.)
-- The v3 quote page (`js/quote/route.js`, `linked.js`) still reads only `#q=<id>[&d=<legacy>]`. Until Q4 switches it to `parseQuoteLink` it shows "We could not open this quote" for a `quote.html#d=...` link on a browser that has no copy of the quote.
+- Done in the final audit: the Accepted-stage summary in `js/core/pipeline.js` now says "Install day to arrange" for an install with no day (it no longer reads "pencilled in To be arranged"), the booking story says the same, and "Confirm install day" on an install with no day opens the reschedule sheet so a day can be chosen first (it used to fail with a generic toast).
+- The quote page (`js/quote/route.js`, `linked.js`) now reads `quote.html#d=...` through `parseQuoteLink` (link mode), so a quote link opens on a phone that holds no copy of it.
 - A link carries no signature: anybody who knows the format can make one. That is why the import screen shows what it will add and needs a tap, and why a real build signs payloads server-side.
 - `viewed` cannot travel back: opening the quote on the customer's phone does not tell the owner's phone. The owner only learns of an accept or a decline.
 

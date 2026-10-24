@@ -22,7 +22,12 @@ export function loadCss(href) {
       document.head.appendChild(link);
     }
     link.addEventListener('load', () => resolve(true), { once: true });
-    link.addEventListener('error', () => { console.warn('Stylesheet failed to load:', href); resolve(false); }, { once: true });
+    link.addEventListener('error', () => {
+      if (typeof navigator === 'undefined' || navigator.onLine !== false) console.warn('Stylesheet failed to load:', href);
+      link.remove(); // a failed sheet is not remembered: asking again fetches it again
+      pending.delete(href);
+      resolve(false);
+    }, { once: true });
   });
   pending.set(href, promise);
   return promise;

@@ -6,7 +6,7 @@ import {
 import { nowStamp } from './clock.js';
 import { addDays, addMinutes, fmtDayShort, isDayKey, minutesBetween, monthKeyOf, stampDay } from './dates.js';
 import { bookingEndStamp, bookingWhen, bookingWhenArrival, isUnscheduled } from './availability.js';
-import { addressLine, firstName, gbp, toWaDigits } from './format.js';
+import { addressLine, firstName, gbp, own, toWaDigits } from './format.js';
 import { latestQuoteFor, quoteExpiresInDays, quoteStatus, quoteTotal, quotesFor, splitLines } from './quotes.js';
 
 const priceOf = (b) => (b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice);
@@ -193,7 +193,7 @@ function summaryFor(j, nowStampStr) {
       return `Quote ${total} sent, not opened yet`;
     }
     case 'accepted':
-      return i && i.status === 'new' ? `Accepted ${total}. Install pencilled in ${bookingWhen(i)}` : `Accepted ${total}. Install day to arrange`;
+      return i && i.status === 'new' && !isUnscheduled(i) ? `Accepted ${total}. Install pencilled in ${bookingWhen(i)}` : `Accepted ${total}. Install day to arrange`;
     case 'install': return `Install ${bookingWhen(i)}`;
     case 'done': {
       const day = fmtDayShort(stampDay(i.start));
@@ -466,7 +466,7 @@ export function selectQuotes(state) {
 }
 
 export function selectQuote(state, id) {
-  return (state.quotes && state.quotes[id]) || null;
+  return own(state.quotes, id);
 }
 
 export function selectQuotesForBooking(state, bookingId) {

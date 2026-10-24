@@ -1,7 +1,9 @@
 // js/dashboard/app.js: owner dashboard entry. Names the tab, then boots the shell and the new-booking watcher.
 // Owner: B3 (was WP2)
 import { html, useErrorBoundary } from '../vendor/preact-htm.js';
-import { Button, bootApp } from '../ui/index.js';
+import { Button } from '../ui/button.js';
+import { ResetDataButton } from '../ui/reset.js';
+import { bootApp } from '../ui/boot.js';
 import { Shell } from './shell.js';
 import { Watcher } from './watcher.js';
 
@@ -15,6 +17,7 @@ function Crash({ children }) {
     return html`<div class="ui-fatal" role="alert" data-testid="shell-error">
       <p class="ui-fatal__text">Something went wrong. Reload the page.</p>
       <${Button} variant="primary" onClick=${() => location.reload()}>Reload<//>
+      <${ResetDataButton} />
     </div>`;
   }
   return children;

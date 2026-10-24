@@ -225,8 +225,8 @@
 /* Non-colour tokens: same in both themes. */
 :root {
   /* type: Manrope (headings), Inter (body); both local variable fonts, see css/fonts.css */
-  --font-display: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Manrope', 'Manrope Fallback', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Inter', 'Inter Fallback', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --fs-12: 0.75rem;   /* captions, chips, tab labels. NEVER smaller. */
   --fs-14: 0.875rem;  /* meta, helper text */

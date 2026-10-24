@@ -72,7 +72,7 @@ let keySeq = 0;
  * Sent photos are saved on the booking in this browser (a real build would upload them): the card says so.
  */
 /** `prompt` replaces the sentence above the buttons (the thank-you page passes its own). In `compact` mode (inside the thank-you page's closed "Add photos" row) both pick buttons are secondary; "Send photos" is the only filled one, and only once photos are picked. */
-export function PhotoCard({ booking, brand, compact = false, prompt = '' }) {
+export function PhotoCard({ booking, brand, compact = false, prompt = '', readyTitle = '' }) {
   const [pending, setPending] = useState([]); // chosen but not sent: { key, name, dataUrl }
   const [busy, setBusy] = useState(false); // shrinking pictures
   const [sending, setSending] = useState(false);
@@ -132,18 +132,18 @@ export function PhotoCard({ booking, brand, compact = false, prompt = '' }) {
       setPending([]);
       const n = res.added;
       const dropped = res.dropped ? ` ${res.dropped} could not be added.` : '';
-      setNote({ tone: 'ok', text: `${n === 1 ? 'Your photo is' : `Your ${n} photos are`} added to your enquiry for ${brand.ownerFirst}.${dropped}` });
+      setNote({ tone: 'ok', text: `${n === 1 ? 'Your photo is' : `Your ${n} photos are`} added to your enquiry.${dropped}` });
       return;
     }
     if (res.reason === 'storage_full') {
-      setNote({ tone: 'error', text: `There is no room left on this device to save those photos. Your photos are still here: try one or two, or send them to ${brand.ownerFirst} on WhatsApp.`, whatsapp: true });
+      setNote({ tone: 'error', text: `There is no room left on this device to save those photos. Your photos are still here: try one or two, or send them to us on WhatsApp.`, whatsapp: true });
     } else if (res.reason === 'too_many') {
-      setNote({ tone: 'error', text: `You have already sent ${PHOTO_LIMITS.maxPhotos} photos, which is the most we can take here. Anything else, send to ${brand.ownerFirst} on WhatsApp.`, whatsapp: true });
+      setNote({ tone: 'error', text: `You have already sent ${PHOTO_LIMITS.maxPhotos} photos, which is the most we can take here. Anything else, send to us on WhatsApp.`, whatsapp: true });
       setPending([]);
     } else if (res.reason === 'not_found') {
-      setNote({ tone: 'error', text: `We couldn't find your enquiry any more. Please call ${brand.ownerFirst} on ${brand.phone}.` });
+      setNote({ tone: 'error', text: `We couldn't find your enquiry any more. Please call us on ${brand.phone}.` });
     } else {
-      setNote({ tone: 'error', text: `Those photos weren't accepted. Try different ones, or send them to ${brand.ownerFirst} on WhatsApp.`, whatsapp: true });
+      setNote({ tone: 'error', text: `Those photos weren't accepted. Try different ones, or send them to us on WhatsApp.`, whatsapp: true });
     }
   };
 
@@ -156,7 +156,8 @@ export function PhotoCard({ booking, brand, compact = false, prompt = '' }) {
         <p class="bk-photos__opt">Optional</p>
       </div>
     </div>`}
-    <p class="bk-photos__text" data-testid="photos-prompt">${prompt || `A photo of your consumer unit and where you'd like the charger helps ${brand.ownerFirst} prepare your quote.`}</p>
+    ${readyTitle ? html`<p class="bk-eyebrow bk-photos__ready" data-testid="photos-ready-title">${readyTitle}</p>` : null}
+    <p class="bk-photos__text" data-testid="photos-prompt">${prompt || `A photo of your consumer unit and where you'd like the charger helps us prepare your quote.`}</p>
     ${slots > 0 ? html`<ul class="bk-photos__grid" data-testid="photos-grid">
       ${saved.map((p, i) => html`<li key=${p.id} class="bk-thumb is-saved" data-testid=${`photos-saved-${i}`}>
         <img src=${p.dataUrl} alt=${`Photo ${i + 1}, sent`} width="120" height="120" decoding="async" />

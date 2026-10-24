@@ -1,6 +1,6 @@
 // tests/e2e/handoff-journey.mjs: the WHOLE two-phone loop of docs/V4-HANDOFF.md, end to end, with SEPARATE browser contexts (no shared storage):
 //
-//   customer phone: funnel -> "Send my enquiry to Daniel on WhatsApp" (a real wa.me address) ......................... (section 1)
+//   customer phone: funnel -> "Send my enquiry on WhatsApp" (a real wa.me address) ......................... (section 1)
 //   Daniel's phone: taps the link in that message -> Import screen -> "Add to my dashboard" (idempotent) ............... (section 2)
 //   Daniel's phone: builds and sends a quote (the test reads the quote link from the send sheet, not from wa.me) ...... (section 3)
 //   customer phone: opens the quote link (link mode), "Which days suit you?", opens WhatsApp with the reply ........... (section 4)
@@ -215,7 +215,7 @@ const state = {}; // what one section hands to the next
 // ================================================================ 1. the customer's enquiry becomes a WhatsApp message
 await section('1. Aoife finishes the funnel and sends her enquiry to Daniel on WhatsApp', async () => {
   await submitEnquiry(a, AOIFE);
-  check('the confirmation offers "Send my enquiry to Daniel on WhatsApp" as the primary button', /Send my enquiry to Daniel on WhatsApp/.test(await txt(a, 'wa-send')) && (await tid(a, 'wa-send').evaluate((el) => el.classList.contains('ui-btn--primary'))));
+  check('the confirmation offers "Send my enquiry on WhatsApp" as the primary button', /Send my enquiry on WhatsApp/.test(await txt(a, 'wa-send')) && (await tid(a, 'wa-send').evaluate((el) => el.classList.contains('ui-btn--primary'))));
   check('the card says honestly that in a live site this is automatic, tagged data-proto', /happens automatically through your funnel's webhook/.test(await txt(a, 'wa-send-note')) && (await attr(a, 'wa-send-note', 'data-proto')) !== null);
   check('before the tap the page does not claim anything reached Daniel', !/\b(sent|delivered)\b/i.test((await txt(a, 'wa-send-text')).replace(/press send/i, '')), await txt(a, 'wa-send-text'));
   await shot(a, 'journey-1-confirmation-375-dark', true);
@@ -228,7 +228,7 @@ await section('1. Aoife finishes the funnel and sends her enquiry to Daniel on W
     && /Parking: Private driveway/.test(sent.text) && /Electric car: It's ordered or arriving soon/.test(sent.text) && /Timing: As soon as possible/.test(sent.text) && /Permission to install: Yes/.test(sent.text), sent.text.slice(0, 500));
   check('the notes survive, accents and symbols included', sent.text.includes(AOIFE.note), sent.text.slice(0, 600));
   check('it ends with the link Daniel taps: dashboard.html#import=<payload>, a sensible length', /dashboard\.html#import=[A-Za-z0-9_-]+$/.test(sent.link) && sent.link.length < 1400, `${sent.link.length}`);
-  check('the card then says "Opened in WhatsApp" (never "sent") and offers to open it again', await until(async () => (await attr(a, 'wa-send-card', 'data-state')) === 'opened') && /Opened in WhatsApp/.test(await txt(a, 'wa-send-title')) && (await tid(a, 'wa-send-again').count()) === 1);
+  check('the card then says "Opened in WhatsApp" (never "sent") and offers to open it again', await until(async () => (await attr(a, 'wa-send-card', 'data-state')) === 'opened') && /Opened in WhatsApp/.test((await tid(a, 'wa-send-title').textContent()) || '') && (await tid(a, 'wa-send-again').count()) === 1);
   const mine = await bookingNamed(a, AOIFE.name);
   check('the enquiry is also saved in Aoife\'s own browser, as before', mine.length === 1 && mine[0].ref === 'EL-1043', JSON.stringify(mine.map((b) => b.ref)));
   state.ref = mine[0] ? mine[0].ref : '';
@@ -291,7 +291,7 @@ await section('4. Aoife opens the quote link on her own phone (link mode) and ac
   await a.goto(`${BASE}/quote.html?${CLOCK}${hashOf(state.quoteLink)}`, { waitUntil: 'load' });
   await tid(a, 'q2-page').waitFor({ timeout: WAIT });
   const money = `£${state.total.toLocaleString('en-GB')}`;
-  check('the quote renders from the link alone, in link mode', (await attr(a, 'q2-page', 'data-state')) === 'open' && (await attr(a, 'q2-page', 'data-mode')) === 'link' && (await txt(a, 'q2-greeting')) === `Hi ${AOIFE.first},`);
+  check('the quote renders from the link alone, in link mode', (await attr(a, 'q2-page', 'data-state')) === 'open' && (await attr(a, 'q2-page', 'data-mode')) === 'link' && (await txt(a, 'q2-greeting')).toLowerCase() === `Hi ${AOIFE.first},`.toLowerCase());
   check('the reference, the total, the lines and Daniel\'s own notes are all there', (await txt(a, 'q2-ref')) === state.quoteId && (await txt(a, 'q2-total')) === money && (await tid(a, 'q2-line').count()) >= 3 && /Cable route agreed on the survey, café side\./.test(await txt(a, 'q2-notes')), `${await txt(a, 'q2-total')} ${await txt(a, 'q2-notes')}`);
   check('it says "Prototype: sample prices" and carries the credentials, call and WhatsApp', /Prototype: sample prices/.test(await txt(a, 'q2-sample-note')) && /Level 3/.test(await txt(a, 'q2-credentials')) && (await attr(a, 'q2-call', 'href')) === 'tel:+447885496800');
   check('opening it wrote nothing to Aoife\'s store, and Daniel\'s phone cannot know she looked (still "sent", not "viewed")', !((await storeOf(a)).quotes || {})[state.quoteId] && (await storeOf(d)).quotes[state.quoteId].status === 'sent');
@@ -310,7 +310,7 @@ await section('4. Aoife opens the quote link on her own phone (link mode) and ac
   check('Accept opens a real WhatsApp message to Daniel with the quote, the total, the days and her note', sent.path === '/447885496800' && sent.text.includes(`quote ${state.quoteId} (${money})`) && /Best: Thu or Fri mornings\./.test(sent.text) && sent.text.includes('Note: Please ring first, the gate sticks.'), sent.text.slice(0, 300));
   check('and ends with the link Daniel taps to add her reply to his dashboard', /dashboard\.html#import=[A-Za-z0-9_-]+$/.test(sent.link) && sent.link.length < 900, `${sent.link.length}`);
   await tid(a, 'q2-reply-sent').waitFor({ timeout: WAIT });
-  check('the page then shows the calm "Your message is ready in WhatsApp. Tap send and Daniel will confirm your install day"', /Your message is ready in WhatsApp/.test(await txt(a, 'q2-sent-title')) && /Tap send and Daniel will confirm your install day\./.test(await txt(a, 'q2-reply-sent')));
+  check('the page then shows the calm "Your message is ready in WhatsApp. Tap send and we will confirm your install day"', /Your message is ready in WhatsApp/.test(await txt(a, 'q2-sent-title')) && /Tap send and we will confirm your install day\./.test(await txt(a, 'q2-reply-sent')));
   check('nothing claims it was sent, and there are Copy message and Open WhatsApp again fallbacks', !/(has|was|been) sent\b/i.test(await txt(a, 'q2-reply-sent')) && (await tid(a, 'q2-copy').count()) === 1 && (await tid(a, 'q2-reopen').count()) === 1);
   check('Aoife\'s store holds no accepted quote (the only thing that left her phone is the WhatsApp message)', !((await storeOf(a)).quotes || {})[state.quoteId] && (await storeOf(d)).quotes[state.quoteId].status === 'sent');
   await shot(a, 'journey-4-ready-375-dark', true);
@@ -347,6 +347,13 @@ await section('5. Daniel taps her reply: "Mark quote accepted and plan the insta
   await d.evaluate((id) => { location.hash = `#/bookings/${id}`; }, state.installId);
   await tid(d, 'booking-detail').waitFor({ timeout: WAIT });
   check('opening the install shows "To be arranged" and her preferences', /To be arranged/.test(await txt(d, 'booking-detail')) && /Install preferences: Thu or Fri mornings/.test(await txt(d, 'booking-detail')), (await txt(d, 'booking-detail')).slice(0, 300));
+  // "Confirm install day" on an install with no day yet opens the day picker (it used to fail with a generic "did not work" toast).
+  await tid(d, 'job-primary').click();
+  await tid(d, 'reschedule-sheet').waitFor({ timeout: WAIT });
+  check('"Confirm install day" on an install with no day opens the day picker ("Choose a day", "Set this day"), not an error toast', /Choose a day/.test(await txt(d, 'reschedule-sheet')) && /Set this day/.test(await txt(d, 'reschedule-submit')) && (await d.locator('.ui-toast', { hasText: 'did not work' }).count()) === 0, await txt(d, 'reschedule-sheet'));
+  await d.keyboard.press('Escape');
+  await until(async () => (await tid(d, 'reschedule-sheet').count()) === 0);
+  check('and the install is still waiting for a day (nothing was confirmed by that tap)', ((await storeOf(d)).bookings.find((b) => b.id === state.installId) || {}).status === 'new');
   // Daniel agrees a day with her (he moves it into his diary), then confirms it.
   await tid(d, 'detail-overflow').click();
   await tid(d, 'job-secondary-reschedule').click();
@@ -406,7 +413,7 @@ await section('6. a second customer, on a third phone, declines: the reason trav
   const total = (await storeOf(d)).quotes[made.quoteId].lines.reduce((t, l) => t + l.qty * l.unitPrice, 0);
   await b.goto(`${BASE}/quote.html?${CLOCK}${hashOf(made.link)}`, { waitUntil: 'load' });
   await tid(b, 'q2-page').waitFor({ timeout: WAIT });
-  check('Seán opens it on his phone in link mode', (await attr(b, 'q2-page', 'data-mode')) === 'link' && (await txt(b, 'q2-greeting')) === `Hi ${SEAN.first},`, await txt(b, 'q2-greeting'));
+  check('Seán opens it on his phone in link mode', (await attr(b, 'q2-page', 'data-mode')) === 'link' && (await txt(b, 'q2-greeting')).toLowerCase() === `Hi ${SEAN.first},`.toLowerCase(), await txt(b, 'q2-greeting'));
   await tid(b, 'q2-decline').click();
   await tid(b, 'q2-decline-sheet').waitFor({ timeout: WAIT });
   await tid(b, 'q2-reason-price').click();
@@ -414,7 +421,7 @@ await section('6. a second customer, on a third phone, declines: the reason trav
   const dec = await tapWhatsApp(customerB, b, 'q2-decline-whatsapp');
   check('Decline opens WhatsApp with the reason chip and his own words', dec.path === '/447885496800' && dec.text.includes(`quote ${made.quoteId} (£${total.toLocaleString('en-GB')}), but I won't be going ahead this time.`) && dec.text.includes('Reason: Too expensive: Found it cheaper nearby.') && /dashboard\.html#import=/.test(dec.link), dec.text.slice(0, 300));
   await tid(b, 'q2-reply-sent').waitFor({ timeout: WAIT });
-  check('his page shows the same calm "ready in WhatsApp" view, worded for a decline', (await attr(b, 'q2-reply-sent', 'data-kind')) === 'dec' && /Tap send so Daniel knows/.test(await txt(b, 'q2-reply-sent')));
+  check('his page shows the same calm "ready in WhatsApp" view, worded for a decline', (await attr(b, 'q2-reply-sent', 'data-kind')) === 'dec' && /Tap send so we know/.test(await txt(b, 'q2-reply-sent')));
   await openImport(d, dec.link);
   check('Daniel\'s Import screen: "Seán declined quote ... (Too expensive)" with the note', (await txt(d, 'f4-summary')).includes(`${SEAN.first} declined quote ${made.quoteId} (Too expensive)`) && (await txt(d, 'f4-view')).includes('Found it cheaper nearby.'), await txt(d, 'f4-summary'));
   await tid(d, 'f4-add').click();

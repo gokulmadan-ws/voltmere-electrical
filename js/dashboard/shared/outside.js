@@ -1,7 +1,7 @@
 // js/dashboard/shared/outside.js: the amber "Outside NI" pill for an enquiry from outside Northern Ireland (Today and Bookings share it).
 // Owner: DASH
 import { html } from '../../vendor/preact-htm.js';
-import { Icon } from '../../ui/index.js';
+import { Icon } from '../../ui/display.js';
 
 export const OUTSIDE_TEXT = 'Outside NI';
 

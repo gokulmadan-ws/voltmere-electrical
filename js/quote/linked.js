@@ -41,17 +41,20 @@ export function readLink(route) {
   return { link: null, damaged: true, reason: v4.reason || 'damaged' };
 }
 
-/** What to tell the customer when their link could not be used, in their words (never "checksum" or "payload"). */
+/**
+ * What to tell the customer when their link could not be used, in their words (never "checksum" or "payload"), in our voice ("us"). The `owner` parameter stays
+ * (the callers pass it) but the page never names him: the landing says "we", and so does this.
+ */
 export function linkProblemText(reason, owner = 'Daniel') {
   switch (reason) {
     case 'unsupported':
-      return `This link was made by a different version of the site, so it cannot be opened here. Ask ${owner} to send it again.`;
+      return 'This link was made by a different version of the site, so it cannot be opened here. Ask us to send it again.';
     case 'invalid':
-      return `The link opened, but something in it cannot be used. Ask ${owner} to send it again.`;
+      return 'The link opened, but something in it cannot be used. Ask us to send it again.';
     case 'wrong_kind':
-      return `This is not a quote link. Open the link ${owner} sent for your quote.`;
+      return 'This is not a quote link. Open the link we sent for your quote.';
     case 'mismatch':
-      return `The quote number in the address does not match the quote inside the link, so it was not opened. Ask ${owner} to send it again.`;
+      return 'The quote number in the address does not match the quote inside the link, so it was not opened. Ask us to send it again.';
     default:
       return 'The link looks cut short or damaged. Copy the whole link from the message and open it again.';
   }

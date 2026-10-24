@@ -1,0 +1,396 @@
+<!doctype html>
+<!--
+  180 Electrical landing page, V5 reference mock. Direction A (Swiss editorial, light) with the judges' grafts applied. REFERENCE ONLY, NOT SHIPPED CODE.
+  The class names and data-testids are the production ones (docs/LANDING-V5.md), so css/*.css here can be read side by side with css/landing.css + css/landing-sections.css.
+  Photos are flat stand-in illustrations at the real aspect ratios. The funnel is a stub: the landing only opens it.
+-->
+<html lang="en-GB" data-scope="public" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>180 Electrical: Home EV charger installation in Northern Ireland</title>
+<meta name="description" content="Home EV charger installation across Northern Ireland. Get a free, no-obligation quote from 180 Electrical.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0B0B0C">
+<link rel="icon" href="data:,">
+<link rel="preload" href="fonts/archivo-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="img/hero.svg" as="image" fetchpriority="high">
+<link rel="stylesheet" href="css/mock-reset.css">
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/public-tokens.css">
+<link rel="stylesheet" href="css/landing.css">
+<link rel="stylesheet" href="css/landing-sections.css">
+<link rel="stylesheet" href="css/mock-only.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="g-arrow" viewBox="0 0 20 20"><path d="M3 10h13M11 4.5 16.5 10 11 15.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"/></symbol>
+    <symbol id="g-tick" viewBox="0 0 20 20"><path d="M3.5 10.5 8 15 16.5 5.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"/></symbol>
+    <symbol id="g-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="g-chev" viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></symbol>
+    <symbol id="g-x" viewBox="0 0 20 20"><path d="M4.5 4.5l11 11M15.5 4.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"/></symbol>
+  </defs>
+</svg>
+
+<a class="lp-skip" href="#main">Skip to main content</a>
+
+<!-- ============ PROTOTYPE STRIP (same DOM as js/ui/notice.js, re-skinned; removed in production) ============ -->
+<aside class="ui-notice ui-notice--strip ui-notice--public" aria-label="Prototype notice" data-testid="prototype-strip" data-page="landing">
+  <div class="ui-notice__inner">
+    <button type="button" class="ui-tools__btn" id="tools-btn" aria-expanded="false" aria-controls="tools-panel" aria-haspopup="dialog" data-testid="prototype-tools">
+      <span class="ui-tools__pill"><span class="ui-tools__long">Prototype tools</span><span class="ui-tools__short">Tools</span><svg class="ui-tools__chev" width="12" height="12" aria-hidden="true"><use href="#g-chev"/></svg></span>
+    </button>
+    <div class="ui-ideas" role="group" aria-label="Show" data-testid="ideas-switch">
+      <span class="ui-ideas__label" aria-hidden="true">Show:</span>
+      <span class="ui-ideas__track">
+        <button type="button" class="ui-ideas__opt is-selected" aria-pressed="true" data-ideas-btn="on" data-testid="ideas-with"><span class="ui-ideas__pill">With ideas</span></button>
+        <button type="button" class="ui-ideas__opt" aria-pressed="false" data-ideas-btn="off" data-testid="ideas-only"><span class="ui-ideas__pill">Only my content</span></button>
+      </span>
+    </div>
+    <div class="ui-tools__panel" id="tools-panel" role="dialog" aria-label="Prototype tools" tabindex="-1" data-testid="prototype-tools-panel" hidden>
+      <div class="ui-tools__head"><h2 class="ui-tools__title">Prototype tools</h2><button type="button" class="ui-tools__close" aria-label="Close prototype tools" id="tools-close"><svg width="18" height="18" aria-hidden="true"><use href="#g-x"/></svg></button></div>
+      <p class="ui-tools__text" data-testid="footer-disclosure">This is a prototype. The business name, phone number and email are 180 Electrical's real public details; the enquiries, bookings, customers, diary and messages are samples. Nothing is really sent. Enquiries are saved only in this browser.</p>
+      <p class="ui-tools__text ui-tools__text--ideas">Blocks tagged "Idea from us" are not on your site today. "Only my content" hides them.</p>
+      <div class="ui-tools__row">
+        <p class="ui-tools__label">Appearance</p>
+        <div class="ui-seg ui-seg--sm" role="radiogroup" aria-label="Theme">
+          <button type="button" class="ui-seg__opt is-selected" role="radio" aria-checked="true" data-theme-btn="light" data-testid="theme-light">Light</button>
+          <button type="button" class="ui-seg__opt" role="radio" aria-checked="false" data-theme-btn="dark" data-testid="theme-dark">Dark</button>
+          <button type="button" class="ui-seg__opt" role="radio" aria-checked="false" data-theme-btn="auto" data-testid="theme-auto">Auto</button>
+        </div>
+      </div>
+      <div class="ui-tools__group">
+        <p class="ui-tools__label">Owner area</p>
+        <ul class="ui-tools__list">
+          <li><a class="ui-tools__link" href="#" data-testid="footer-owner-link"><span>Owner login (demo)</span><svg width="16" height="16" aria-hidden="true"><use href="#g-arrow"/></svg></a></li>
+          <li><a class="ui-tools__link" href="#" data-testid="footer-about-link"><span>What's real in this prototype</span><svg width="16" height="16" aria-hidden="true"><use href="#g-arrow"/></svg></a></li>
+        </ul>
+      </div>
+      <nav class="ui-tools__group" aria-label="On this page" data-testid="prototype-tools-links">
+        <p class="ui-tools__label">On this page</p>
+        <ul class="ui-tools__chips">
+          <li><a class="ui-tools__chip" href="#about">About</a></li><li><a class="ui-tools__chip" href="#work">Recent work</a></li><li><a class="ui-tools__chip" href="#how">How it works</a></li>
+          <li><a class="ui-tools__chip" href="#pricing">Your quote</a></li><li><a class="ui-tools__chip" href="#savings">Running costs</a></li><li><a class="ui-tools__chip" href="#area">Your postcode</a></li><li><a class="ui-tools__chip" href="#faq">Questions</a></li>
+        </ul>
+      </nav>
+    </div>
+  </div>
+</aside>
+
+<!-- ============ HEADER: black, the logo's own ground. Sticky from 720. The red button appears only after the hero's has scrolled out ============ -->
+<header class="lp-header" id="hdr" data-testid="lp-header">
+  <div class="lp-wrap lp-header__bar">
+    <a class="lp-brand" href="#top" aria-label="180 Electrical, back to the top"><span data-testid="lp-lockup"><span class="lp-logo"><img class="lp-logo__img" src="img/logo-180.png" alt="" width="1119" height="743" fetchpriority="high" decoding="async"></span></span></a>
+    <nav class="lp-nav" aria-label="Page sections">
+      <a class="lp-nav__link" href="#about" data-spy="about">About</a>
+      <a class="lp-nav__link" href="#work" data-spy="work">Our work</a>
+      <a class="lp-nav__link" href="#how" data-spy="how">How it works</a>
+      <a class="lp-nav__link" href="#pricing" data-spy="pricing">Pricing</a>
+      <a class="lp-nav__link" href="#faq" data-spy="faq">Questions</a>
+    </nav>
+    <div class="lp-header__actions">
+      <a class="lp-header__phone" href="tel:07885496800" aria-label="Call 07885 496800" data-testid="lp-header-phone"><svg class="lp-glyph" width="18" height="18" aria-hidden="true"><use href="#g-phone"/></svg><span>07885 496800</span></a>
+      <button type="button" class="lp-btn lp-btn--sm lp-cta lp-header__book" data-cta data-testid="lp-header-book"><span>Get my installation quote</span></button>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="lp-main" tabindex="-1">
+
+<!-- ============ HERO ============ -->
+<section class="lp-hero" id="top" aria-labelledby="hero-title">
+  <div class="lp-wrap">
+    <p class="lp-lbl lp-hero__eyebrow">Local EV charger installation</p>
+    <h1 class="lp-hero__title lp-display" id="hero-title"><span>Your own EV charger.</span> <span>Installed at home in <span class="lp-nowrap">Northern Ireland.</span></span></h1>
+  </div>
+  <div class="lp-wrap lp-hero__body">
+    <div class="lp-hero__copy">
+      <p class="lp-hero__sub">Make charging fit around your day. 180 Electrical helps homeowners across Northern Ireland choose and install the right charger for their home and vehicle.</p>
+      <div class="lp-hero__cta">
+        <button type="button" class="lp-btn lp-btn--lg lp-cta lp-hero__btn" data-cta data-hero-cta data-testid="hero-cta"><span>Get my installation quote</span><svg class="lp-glyph lp-glyph--arrow" width="20" height="20" aria-hidden="true"><use href="#g-arrow"/></svg></button>
+        <p class="lp-note"><span>Tell us a little about your home and what you need.</span><strong data-testid="hero-proof-free">Free, no-obligation quote.</strong></p>
+      </div>
+    </div>
+    <figure class="lp-hero__photo lp-cut-tl" data-testid="l3-hero-visual">
+      <div class="lp-photo is-loaded" style="aspect-ratio:3 / 2" data-testid="hero-photo"><img class="lp-photo__img" src="img/hero.svg" width="1080" height="720" alt="A man in an olive jacket plugging a charging cable into a black wall-mounted home EV charger on a timber-clad wall, with a white Audi parked on block paving behind him" fetchpriority="high" decoding="async" style="object-position:50% 42%"></div>
+    </figure>
+  </div>
+  <div class="lp-wrap">
+    <div class="lp-spec" data-testid="hero-proof">
+      <ul class="lp-spec__ticks" aria-label="What you get" data-testid="hero-ticks">
+        <li><svg class="lp-glyph" width="20" height="20" aria-hidden="true"><use href="#g-tick"/></svg><span>Advice on charger options</span></li>
+        <li><svg class="lp-glyph" width="20" height="20" aria-hidden="true"><use href="#g-tick"/></svg><span>Installation tailored to your property</span></li>
+        <li><svg class="lp-glyph" width="20" height="20" aria-hidden="true"><use href="#g-tick"/></svg><span>Speak directly with 180 Electrical</span></li>
+      </ul>
+      <div class="lp-spec__trust" role="group" aria-labelledby="trust-k" data-testid="hero-creds">
+        <p class="lp-lbl lp-spec__k" id="trust-k">Accredited and qualified</p>
+        <p class="lp-spec__cred" data-testid="hero-cred-0"><b class="lp-fig lp-logovoice">Level 3</b> <span>Electrical Installation</span></p>
+        <p class="lp-spec__cred" data-testid="hero-cred-1"><b class="lp-fig lp-logovoice">2391</b> <span>Inspection and Testing</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHY ============ -->
+<section class="lp-sec lp-sec--l" id="why" aria-labelledby="why-title" data-testid="why-cards">
+  <div class="lp-wrap lp-sec__in lp-why">
+    <h2 class="lp-h2 lp-display" id="why-title">Home charging that works around you.</h2>
+    <div class="lp-why__rows">
+      <ul class="lp-rows">
+        <li><h3>Charge while you're at home</h3><p>Plug in when you arrive and charge around your routine.</p></li>
+        <li><h3>Choose with confidence</h3><p>Get help choosing a charger suited to your vehicle, property and preferences.</p></li>
+        <li><h3>Make the most of smart charging</h3><p>Compatible chargers and suitable electricity tariffs can let you schedule charging for off-peak periods.</p></li>
+      </ul>
+      <p class="lp-why__cta"><a class="lp-link" href="#" data-cta data-testid="why-cta"><span>Get my installation quote</span><svg class="lp-glyph lp-glyph--arrow" width="18" height="18" aria-hidden="true"><use href="#g-arrow"/></svg></a></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ABOUT ============ -->
+<section class="lp-sec lp-sec--l" id="about" aria-labelledby="about-title" data-testid="about">
+  <div class="lp-wrap lp-sec__in lp-about">
+    <figure class="lp-about__photo lp-cut-br">
+      <div class="lp-photo is-loaded" style="aspect-ratio:4 / 3" data-testid="about-photo"><img class="lp-photo__img" src="img/about.svg" width="3600" height="2697" alt="A smiling 180 Electrical installer in a black 180 hoodie, arms crossed, beside a white van on a residential street" loading="lazy" decoding="async" style="object-position:50% 59%"></div>
+    </figure>
+    <div class="lp-about__text">
+      <h2 class="lp-h2 lp-h2--s lp-display" id="about-title">Meet your local EV charger installers.</h2>
+      <div data-testid="about-body">
+        <p class="lp-about__p1">180 Electrical installs home EV chargers for homeowners across Northern Ireland. We take time to understand your property and how you drive, then fit a charger that suits both.</p>
+        <p class="lp-about__p2" data-testid="about-pull">Every visit is planned around a safe cable route and a tidy finish, so your charger looks like it belongs on your home.</p>
+      </div>
+    </div>
+    <div class="lp-brands" role="group" aria-labelledby="brands-k" data-testid="brands">
+      <p class="lp-lbl lp-brands__k" id="brands-k">Charger brands we install</p>
+      <ul class="lp-brands__list"><li class="lp-logovoice">ZAPPI</li><li class="lp-logovoice">OHME</li><li class="lp-logovoice">SYNC</li></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OUR RECENT WORK ============ -->
+<section class="lp-sec" id="work" aria-labelledby="work-title" data-testid="gallery">
+  <div class="lp-wrap lp-sec__in">
+    <div class="lp-plate">
+      <div class="lp-plate__head">
+        <p class="lp-lbl">Our recent work</p>
+        <h2 class="lp-h2 lp-h2--s lp-display" id="work-title">Installations across Northern Ireland</h2>
+      </div>
+      <ul class="lp-gal" role="list" aria-label="Recent installations" data-testid="l3-gallery-row">
+        <li class="lp-gal__i lp-gal__i--1"><figure><button type="button" class="lp-gal__b" data-lb="0" aria-haspopup="dialog" aria-label="View photo 1 of 4 larger" data-testid="l3-gallery-open-0"><div class="lp-photo lp-gal__photo is-loaded" data-testid="gallery-photo-0"><img class="lp-photo__img" src="img/work1.svg" width="1170" height="1532" alt="A black and grey home EV charger on a red brick wall, with its charging cable tethered neatly beside it" loading="lazy" decoding="async"></div></button><figcaption class="lp-gal__cap" data-testid="gallery-chip-0"><span class="lp-gal__n">01</span>Red brick wall</figcaption></figure></li>
+        <li class="lp-gal__i lp-gal__i--2"><figure><button type="button" class="lp-gal__b" data-lb="1" aria-haspopup="dialog" aria-label="View photo 2 of 4 larger" data-testid="l3-gallery-open-1"><div class="lp-photo lp-gal__photo has-zoom is-loaded" style="--zoom:1.45" data-testid="gallery-photo-1"><img class="lp-photo__img" src="img/work2.svg" width="739" height="1600" alt="A home EV charger on a grey pebbledash wall with the cable clipped neatly along the wall" loading="lazy" decoding="async"></div></button><figcaption class="lp-gal__cap" data-testid="gallery-chip-1"><span class="lp-gal__n">02</span>Pebbledash wall</figcaption></figure></li>
+        <li class="lp-gal__i lp-gal__i--3"><figure><button type="button" class="lp-gal__b" data-lb="2" aria-haspopup="dialog" aria-label="View photo 3 of 4 larger" data-testid="l3-gallery-open-2"><div class="lp-photo lp-gal__photo is-loaded" data-testid="gallery-photo-2"><img class="lp-photo__img" src="img/work4.svg" width="3600" height="2684" alt="A black EV charger with blue buttons and a cable holster on an orange brick wall beside a black downpipe" loading="lazy" decoding="async"></div></button><figcaption class="lp-gal__cap" data-testid="gallery-chip-2"><span class="lp-gal__n">03</span>Orange brick wall</figcaption></figure></li>
+        <li class="lp-gal__i lp-gal__i--4"><figure><button type="button" class="lp-gal__b" data-lb="3" aria-haspopup="dialog" aria-label="View photo 4 of 4 larger" data-testid="l3-gallery-open-3"><div class="lp-photo lp-gal__photo is-loaded" data-testid="gallery-photo-3"><img class="lp-photo__img" src="img/work3.svg" width="1200" height="1600" alt="A black EV charger fitted to a red brick pillar, with the cable resting on a holster beside a wooden fence" loading="lazy" decoding="async"></div></button><figcaption class="lp-gal__cap" data-testid="gallery-chip-3"><span class="lp-gal__n">04</span>Brick pillar</figcaption></figure></li>
+      </ul>
+      <div class="lp-gal__dots" role="group" aria-label="Choose a photo" data-testid="gallery-dots">
+        <button type="button" class="lp-gal__dot is-current" aria-label="Show photo 1 of 4" aria-current="true" data-testid="gallery-dot-0"><span aria-hidden="true"></span></button>
+        <button type="button" class="lp-gal__dot" aria-label="Show photo 2 of 4" data-testid="gallery-dot-1"><span aria-hidden="true"></span></button>
+        <button type="button" class="lp-gal__dot" aria-label="Show photo 3 of 4" data-testid="gallery-dot-2"><span aria-hidden="true"></span></button>
+        <button type="button" class="lp-gal__dot" aria-label="Show photo 4 of 4" data-testid="gallery-dot-3"><span aria-hidden="true"></span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="lp-sec lp-sec--l" id="how" aria-labelledby="how-title" data-testid="how-it-works">
+  <div class="lp-wrap lp-sec__in">
+    <h2 class="lp-h2 lp-display" id="how-title">From first enquiry to charging at home.</h2>
+    <ol class="lp-steps" data-testid="l3-steps">
+      <li class="lp-step"><span class="lp-step__n lp-logovoice" aria-hidden="true">01</span><div><h3>Tell us about your home</h3><p>Answer a few short questions about your location, parking and plans.</p></div></li>
+      <li class="lp-step"><span class="lp-step__n lp-logovoice" aria-hidden="true">02</span><div><h3>Discuss your installation</h3><p>The team will review your enquiry and explain the next steps. Photos or a survey may be needed to prepare an accurate quote.</p>
+        <div class="lp-visit" data-proto="true" data-testid="hero-visit">
+          <span class="ui-idea-tag" data-testid="idea-tag"><i class="ui-idea-tag__d" aria-hidden="true"></i><span>Idea from us, not on your site today</span></span>
+          <span data-testid="live-availability">
+            <p class="lp-visit__k">Earliest visit Daniel could offer</p>
+            <p class="lp-visit__date" data-testid="next-free-slot"><time datetime="2026-10-26">Mon 26 Oct</time>, 8 to 10am</p>
+            <p class="lp-visit__conf">Daniel will confirm.</p>
+          </span>
+        </div></div></li>
+      <li class="lp-step"><span class="lp-step__n lp-logovoice" aria-hidden="true">03</span><div><h3>Arrange your installation</h3><p>Once you are happy with the agreed quote and scope, arrange a suitable installation date.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ YOUR QUOTE ============ -->
+<section class="lp-sec" id="pricing" aria-labelledby="pricing-title" data-testid="pricing">
+  <div class="lp-wrap lp-sec__in">
+    <div class="lp-pricing__head">
+      <h2 class="lp-h2 lp-display" id="pricing-title">Your installation, clearly quoted.</h2>
+      <p class="lp-statement">Costs depend on your charger choice, cable route and any electrical work required. Tell us about your home so the team can advise on the next steps towards an accurate quote.</p>
+    </div>
+
+    <!-- IDEA: see how a quote looks -->
+    <div class="lp-idea lp-qpeek" role="group" aria-label="See how a quote looks" data-proto="true" data-testid="quote-preview">
+      <span class="ui-idea-tag" data-testid="idea-tag"><i class="ui-idea-tag__d" aria-hidden="true"></i><span>Idea from us, not on your site today</span></span>
+      <div class="lp-idea__grid">
+        <div class="lp-idea__intro">
+          <h3>See how a quote looks</h3>
+          <p>Curious what you would receive? Open an example quote and read it line by line.</p>
+          <a class="lp-link" href="#" data-example-quote data-testid="pricing-sample-link"><span>See how a quote looks</span><svg class="lp-glyph lp-glyph--arrow" width="18" height="18" aria-hidden="true"><use href="#g-arrow"/></svg></a>
+        </div>
+        <div class="lp-idea__body">
+          <table class="lp-qt" aria-hidden="true">
+            <caption class="lp-small" data-testid="quote-preview-tag">Example only</caption>
+            <thead><tr><th scope="col">No.</th><th scope="col">Line</th><th scope="col" class="lp-qt__r">Amount</th></tr></thead>
+            <tbody>
+              <tr><td>01</td><td>Your chosen home charger</td><td class="lp-qt__r"><span class="lp-qt__blank"></span></td></tr>
+              <tr><td>02</td><td>Installation</td><td class="lp-qt__r"><span class="lp-qt__blank"></span></td></tr>
+              <tr><td>03</td><td>Dedicated circuit</td><td class="lp-qt__r"><span class="lp-qt__blank"></span></td></tr>
+              <tr><td>04</td><td>Testing and certification</td><td class="lp-qt__r"><span class="lp-qt__blank"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- IDEA: running costs -->
+    <div class="lp-idea lp-calc" id="savings" data-proto="true" data-testid="l3-calc">
+      <span class="ui-idea-tag" data-testid="idea-tag"><i class="ui-idea-tag__d" aria-hidden="true"></i><span>Idea from us, not on your site today</span></span>
+      <div class="lp-idea__grid">
+        <div class="lp-idea__intro">
+          <h3>What would home charging cost you?</h3>
+          <p>A rough guide, using example rates that you can change.</p>
+        </div>
+        <div class="lp-idea__body">
+          <div>
+            <label class="lp-lbl" for="miles">Miles you drive in a year</label>
+            <div class="lp-calc__mrow">
+              <input id="miles" class="lp-calc__in lp-calc__in--big" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="8,000" aria-describedby="miles-unit" data-testid="l3-calc-miles">
+              <span id="miles-unit" class="lp-calc__unit">miles a year</span>
+            </div>
+            <input id="miles-r" class="lp-range" type="range" min="1000" max="25000" step="500" value="8000" aria-label="Miles you drive in a year, slider" data-testid="l3-calc-slider">
+          </div>
+          <div class="lp-calc__res" aria-live="polite" data-testid="l3-calc-result">
+            <p class="lp-calc__lead">Home charging would cost about</p>
+            <p class="lp-calc__big" data-testid="l3-calc-headline"><span class="lp-calc__num" id="c-home" data-testid="l3-calc-home-big">£617</span><span class="lp-calc__per">a year</span></p>
+            <p class="lp-calc__cmp" id="c-cmp" data-testid="l3-calc-compare">The same miles in a petrol car would cost about £1,212 a year, which is about £595 more.</p>
+          </div>
+          <table class="lp-bars" data-testid="l3-calc-workings">
+            <caption class="lp-small">The same miles, three ways</caption>
+            <tbody>
+              <tr><th scope="row">Home charging</th><td><span class="lp-bars__t"><span class="lp-bars__f lp-bars__f--home" id="b-home"></span></span></td><td class="lp-bars__v" id="v-home" data-testid="l3-calc-home">£617</td></tr>
+              <tr><th scope="row">Petrol</th><td><span class="lp-bars__t"><span class="lp-bars__f" id="b-petrol"></span></span></td><td class="lp-bars__v" id="v-petrol" data-testid="l3-calc-petrol">£1,212</td></tr>
+              <tr><th scope="row">Public charging</th><td><span class="lp-bars__t"><span class="lp-bars__f" id="b-public"></span></span></td><td class="lp-bars__v" id="v-public" data-testid="l3-calc-public">£1,714</td></tr>
+            </tbody>
+          </table>
+          <details class="lp-calc__more" id="calc-more" data-testid="l3-calc-assumptions">
+            <summary><span>Change the rates</span><i class="lp-pm" aria-hidden="true"></i></summary>
+            <p class="lp-lbl lp-calc__rates-k" style="margin-top:16px">Rates we have assumed</p>
+            <div class="lp-rates" style="margin-top:12px">
+              <div class="lp-rates__r"><label for="r-home">Electricity at home</label><input id="r-home" class="lp-calc__in" data-k="homePence" inputmode="decimal" autocomplete="off" value="27" data-testid="l3-calc-field-homePence"><span>p per kWh</span></div>
+              <div class="lp-rates__r"><label for="r-petrol">Petrol</label><input id="r-petrol" class="lp-calc__in" data-k="petrolPence" inputmode="decimal" autocomplete="off" value="140" data-testid="l3-calc-field-petrolPence"><span>p per litre</span></div>
+              <div class="lp-rates__r"><label for="r-mpg">Petrol car economy</label><input id="r-mpg" class="lp-calc__in" data-k="mpg" inputmode="decimal" autocomplete="off" value="42" data-testid="l3-calc-field-mpg"><span>miles per gallon</span></div>
+              <div class="lp-rates__r"><label for="r-mpk">Electric car efficiency</label><input id="r-mpk" class="lp-calc__in" data-k="milesPerKwh" inputmode="decimal" autocomplete="off" value="3.5" data-testid="l3-calc-field-milesPerKwh"><span>miles per kWh</span></div>
+              <div class="lp-rates__r"><label for="r-pub">Public charger</label><input id="r-pub" class="lp-calc__in" data-k="publicPence" inputmode="decimal" autocomplete="off" value="75" data-testid="l3-calc-field-publicPence"><span>p per kWh</span></div>
+            </div>
+            <p class="lp-small lp-calc__note">Examples only, not 180 Electrical prices. A kWh is the unit of electricity on your bill. Change any figure to match yours.</p>
+            <p class="lp-lbl lp-calc__work-k">How we worked this out</p>
+            <p class="lp-workings" id="c-work" data-testid="l3-calc-workings-text">Your 8,000 miles use about 2,286 kWh a year, which is £617 at 27p a kWh. A petrol car doing 42 mpg would use about 866 litres, which is £1,212 at 140p a litre. At a public charger, 75p a kWh would come to £1,714.</p>
+            <button type="button" class="lp-link lp-link--quiet" id="calc-reset" aria-label="Reset to the example figures" data-testid="l3-calc-reset">Reset</button>
+          </details>
+        </div>
+      </div>
+      <p class="lp-calc__foot" data-testid="l3-calc-footnote"><span class="lp-calc__badge" data-testid="l3-calc-badge">Illustrative estimate</span>An illustration, not a quote or a promise. Your own costs will differ with your car, your driving and the rates you pay.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ AREA ============ -->
+<section class="lp-sec lp-sec--l" id="area" aria-labelledby="area-title" data-testid="area" data-sticky-hide>
+  <div class="lp-wrap lp-sec__in">
+    <h2 class="lp-h2 lp-display" id="area-title">EV charger installation in Northern Ireland.</h2>
+    <div class="lp-area__row">
+      <p class="lp-statement">We install home chargers across Northern Ireland. If you are not sure, enter your postcode and we will check.</p>
+      <form class="lp-pc" id="pc-form" novalidate data-testid="area-form">
+        <label class="lp-lbl" for="pc">Your postcode</label>
+        <div class="lp-pc__row">
+          <input id="pc" class="lp-pc__in" type="text" autocomplete="postal-code" autocapitalize="characters" spellcheck="false" enterkeyhint="go" maxlength="8" placeholder="e.g. BT7 3AB" aria-describedby="pc-note pc-result" data-testid="coverage-input">
+          <button type="submit" class="lp-btn lp-btn--xl lp-cta lp-pc__btn" data-testid="coverage-book"><span>Get my installation quote</span><svg class="lp-glyph lp-glyph--arrow" width="20" height="20" aria-hidden="true"><use href="#g-arrow"/></svg></button>
+        </div>
+        <p class="lp-pc__note" id="pc-note">Enter your postcode so we can check your location.</p>
+        <p class="lp-pc__result" id="pc-result" aria-live="polite" data-testid="coverage-result"></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUESTIONS ============ -->
+<section class="lp-sec" id="faq" aria-labelledby="faq-title" data-testid="faq">
+  <div class="lp-wrap lp-sec__in lp-faq">
+    <h2 class="lp-h2 lp-display" id="faq-title">Frequently asked questions</h2>
+    <div class="lp-faq__list">
+      <details class="lp-faq__item" name="faq" data-testid="faq-item-0"><summary class="lp-faq__q" data-testid="faq-q-0"><span>Which charger is right for my car?</span><i class="lp-pm" aria-hidden="true"></i></summary><div class="lp-faq__a"><p>Most home chargers suit most electric and plug-in hybrid cars, but the best choice depends on your vehicle, how you drive and your preferences. We will help you weigh up the options once we know a little about your setup.</p></div></details>
+      <details class="lp-faq__item" name="faq" data-testid="faq-item-1"><summary class="lp-faq__q" data-testid="faq-q-1"><span>Do I need a driveway or private parking?</span><i class="lp-pm" aria-hidden="true"></i></summary><div class="lp-faq__a"><p>A charger needs a suitable parking position and a safe route for the cable that does not create a hazard. We assess this for your property rather than assuming it. Running a cable across a public pavement is not a standard solution, so let us know your setup and we will advise.</p></div></details>
+      <details class="lp-faq__item" name="faq" open data-testid="faq-item-2"><summary class="lp-faq__q" data-testid="faq-q-2"><span>How much will installation cost?</span><i class="lp-pm" aria-hidden="true"></i></summary><div class="lp-faq__a"><p>It depends on the charger you choose, the cable route and any electrical work your property needs. We give you a clear quote once we understand your requirements, rather than a headline figure that changes later.</p></div></details>
+      <details class="lp-faq__item" name="faq" data-testid="faq-item-3"><summary class="lp-faq__q" data-testid="faq-q-3"><span>How long does installation take?</span><i class="lp-pm" aria-hidden="true"></i></summary><div class="lp-faq__a"><p>Timing varies with the property and the scope of work involved. Once the team has reviewed your enquiry, they can talk you through what to expect for your specific installation.</p></div></details>
+      <details class="lp-faq__item" name="faq" data-testid="faq-item-4"><summary class="lp-faq__q" data-testid="faq-q-4"><span>Can I have a charger installed before my car arrives?</span><i class="lp-pm" aria-hidden="true"></i></summary><div class="lp-faq__a"><p>Many homeowners plan the installation while waiting for their car. Tell us where you are in the process and we will suggest sensible timing so your charger is ready when you need it.</p></div></details>
+      <details class="lp-faq__item" name="faq" data-testid="faq-item-5"><summary class="lp-faq__q" data-testid="faq-q-5"><span>What happens after I enquire?</span><i class="lp-pm" aria-hidden="true"></i></summary><div class="lp-faq__a"><p>The team reviews your details and contacts you to discuss your installation and the next steps. Submitting the form is an enquiry, not a booking, and it does not produce an instant final price.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINAL CALL TO ACTION (black; the logo's stripes top-left) ============ -->
+<section class="lp-final" id="final" aria-labelledby="final-title" data-testid="final-cta" data-sticky-hide>
+  <div class="lp-wrap lp-final__grid">
+    <h2 class="lp-final__h lp-display" id="final-title">Ready to make charging at home simpler?</h2>
+    <div class="lp-final__side">
+      <p>Tell us about your home and plans. 180 Electrical will review your enquiry and help you understand your installation options.</p>
+      <button type="button" class="lp-btn lp-btn--xl lp-cta lp-final__btn" data-cta data-testid="final-book"><span>Get my installation quote</span><svg class="lp-glyph lp-glyph--arrow" width="20" height="20" aria-hidden="true"><use href="#g-arrow"/></svg></button>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- ============ FOOTER (black; continues the closing composition; the logo's stripes bottom-right) ============ -->
+<footer class="lp-footer" data-testid="footer">
+  <div class="lp-wrap lp-footer__grid">
+    <a class="lp-footer__logo" href="#top" aria-label="180 Electrical, back to the top" data-testid="footer-lockup"><span class="lp-logo"><img class="lp-logo__img" src="img/logo-180.png" alt="" width="1119" height="743" loading="lazy" decoding="async"></span></a>
+    <dl class="lp-footer__list">
+      <div><dt>Phone</dt><dd class="lp-footer__phone"><a href="tel:07885496800" data-testid="footer-phone">07885 496800</a></dd></div>
+      <div><dt>Email</dt><dd><a href="mailto:daniel@180electrical.co.uk" data-testid="footer-email">daniel@180electrical.co.uk</a></dd></div>
+      <div><dt>Area</dt><dd>Serving Northern Ireland</dd></div>
+    </dl>
+    <p class="lp-footer__legal" data-testid="footer-copyright">&copy; 2026 180 Electrical</p>
+  </div>
+</footer>
+
+<!-- ============ STICKY MOBILE BAR ============ -->
+<nav class="lp-sticky" id="sticky" aria-label="Quick actions" data-testid="sticky-bar">
+  <a class="lp-btn lp-btn--outline lp-sticky__call" href="tel:07885496800" aria-label="Call 07885 496800" data-testid="sticky-call"><svg class="lp-glyph" width="20" height="20" aria-hidden="true"><use href="#g-phone"/></svg><span>Call</span></a>
+  <button type="button" class="lp-btn lp-cta lp-sticky__book" data-cta data-testid="sticky-book"><span>Get my installation quote</span><svg class="lp-glyph lp-glyph--arrow" width="20" height="20" aria-hidden="true"><use href="#g-arrow"/></svg></button>
+</nav>
+
+<!-- ============ LIGHTBOX ============ -->
+<div class="lp-lb" id="lb" role="dialog" aria-modal="true" aria-label="Photo viewer" data-testid="l3-lightbox" hidden>
+  <div class="lp-lb__top">
+    <p class="lp-lb__count" aria-live="polite" data-testid="l3-lightbox-count">Photo <span id="lb-n">1</span> of 4</p>
+    <button type="button" class="lp-lb__close" data-lb-close aria-label="Close photo viewer" data-testid="l3-lightbox-close">Close</button>
+  </div>
+  <figure class="lp-lb__figure">
+    <div class="lp-lb__frame">
+      <div class="lp-lb__stage"><img class="lp-lb__img" id="lb-img" alt="" src="img/work1.svg" data-testid="l3-lightbox-img"></div>
+      <button type="button" class="lp-lb__nav lp-lb__nav--prev" data-lb-prev aria-label="Previous photo" data-testid="l3-lightbox-prev"><svg class="lp-glyph lp-glyph--arrow" width="24" height="24" aria-hidden="true"><use href="#g-arrow"/></svg></button>
+      <button type="button" class="lp-lb__nav lp-lb__nav--next" data-lb-next aria-label="Next photo" data-testid="l3-lightbox-next"><svg class="lp-glyph lp-glyph--arrow" width="24" height="24" aria-hidden="true"><use href="#g-arrow"/></svg></button>
+    </div>
+    <figcaption class="lp-lb__caption" id="lb-cap" data-testid="l3-lightbox-caption"></figcaption>
+  </figure>
+</div>
+
+<!-- ============ FUNNEL STUB (the real 6-step funnel is the full-screen booking sheet; the landing only opens it) ============ -->
+<dialog class="mock-funnel" id="funnel" aria-labelledby="f-h">
+  <div class="mock-funnel__bar"><p class="lp-lbl">Step 1 of 6</p><button type="button" class="lp-lb__close" data-close style="color:var(--ink)">Close</button></div>
+  <div class="mock-funnel__body">
+    <p class="lp-lbl" style="color:var(--ink-2)">Let's find the right home charging setup for you</p>
+    <h2 class="lp-h2 lp-display" id="f-h">What's your installation postcode?</h2>
+    <label class="lp-lbl" for="f-pc">UK postcode</label>
+    <input class="lp-pc__in" id="f-pc" placeholder="e.g. SW1A 1AA" autocomplete="postal-code">
+    <p><button type="button" class="lp-btn lp-btn--lg" data-close style="margin-top:8px">Continue</button></p>
+    <p class="lp-small">Your postcode helps us confirm we cover your area.</p>
+    <p class="lp-small mock-funnel__stub">Prototype stand-in. The landing page only opens the funnel; the six steps are built elsewhere.</p>
+  </div>
+</dialog>
+
+<script src="mock.js"></script>
+</body>
+</html>

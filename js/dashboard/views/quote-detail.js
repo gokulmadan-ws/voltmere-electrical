@@ -13,7 +13,7 @@ import { bookingWhen, getBookableDays, getDaySlots } from '../../core/availabili
 import { QUOTE_VIA_LABELS } from '../../core/config.js';
 import { addDays, diffDays, fmtDayLong, fmtDayShort, parseDayKey, stampDay, stampTime, toStamp, weekdayOf, DAY_SHORT, MONTH_SHORT } from '../../core/dates.js';
 import { todayKey } from '../../core/clock.js';
-import { firstName, gbp, makeId } from '../../core/format.js';
+import { firstName, gbp, makeId, own } from '../../core/format.js';
 import { goBack, navigate, routeHref } from '../router.js';
 import { AnswerChips, answerSummaryLine, answersOf, isEnquiry, isOutsideNi, isPencilled } from '../shared/enquiry.js';
 import { QuotePill, ageText, brandLabel, nudgeHref, plural } from './quotes.js';
@@ -486,7 +486,7 @@ function CustomLineSheet({ open, line, onSave, onClose }) {
 /** How the quote goes out. Opens only after unsaved edits have been saved, so the preview is exactly what they get. */
 function SendSheet({ open, quoteId, resend, onPick, onClose }) {
   const state = useStore(selectAll);
-  const quote = state.quotes[quoteId] || null;
+  const quote = own(state.quotes, quoteId);
   const booking = quote ? state.bookings.find((b) => b.id === quote.bookingId) || null : null;
   if (!open || !quote || !booking) return html`<${Sheet} open=${false} title="Send" onClose=${onClose} />`;
   const first = firstName(quote.customerName);
@@ -1040,7 +1040,7 @@ function Builder({ quote, booking, state, nowStampStr }) {
 function QuoteScreen({ id }) {
   const state = useStore(selectAll);
   const nowDate = useNow(60000);
-  const quote = state.quotes ? state.quotes[id] : null;
+  const quote = own(state.quotes, id);
   if (!quote) return html`<${NotFound} what="quote" />`;
   const booking = state.bookings.find((b) => b.id === quote.bookingId) || null;
   return html`<${Builder} key=${quote.id} quote=${quote} booking=${booking} state=${state} nowStampStr=${toStamp(nowDate)} />`;

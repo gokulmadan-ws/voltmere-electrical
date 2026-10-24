@@ -1,5 +1,7 @@
 # V4: a real cross-device loop with no server (WhatsApp link handoff)
 
+Status: built and tested end to end across separate browsers (`tests/e2e/handoff-journey.mjs`). The "Problem" below is the brief it answered; `V4-API.md` documents the code and `DEMO-SCRIPT.md` shows the loop on two phones.
+
 Problem: the prototype stores everything in one browser's localStorage, so a booking made on a customer's phone never reaches Daniel's phone, and a quote link texted to a customer says "not valid on this device". A server would fix it; a static prototype cannot have one. But WhatsApp deep links ARE a real transport that needs no server, and Daniel lives in WhatsApp. So the loop becomes REAL across two phones, with the customer tapping "send" themselves:
 
 1. Customer finishes the funnel on THEIR phone. The confirmation offers "Send my enquiry to Daniel on WhatsApp": a real `https://wa.me/447885496800?text=...` link whose text lists the enquiry in plain words and ends with a link `dashboard.html#import=<payload>`. (In a real build his webhook does this silently; here it is the transport. Tag the button as a prototype idea: `data-proto`.) It also stays saved in the customer's own browser as today.

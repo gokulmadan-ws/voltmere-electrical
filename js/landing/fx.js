@@ -1,65 +1,76 @@
-// js/landing/fx.js: small motion helpers: scroll reveal (starts visible), condensing header flag, scroll spy, number tween.
-// Owner: L3 (landing page for 180 Electrical)
-import { useEffect, useRef, useState } from '../vendor/preact-htm.js';
+// js/landing/fx.js: small behaviour helpers for the landing page: reducedMotion, useMedia, the two "where is the red button" observers (useHeroCtaGone, useInPageCtaVisible) and the scroll spy.
+// LANDING-V5 (7): no scroll reveal, no condensing header, no loops. Owner: L3 (landing page for 180 Electrical); trimmed and extended by B1.
+import { useEffect, useState } from '../vendor/preact-htm.js';
+import { useMediaQuery } from '../ui/hooks.js';
 
 /** True when the visitor asked for less motion. Re-read on every call (cheap) so a change in system settings applies at once. */
 export function reducedMotion() {
   try { return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
 }
 
+/** True while the media query matches (ui/hooks.js useMediaQuery; the calculator's rates use useMedia('(min-width: 1200px)')). */
+export function useMedia(query) { return useMediaQuery(query); }
+
 /**
- * Scroll reveal. Everything is fully visible by default: only elements that are BELOW the fold at this moment get
- * data-rv="pending" (a small downward offset, never opacity 0, so a full-page screenshot, a thumbnail, a print or a
- * failed script still shows every word at full contrast), and data-rv="in" when they scroll into view. Elements that are
- * already on screen are left alone, so nothing flickers on load. Targets are [data-reveal]; the offset delay per item
- * comes from the inline --i variable (see .lp-rv in landing.css). Returns a cleanup function.
+ * How much of the top of the viewport the header covers right now: its own height while it is sticky (from 720px), 0 while it scrolls away (phones). Read from the header itself,
+ * so a breakpoint change in the css can never leave this stale. A button under a sticky header counts as out of view.
  */
-export function initReveal(root = document) {
-  if (reducedMotion() || typeof IntersectionObserver !== 'function') return () => {};
-  const targets = Array.from(root.querySelectorAll('[data-reveal]:not([data-rv])'));
-  if (!targets.length) return () => {};
-  const fold = window.innerHeight || 800;
-  const io = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
-      entry.target.setAttribute('data-rv', 'in');
-      io.unobserve(entry.target);
-    }
-  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.01 });
-  for (const el of targets) {
-    if (el.getBoundingClientRect().top > fold * 0.96) {
-      el.setAttribute('data-rv', 'pending');
-      io.observe(el);
-    }
-  }
-  // Safety net: anything still pending after a long wait that is on screen is released (an observer that never fires must not strand content).
-  const timer = setInterval(() => {
-    for (const el of root.querySelectorAll('[data-rv="pending"]')) {
-      const r = el.getBoundingClientRect();
-      if (r.top < window.innerHeight && r.bottom > 0) { el.setAttribute('data-rv', 'in'); io.unobserve(el); }
-    }
-  }, 2500);
-  return () => { io.disconnect(); clearInterval(timer); };
+function headerZone() {
+  const el = typeof document !== 'undefined' ? document.querySelector('[data-testid="lp-header"]') : null;
+  if (!el || getComputedStyle(el).position !== 'sticky') return 0;
+  return Math.round(el.getBoundingClientRect().height);
 }
 
-/** True once the page has scrolled past `after` pixels (the header condenses). One rAF-throttled passive listener. */
-export function useCondensed(after = 36) {
-  const [condensed, setCondensed] = useState(false);
+/**
+ * True once the hero's own quote button has scrolled out of view ABOVE the screen. Until then the hero button is the one red button on screen (the header's and the sticky bar's wait).
+ * With no IntersectionObserver, or no hero button to watch, it is always true: the bar and the header button must never be missing. Re-observes when the header becomes (or stops being)
+ * sticky at a breakpoint.
+ */
+export function useHeroCtaGone() {
+  const [gone, setGone] = useState(typeof IntersectionObserver !== 'function');
+  const sticky = useMedia('(min-width: 720px)');
+  const tall = useMedia('(min-width: 1024px)');
   useEffect(() => {
-    let queued = false;
-    const read = () => { queued = false; setCondensed((window.scrollY || document.documentElement.scrollTop || 0) > after); };
-    const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(read); } };
-    read();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [after]);
-  return condensed;
+    const target = document.querySelector('[data-testid="hero-cta"]');
+    if (typeof IntersectionObserver !== 'function' || !target) { setGone(true); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      const e = entries[entries.length - 1];
+      const top = e.rootBounds ? e.rootBounds.top : 0;
+      setGone(!e.isIntersecting && e.boundingClientRect.top < top);
+    }, { rootMargin: `-${headerZone()}px 0px 0px 0px`, threshold: 0 });
+    io.observe(target);
+    return () => io.disconnect();
+  }, [sticky, tall]);
+  return gone;
+}
+
+/**
+ * True while any block marked data-sticky-hide (the postcode section, the final band) is on screen. Those blocks carry their own red button, so the header's and the sticky bar's
+ * step aside: one red "Get my installation quote" at a time. `ready` is true once the sections below the hero are in the page (js/landing/ready.js): the blocks do not exist before,
+ * so the observer is set up again then. With no IntersectionObserver the answer is always false.
+ */
+export function useInPageCtaVisible(ready = true) {
+  const [blocked, setBlocked] = useState(false);
+  const sticky = useMedia('(min-width: 720px)');
+  const tall = useMedia('(min-width: 1024px)');
+  useEffect(() => {
+    const targets = Array.from(document.querySelectorAll('[data-sticky-hide]'));
+    if (typeof IntersectionObserver !== 'function' || !targets.length) { setBlocked(false); return undefined; }
+    const seen = new Map();
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) seen.set(e.target, e.isIntersecting);
+      setBlocked(Array.from(seen.values()).some(Boolean));
+    }, { rootMargin: `-${headerZone()}px 0px 0px 0px`, threshold: 0 }); // a block hidden under the sticky header is not on screen
+    for (const t of targets) io.observe(t);
+    return () => io.disconnect();
+  }, [ready, sticky, tall]);
+  return blocked;
 }
 
 /** The id of the section nearest the middle of the screen, from a list of element ids ('' while none is). */
-export function useScrollSpy(ids) {
+export function useScrollSpy(ids, sectionsReady = true) {
   const [active, setActive] = useState('');
-  const key = ids.join('|');
+  const key = ids.join('|') + (sectionsReady ? '|ready' : '');
   useEffect(() => {
     if (typeof IntersectionObserver !== 'function') return undefined;
     const seen = new Map();
@@ -72,34 +83,4 @@ export function useScrollSpy(ids) {
     return () => io.disconnect();
   }, [key]);
   return active;
-}
-
-/**
- * A number that glides to `target` (ease-out cubic over `ms`). With reduced motion, or on the first render, it is the
- * target at once. Uses the animation frame timestamp, never the wall clock.
- */
-export function useTween(target, ms = 650) {
-  const [value, setValue] = useState(target);
-  const from = useRef(target);
-  const shown = useRef(target);
-  const first = useRef(true);
-  useEffect(() => {
-    if (first.current) { first.current = false; from.current = target; shown.current = target; setValue(target); return undefined; }
-    if (reducedMotion() || typeof requestAnimationFrame !== 'function') { from.current = target; shown.current = target; setValue(target); return undefined; }
-    const start = shown.current;
-    let t0 = null;
-    let raf = 0;
-    const step = (ts) => {
-      if (t0 === null) t0 = ts;
-      const p = Math.min(1, (ts - t0) / ms);
-      const eased = 1 - Math.pow(1 - p, 3);
-      const v = start + (target - start) * eased;
-      shown.current = v;
-      setValue(v);
-      if (p < 1) raf = requestAnimationFrame(step); else { shown.current = target; setValue(target); }
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [target, ms]);
-  return value;
 }

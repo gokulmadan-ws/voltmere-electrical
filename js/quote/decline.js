@@ -1,8 +1,12 @@
 // js/quote/decline.js: the "Not for me" flow: an optional reason chip and note, then declineQuote (same-browser mode; link mode is js/quote/reply.js).
 // Owner: Q2 (customer quote page)
 import { html, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
-import { Banner, Button, Field, Sheet, Textarea, cx } from '../ui/index.js';
-import { StepFocus } from './parts.js';
+import { Banner } from '../ui/display.js';
+import { Button } from '../ui/button.js';
+import { Field, Textarea } from '../ui/form.js';
+import { Sheet } from '../ui/sheet.js';
+import { cx } from '../ui/util.js';
+import { SheetBar, StepFocus } from './parts.js';
 import { declineQuote } from '../core/store.js';
 
 export const DECLINE_REASONS = [
@@ -25,9 +29,9 @@ function failureText(result, brand) {
     case 'not_found':
       return { close: true };
     case 'storage_full':
-      return { text: `Your device has no room left to save this, so nothing was changed. Free up some space and try again, or call ${brand.ownerFirst}.` };
+      return { text: 'Your device has no room left to save this, so nothing was changed. Free up some space and try again, or call us.' };
     default:
-      return { text: `Something went wrong and nothing was changed. Please try again, or call ${brand.ownerFirst} on ${brand.phone}.` };
+      return { text: `Something went wrong and nothing was changed. Please try again, or call us on ${brand.phone}.` };
   }
 }
 
@@ -65,9 +69,10 @@ export function DeclineFlow({ open, d, brand, onClose, onDeclined }) {
       <${Button} variant="secondary" size="lg" block onClick=${submit} data-testid="q2-decline-confirm">Decline quote<//>
     </div>`;
 
-  return html`<${Sheet} open=${open} size="auto" title="Not for you?" onClose=${onClose} footer=${footer}
+  const header = html`<${SheetBar} brand=${brand} title="Not for you?" onClose=${onClose} />`;
+  return html`<${Sheet} open=${open} size="auto" title="Not for you?" header=${header} onClose=${onClose} footer=${footer}
     initialFocus="[data-q2-focus]" testid="q2-decline-sheet">
-    <${StepFocus} class="q2-sheet__lead">No problem. If you tell ${brand.ownerFirst} why, it helps. You can also skip this.<//>
+    <${StepFocus} class="q2-sheet__lead">No problem. If you tell us why, it helps. You can also skip this.<//>
     <fieldset class="q2-reasons" data-testid="q2-reasons">
       <legend class="q2-reasons__legend">Why? <span class="q2-muted">(optional)</span></legend>
       <div class="q2-reasons__list">
@@ -75,11 +80,12 @@ export function DeclineFlow({ open, d, brand, onClose, onDeclined }) {
           <label class=${cx('q2-reason', reasonId === r.id && 'is-selected')} key=${r.id} data-testid=${`q2-reason-${r.id}`}>
             <input class="q2-reason__input" type="radio" name="q2-reason" value=${r.id} checked=${reasonId === r.id} onChange=${() => setReasonId(r.id)} />
             <span>${r.label}</span>
+            <span class="q2-reason__tick" aria-hidden="true"></span>
           </label>`)}
       </div>
     </fieldset>
     <div class="q2-sheet__field">
-      <${Field} label=${`Anything else you'd like ${brand.ownerFirst} to know? (optional)`} id="q2-decline-note">
+      <${Field} label="Anything else you'd like us to know? (optional)" id="q2-decline-note">
         <${Textarea} id="q2-decline-note" rows=${3} value=${note} maxlength="140" onInput=${(e) => setNote(e.target.value)} data-testid="q2-reason-note" />
       <//>
     </div>

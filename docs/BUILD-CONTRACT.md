@@ -1,3 +1,5 @@
+> **HISTORICAL: this is the v1 spec, kept for reference only.** It describes the first prototype (a general one-van electrician booking site under an earlier working name, with fixed prices, EICR and fault-finding jobs, the first colours and a "3-minute demo"). It has been superseded: [`V3-SPEC.md`](V3-SPEC.md) (180 Electrical, quote-led home EV chargers, quotes, pipeline, simulated connections) and [`V4-HANDOFF.md`](V4-HANDOFF.md) (the real WhatsApp link loop between two phones) win wherever they differ, and [`V3-API.md`](V3-API.md) and [`V4-API.md`](V4-API.md) document the code as it is now. For how to run, demo and extend the prototype today, start with the root [`README.md`](../README.md). Do not treat anything below as current copy, pricing, branding, demo script or file ownership.
+
 # BUILD CONTRACT: Voltmere Electrical booking platform (prototype)
 
 > Status: FROZEN. Version 1.1 (integration-risk critic pass applied; the change log is the last section), written 2026-10-23 (a Friday) by the lead architect.

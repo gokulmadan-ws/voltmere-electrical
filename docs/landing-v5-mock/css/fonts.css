@@ -1,0 +1,17 @@
+/* css/fonts.css: @font-face for the local variable fonts.
+   Archivo (public pages: landing, funnel, quote): one family, weight 100-900 and width 62-125 axes, normal + italic, latin subset.
+   Inter + Manrope stay for the owner dashboard. No web fonts, no CDN. SIL OFL 1.1 (fonts/LICENSE-archivo-OFL.txt). */
+@font-face { font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+  src: url('../fonts/archivo-latin-wdth-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Archivo'; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+  src: url('../fonts/archivo-latin-wdth-italic.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+/* Metric-matched fallbacks, so the swap moves nothing: measured against Arial (Liberation Sans) at 100px, ascent 0.878 / descent 0.210 for Archivo.
+   Body (width 100, weight 400): Archivo is 98% as wide as Arial. Display (width 108, weight 650) is 105% as wide as Arial Bold. */
+@font-face { font-family: 'Archivo Fallback'; src: local('Arial'), local('Helvetica Neue'), local('Helvetica'), local('Liberation Sans');
+  size-adjust: 98%; ascent-override: 89.6%; descent-override: 21.4%; line-gap-override: 0%; }
+@font-face { font-family: 'Archivo Fallback Display'; font-weight: 700; src: local('Arial Bold'), local('Arial-BoldMT'), local('Helvetica Neue Bold'), local('Liberation Sans Bold');
+  size-adjust: 105%; ascent-override: 83.6%; descent-override: 20%; line-gap-override: 0%; }
+
+/* (production css/fonts.css keeps its Inter and Manrope faces below this line for the owner dashboard; the mock does not need them.) */
