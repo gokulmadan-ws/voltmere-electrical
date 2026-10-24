@@ -1,5 +1,5 @@
 // js/dashboard/shell.js: the dashboard shell (strip, header, tab bar, sidebar, FAB) and the lazy view loader.
-// Owner: WP2
+// Owner: WP2 (brand lockup for 180 Electrical by role B2)
 import { html, h, useErrorBoundary, useEffect, useLayoutEffect, useReducer, useRef } from '../vendor/preact-htm.js';
 import {
   BrandMark, Button, Card, Icon, IconButton, PrototypeNotice, Skeleton, ThemeToggle,
@@ -49,8 +49,11 @@ function Header() {
   return html`<header class="db-header" data-testid="db-header">
     <div class="db-header__inner">
       <a class="db-header__brand" href=${routeHref('today')}>
-        <${BrandMark} size=${32} />
-        <span class="db-header__name">${shortName}</span>
+        <${BrandMark} size=${34} />
+        <span class="db-brand__text">
+          <span class="db-header__name">${shortName}</span>
+          <span class="db-brand__sub">Owner dashboard</span>
+        </span>
       </a>
       <div class="db-header__actions">
         <${IconButton} icon="message-circle" label=${unread > 0 ? `Messages, ${unread} new` : 'Messages'} href=${routeHref('messages')}
@@ -104,8 +107,11 @@ function Sidebar({ route }) {
   return html`<aside class="db-sidebar" data-testid="sidebar">
     <nav class="db-sidebar__nav" aria-label="Main">
       <a class="db-sidebar__brand" href=${routeHref('today')}>
-        <${BrandMark} size=${36} />
-        <span class="db-sidebar__name">${shortName}</span>
+        <${BrandMark} size=${38} />
+        <span class="db-brand__text">
+          <span class="db-sidebar__name">${shortName}</span>
+          <span class="db-brand__sub">Owner dashboard</span>
+        </span>
       </a>
       <ul class="db-nav">
         ${SIDEBAR_MAIN.map((item) => html`<${SidebarItem} key=${item.id} item=${item} route=${route} badge=${item.id === 'messages' ? unread : 0} />`)}

@@ -15,6 +15,7 @@ import {
   addBlock, addDaysOff, blockRange, getState, removeBlock, removeBlockGroup, removeDayOff, setDayFull
 } from '../../core/store.js';
 import { navigate, routeHref } from '../router.js';
+import { BookingPill, isPencilled } from '../shared/enquiry.js';
 
 export const title = 'Calendar';
 export const css = ['css/calendar.css'];
@@ -157,19 +158,20 @@ function BookingCard({ booking, ids, compact }) {
   const who = firstName(booking.customer.name);
   const service = booking.variantLabel ? `${booking.serviceName}, ${booking.variantLabel}` : booking.serviceName;
   const mod = modOf(booking.status);
+  const pencil = isPencilled(booking);
   if (compact) {
-    return html`<a class=${cx('cal-booking', 'cal-booking--compact', `cal-booking--${mod}`)}
+    return html`<a class=${cx('cal-booking', 'cal-booking--compact', `cal-booking--${mod}`, pencil && 'cal-booking--pencil')}
       href=${routeHref('bookings', { id: booking.id })} data-testid=${`calendar-booking-${booking.id}`}>
       <span class="cal-booking__who"><${Icon} name=${STATUS_ICON[booking.status] || 'bell'} size=${14} /><span class="cal-booking__name">${who}</span></span>
       <span class="cal-booking__svc">${service}</span>
-      <span class="u-sr-only">${`${bookingWindowLabel(booking)}, ${booking.paid === false && booking.status === 'done' ? 'To collect' : booking.status.replace(/_/g, ' ')}`}</span>
+      <span class="u-sr-only">${`${bookingWindowLabel(booking)}, ${pencil ? 'pencilled in' : booking.paid === false && booking.status === 'done' && booking.serviceId !== 'ev_quote' ? 'To collect' : booking.status.replace(/_/g, ' ')}`}</span>
     </a>`;
   }
-  return html`<a class=${cx('cal-booking', ids.length > 1 && 'cal-booking--half', `cal-booking--${mod}`)}
+  return html`<a class=${cx('cal-booking', ids.length > 1 && 'cal-booking--half', `cal-booking--${mod}`, pencil && 'cal-booking--pencil')}
     href=${routeHref('bookings', { id: booking.id })} data-testid=${`calendar-booking-${booking.id}`}>
     <span class="cal-booking__top">
       <span class="cal-booking__service">${service}</span>
-      <${StatusPill} status=${booking.status} paid=${booking.paid} compact />
+      <${BookingPill} booking=${booking} compact />
     </span>
     <span class="cal-booking__meta">${`${who} · ${bookingWindowLabel(booking)}`}</span>
   </a>`;
@@ -516,7 +518,7 @@ export default function CalendarView({ route }) {
           <li><span class="cal-day__dot cal-day__dot--full" aria-hidden="true"></span>Full or closed</li>
           <li><span class="cal-day__dot cal-day__dot--hatch" aria-hidden="true"></span>Blocked</li>
         </ul>
-        <p class="cal-legend__note">Customers book from this diary. Free here means bookable on your website.</p>
+        <p class="cal-legend__note">Free here means your website can pencil a survey visit into it.</p>
         <${TextLink} href=${pageHref('index.html', '#book')} target=${pageTarget('index.html')} data-testid="calendar-preview-site">Preview customer view<//>
       </section>
     </div>

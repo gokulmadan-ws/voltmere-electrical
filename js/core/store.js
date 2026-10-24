@@ -1,11 +1,12 @@
 // js/core/store.js: the persisted store (localStorage with memory fallback), every mutation, cross-tab sync and undo
 // Owner: WP1
 import {
-  EMERGENCY_REASONS, HALF_DAY_STARTS, KIND_LABELS, PAID_METHODS, PROMISES, SCHEMA_VERSION, SOURCES, STORAGE_KEYS, WINDOWS, makeDefaultSettings
+  EMERGENCY_REASONS, HALF_DAY_STARTS, KIND_LABELS, PAID_METHODS, PROMISES, SCHEMA_VERSION, SOURCES, STORAGE_KEYS, WINDOWS,
+  makeDefaultBusiness, makeDefaultSettings, normaliseAnswers
 } from './config.js';
 import { now, nowStamp, todayKey } from './clock.js';
 import { addDays, addMinutes, isDayKey, makeStamp, stampDay } from './dates.js';
-import { bookingWindowIds, bookingWhen, isSlotFree, nextFreeSlot, nextFreeSlots, occupiedBy } from './availability.js';
+import { bookingWindowIds, bookingWhen, isSlotFree, isUnscheduled, nextFreeSlot, nextFreeSlots, occupiedBy } from './availability.js';
 import {
   makeId, normaliseDemoPhone, normalisePhone, normalisePostcode, postcodeZone,
   validateLine1, validateName, validatePhone, validatePostcode
@@ -24,7 +25,8 @@ let listenersInstalled = false;
 const subscribers = new Set();
 const tokens = new Map(); // undo tokens live in memory only (max 20)
 const MAX_TOKENS = 20;
-const MIGRATIONS = {}; // none yet: a missing migration discards the (demo) data and reseeds
+// A missing migration discards the (demo) data and reseeds. v1 -> v2 is the move to the 180 Electrical model (see migrateV1).
+const MIGRATIONS = { 1: (old) => migrateV1(old) };
 
 const fail = (reason, extra = {}) => ({ ok: false, reason, ...extra });
 
@@ -87,6 +89,52 @@ function looksValid(st) {
     && Array.isArray(st.settings.daysOff) && Array.isArray(st.settings.fullDays)
     && !!st.meta && typeof st.meta === 'object' && Number.isFinite(st.meta.rev) && Number.isFinite(st.meta.msgSeq)
     && Number.isFinite(st.refSeq) && typeof st.seededFor === 'string';
+}
+
+// An older "v1" state (the generic electrician, or the first 180 rebrand) gains the new fields and services. Demo records
+// (seed: true) are dropped and seededFor is cleared so the next load re-seeds them EV-led; whatever the owner or a customer
+// made is kept. The old placeholder contact details are swapped for his real ones, anything else he edited stays.
+function migrateV1(old) {
+  const next = clone(old);
+  const base = makeDefaultSettings();
+  const settings = next.settings && typeof next.settings === 'object' ? next.settings : {};
+  const biz = settings.business && typeof settings.business === 'object' ? settings.business : {};
+  const wasGeneric = Array.isArray(biz.coveredOutward) && biz.coveredOutward.includes('MB1'); // the old fictional area
+  const merged = wasGeneric ? makeDefaultBusiness() : { ...makeDefaultBusiness(), ...biz };
+  if (merged.phone === '07700 900412') merged.phone = base.business.phone;
+  if (typeof merged.email === 'string' && merged.email.endsWith('.example')) merged.email = base.business.email;
+  if (merged.ownerFirstName === 'Dan' && merged.ownerFullName === 'Dan') {
+    merged.ownerFirstName = base.business.ownerFirstName;
+    merged.ownerFullName = base.business.ownerFullName;
+  }
+  if (!Array.isArray(merged.credentials)) merged.credentials = base.business.credentials;
+  if (!Array.isArray(merged.brands)) merged.brands = base.business.brands;
+  if (merged.schemeLine && /\(sample\)/.test(merged.schemeLine)) merged.schemeLine = '';
+  if (merged.insuranceLine && /\(sample\)/.test(merged.insuranceLine)) merged.insuranceLine = '';
+  settings.business = merged;
+
+  const stored = Array.isArray(settings.services) ? settings.services : [];
+  const services = base.services.map((def) => {
+    const had = stored.find((x) => x && x.id === def.id);
+    if (!had) return def;
+    if (def.id === 'ev_quote' || def.id === 'ev') {
+      const price = def.id === 'ev' && Number.isInteger(had.price) && had.price >= 0 ? had.price : def.price;
+      return { ...def, price, active: had.active !== false };
+    }
+    return { ...had, showOnWebsite: had.showOnWebsite === true };
+  });
+  for (const extra of stored) if (extra && !services.some((x) => x.id === extra.id)) services.push({ ...extra, showOnWebsite: extra.showOnWebsite === true });
+  settings.services = services;
+  settings.takingEmergencies = false;
+  if (!['auto', 'light', 'dark'].includes(settings.theme)) settings.theme = base.theme;
+  next.settings = settings;
+
+  next.bookings = (Array.isArray(next.bookings) ? next.bookings : []).filter((b) => b && !b.seed);
+  next.blocks = (Array.isArray(next.blocks) ? next.blocks : []).filter((b) => b && !b.seed);
+  next.messages = (Array.isArray(next.messages) ? next.messages : []).filter((m) => m && !m.seed);
+  next.seededFor = ''; // not today: initStore runs the rollover, which seeds fresh demo records around the kept ones
+  next.v = 2;
+  return next;
 }
 
 /** Parse + migrate + validate. Returns a State or null (garbage, newer schema, missing migration). */
@@ -367,6 +415,14 @@ function createBookingIn(draft, input) {
   const notes = String(d.notes === undefined || d.notes === null ? '' : d.notes).trim().slice(0, 300);
   const serviceId = urgent ? 'emergency' : d.serviceId;
   const service = settings.services.find((s) => s.id === serviceId) || null;
+  // The free survey is an enquiry: only the postcode is required, it is never auto-confirmed, and with `pencil: true` and no
+  // window given the engine pencils in the next free window itself (provisional until the owner confirms or moves it).
+  const isEnquiry = !urgent && serviceId === 'ev_quote';
+  const given = d.window && typeof d.window === 'object' ? d.window : d;
+  const date = given.date;
+  const windowId = given.windowId;
+  const missing = (v) => v === undefined || v === null || v === '';
+  const autoPencil = isEnquiry && d.pencil === true && missing(date) && missing(windowId);
 
   // CONTRACT-GAP: 13.2.3 fixes the messages for name, phone, postcode and line1 only; the other three are chosen here.
   const errors = {};
@@ -378,11 +434,15 @@ function createBookingIn(draft, input) {
   const postcodeError = validatePostcode(addr.postcode);
   if (postcodeError) errors.postcode = postcodeError;
   if (!urgent) {
-    const line1Error = validateLine1(addr.line1);
-    if (line1Error) errors.line1 = line1Error;
-    if (!isDayKey(d.date)) errors.date = 'Choose a day';
-    if (!Number.isInteger(d.windowId) || d.windowId < 0 || d.windowId > 3) errors.windowId = 'Choose a time';
-    else if (service && service.blocks === 2 && !HALF_DAY_STARTS.includes(d.windowId)) errors.windowId = 'Choose morning or afternoon';
+    if (!isEnquiry) {
+      const line1Error = validateLine1(addr.line1);
+      if (line1Error) errors.line1 = line1Error;
+    }
+    if (!autoPencil) {
+      if (!isDayKey(date)) errors.date = 'Choose a day';
+      if (!Number.isInteger(windowId) || windowId < 0 || windowId > 3) errors.windowId = 'Choose a time';
+      else if (service && service.blocks === 2 && !HALF_DAY_STARTS.includes(windowId)) errors.windowId = 'Choose morning or afternoon';
+    }
   }
   const reasons = urgent
     ? [...new Set((Array.isArray(d.emergencyReasons) ? d.emergencyReasons : []).filter((id) => EMERGENCY_REASONS.some((r) => r.id === id)))]
@@ -394,7 +454,19 @@ function createBookingIn(draft, input) {
   if (urgent && !settings.takingEmergencies) return fail('emergencies_off');
 
   const blocks = urgent ? 0 : service.blocks === 2 ? 2 : 1;
-  if (!urgent && !isSlotFree(draft, { date: d.date, windowId: d.windowId, blocks, ownerMode: asOwner })) {
+  let startDate = date;
+  let startWindow = windowId;
+  let unscheduled = false;
+  if (autoPencil) {
+    // Never lose an enquiry because the diary is full: with no free window it is kept unscheduled and the owner places it.
+    const slot = nextFreeSlot(draft, service.id, { ownerMode: asOwner });
+    if (slot) {
+      startDate = slot.date;
+      startWindow = slot.windowId;
+    } else {
+      unscheduled = true;
+    }
+  } else if (!urgent && !isSlotFree(draft, { date, windowId, blocks, ownerMode: asOwner })) {
     return fail('slot_taken', { alternatives: nextFreeSlots(draft, service.id, 3, { ownerMode: asOwner }) });
   }
 
@@ -404,26 +476,27 @@ function createBookingIn(draft, input) {
     variant = service.variants.find((v) => v.id === d.variantId) || service.variants.find((v) => v.id === service.defaultVariantId) || null;
   }
   let refNumber = draft.refSeq;
-  while (draft.bookings.some((b) => b.ref === `VM-${refNumber}`)) refNumber += 1;
+  while (draft.bookings.some((b) => b.ref === `EL-${refNumber}`)) refNumber += 1;
   draft.refSeq = refNumber + 1;
   let id = makeId('bk');
   while (draft.bookings.some((b) => b.id === id)) id = makeId('bk');
 
   const ownerPrice = asOwner && Number.isFinite(d.quotedPrice) && d.quotedPrice >= 0 ? Math.round(d.quotedPrice) : null;
   const zone = postcodeZone(addr.postcode, settings.business);
-  const status = urgent ? 'new' : asOwner ? 'confirmed' : settings.autoConfirm && zone === 'covered' ? 'confirmed' : 'new';
+  const status = urgent ? 'new' : asOwner ? 'confirmed' : isEnquiry ? 'new' : settings.autoConfirm && zone === 'covered' ? 'confirmed' : 'new';
+  const answers = normaliseAnswers(d.answers, addr.postcode);
   // CONTRACT-GAP: an owner-entered booking with no source is a phone booking (the owner's most common entry).
   const source = SOURCES.includes(d.source) ? d.source : asOwner ? 'phone' : 'website';
   const booking = {
     id,
-    ref: `VM-${refNumber}`,
+    ref: `EL-${refNumber}`,
     createdAt: created,
     serviceId: service.id,
     serviceName: service.name,
     variantId: variant ? variant.id : null,
     variantLabel: variant ? variant.label : '',
-    start: urgent ? created : makeStamp(d.date, WINDOWS[d.windowId].start),
-    durationMin: urgent ? 0 : blocks * 120,
+    start: urgent || unscheduled ? created : makeStamp(startDate, WINDOWS[startWindow].start),
+    durationMin: urgent || unscheduled ? 0 : blocks * 120,
     status,
     urgent,
     emergencyReasons: reasons,
@@ -446,6 +519,8 @@ function createBookingIn(draft, input) {
     seed: false,
     history: []
   };
+  if (answers) booking.answers = answers;
+  if (autoPencil && !unscheduled && status === 'new') booking.tentative = true; // provisional until the owner confirms or moves it
   addHistory(booking, 'created', asOwner ? 'owner' : 'customer', source);
   if (status === 'confirmed') addHistory(booking, 'confirmed', asOwner ? 'owner' : 'system');
   draft.bookings.push(booking);
@@ -469,9 +544,15 @@ function createBookingIn(draft, input) {
   return { ok: true, booking, messages };
 }
 
-/** Create a booking (customer or owner). Validates and re-checks the slot inside the read-modify-write. */
-export function createBooking(draftInput) {
-  return mutate((draft) => createBookingIn(draft, draftInput));
+/**
+ * Create a booking (customer or owner). Validates and re-checks the slot inside the read-modify-write.
+ * `opts.pencil` is the same as `input.pencil` (pencil the next free survey window when the input names none).
+ */
+export function createBooking(draftInput, opts = {}) {
+  const input = opts && opts.pencil && draftInput && typeof draftInput === 'object' && draftInput.pencil === undefined
+    ? { ...draftInput, pencil: true }
+    : draftInput;
+  return mutate((draft) => createBookingIn(draft, input));
 }
 
 // ---------- status changes (7.5) ----------
@@ -489,7 +570,9 @@ export function confirmBooking(id, by = 'owner') {
     const b = liveBooking(draft, id);
     if (!b) return fail('not_found');
     if (b.status !== 'new' || b.urgent) return fail('bad_transition');
+    if (isUnscheduled(b)) return fail('unscheduled'); // an enquiry with no window yet: move it into the diary first
     b.status = 'confirmed';
+    if (b.tentative) b.tentative = false; // the provisional survey is now firm
     b.seenByOwner = true; // CONTRACT-GAP: acting on a booking counts as having seen it (so the Bookings dot clears)
     addHistory(b, 'confirmed', by === 'system' ? 'system' : 'owner');
     const reminder = maybeReminder(draft, b);
@@ -522,6 +605,7 @@ export function declineBooking(id) {
     b.status = 'cancelled';
     b.cancelledBy = 'owner';
     b.cancelReason = 'declined';
+    if (b.tentative) b.tentative = false;
     b.seenByOwner = true;
     addHistory(b, 'declined', 'owner');
     const removed = dropUnsent(draft, b.id);
@@ -620,6 +704,7 @@ export function cancelBooking(id, by, { reason = '', notify = true } = {}) {
     b.status = 'cancelled';
     b.cancelledBy = by;
     b.cancelReason = why;
+    if (b.tentative) b.tentative = false;
     addHistory(b, 'cancelled', by, why);
     const removed = dropUnsent(draft, b.id);
     const added = [];
@@ -637,7 +722,9 @@ export function rescheduleBooking(id, { date, windowId } = {}, by = 'owner', { n
     if (!owner && by !== 'customer') return fail('invalid', { errors: { by: 'Moved by the owner or the customer.' } });
     if (b.urgent || (b.status !== 'new' && b.status !== 'confirmed')) return fail(owner ? 'bad_transition' : 'not_allowed');
     if (!owner && isWithinChangeCutoff(b, nowStamp())) return fail('not_allowed');
-    const blocks = b.durationMin >= 240 ? 2 : 1;
+    // An enquiry with no window yet takes its length from the service when it is first placed.
+    const svc = isUnscheduled(b) ? draft.settings.services.find((x) => x.id === b.serviceId) : null;
+    const blocks = svc ? (svc.blocks === 2 ? 2 : 1) : b.durationMin >= 240 ? 2 : 1;
     const errors = {};
     if (!isDayKey(date)) errors.date = 'Choose a day';
     if (!Number.isInteger(windowId) || windowId < 0 || windowId > 3) errors.windowId = 'Choose a time';
@@ -648,6 +735,8 @@ export function rescheduleBooking(id, { date, windowId } = {}, by = 'owner', { n
     }
     const oldWhen = bookingWhen(b);
     b.start = makeStamp(date, WINDOWS[windowId].start);
+    if (!(b.durationMin > 0)) b.durationMin = blocks * 120;
+    if (owner && b.tentative) b.tentative = false; // the owner has chosen the time: no longer a provisional pencil mark
     const newWhen = bookingWhen(b);
     addHistory(b, 'rescheduled', by, newWhen);
     const removed = dropUnsent(draft, b.id);
@@ -875,7 +964,7 @@ export function updateSettings(patch = {}) {
       for (const key of TEXT_BUSINESS) {
         if (key in biz) nextBiz[key] = String(biz[key] === null || biz[key] === undefined ? '' : biz[key]).trim();
       }
-      for (const key of ['towns', 'coveredOutward', 'edgeOutward']) {
+      for (const key of ['towns', 'coveredOutward', 'edgeOutward', 'credentials', 'brands']) {
         if (Array.isArray(biz[key])) nextBiz[key] = biz[key].map((t) => String(t).trim()).filter(Boolean);
       }
     }
@@ -901,7 +990,7 @@ export function updateSettings(patch = {}) {
 
     const s = draft.settings;
     if (nextBiz.ownerFirstName && !('ownerFullName' in nextBiz) && nextBiz.ownerFirstName !== s.business.ownerFirstName) {
-      // Keep "Dan Mercer" coherent when only the first name is edited: swap the first word.
+      // Keep a full name such as "Dan Murphy" coherent when only the first name is edited: swap the first word.
       const rest = s.business.ownerFullName.trim().split(/\s+/).slice(1).join(' ');
       nextBiz.ownerFullName = rest ? `${nextBiz.ownerFirstName} ${rest}` : nextBiz.ownerFirstName;
     }
@@ -930,6 +1019,7 @@ export function updateService(id, patch = {}) {
     if ('name' in patch) service.name = String(patch.name).trim();
     if ('description' in patch) service.description = String(patch.description === null || patch.description === undefined ? '' : patch.description).trim();
     if ('active' in patch) service.active = !!patch.active;
+    if ('showOnWebsite' in patch) service.showOnWebsite = !!patch.showOnWebsite;
     if ('price' in patch && service.priceType !== 'free') service.price = patch.price;
     if ('variants' in patch) {
       for (const v of patch.variants) {
@@ -1010,10 +1100,12 @@ export function simulateIncomingBooking({ kind = 'standard' } = {}) {
     if (kind === 'emergency') {
       input = { ...base, serviceId: 'emergency', urgent: true, date: todayKey(), windowId: null, emergencyReasons: ['no_power'], notes: 'Power went off suddenly' };
     } else {
-      const slot = nextFreeSlot(draft, 'fault');
-      if (!slot) return fail('slot_taken');
-      // An edge-zone postcode forces the "needs your OK" path.
-      input = { ...base, serviceId: 'fault', date: slot.date, windowId: slot.windowId, address: { ...base.address, postcode: kind === 'approval' ? 'MB11 5HD' : person.postcode } };
+      // A website enquiry like the funnel makes: the postcode and the four answers, and the next free survey window pencilled in.
+      // A postcode outside Northern Ireland (not BT) is the "check before you confirm" case.
+      input = {
+        ...base, serviceId: 'ev_quote', pencil: true, answers: person.answers,
+        address: { line1: '', postcode: kind === 'approval' ? 'DG9 8PQ' : person.postcode }
+      };
     }
     const result = createBookingIn(draft, input);
     if (result.ok) draft.meta.simCursor += 1;

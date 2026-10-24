@@ -1,8 +1,8 @@
 // js/dashboard/views/today.js: the Today screen (needs you, next up, availability, stats, diary, tomorrow, share).
-// Owner: WP4
+// Owner: WP4, enquiry wording and answer chips by E2
 import { html } from '../../vendor/preact-htm.js';
 import {
-  Avatar, Banner, Button, Card, Chip, EmptyState, Icon, PageHeader, Stat, StatusPill, Switch,
+  Avatar, Banner, Button, Card, Chip, EmptyState, Icon, PageHeader, Stat, Switch,
   copyText, toast, showUndoToast, useNow, useStore
 } from '../../ui/index.js';
 import {
@@ -15,10 +15,11 @@ import {
   addDays, fmtClock, fmtDayShort, fmtRelativeDay, fmtTimeAgo, minutesBetween, stampDay, toStamp, weekDates, weekStart, weekdayOf
 } from '../../core/dates.js';
 import { EMERGENCY_REASONS, SITE_BASE_URL } from '../../core/config.js';
-import { firstName, gbp, outwardCode, plural, postcodeZone } from '../../core/format.js';
+import { firstName, gbp, outwardCode, plural } from '../../core/format.js';
 import { mapsLink, telLink, waLink, waShareLink } from '../../core/messages.js';
 import { addDaysOff, setDayFull } from '../../core/store.js';
 import { JobActionBar, NeedsYouActions } from '../shared/job-actions.js';
+import { AnswerChips, BookingPill, isEnquiry, isOutsideNi, isPencilled, pendingWord, priceLabel } from '../shared/enquiry.js';
 
 export const title = 'Today';
 export const css = ['css/today.css', 'css/bookings.css'];
@@ -44,7 +45,6 @@ function doneToast(message, token) {
 }
 
 const bookedJobsNote = (n) => (n === 1 ? ' 1 booked job stays in your diary.' : ` ${n} booked jobs stay in your diary.`);
-const priceOf = (b) => (b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice);
 
 /** A weekday with no open windows (Sunday by default) or a day marked off. */
 function isClosedDay(settings, day) {
@@ -60,32 +60,36 @@ function greeting(nowDate) {
 
 function NeedCard({ booking: b, brand, autoConfirm, nowStamp }) {
   const first = firstName(b.customer.name);
+  const enquiry = isEnquiry(b);
   const reasons = (b.emergencyReasons || [])
     .map((id) => (EMERGENCY_REASONS.find((r) => r.id === id) || {}).label)
     .filter(Boolean)
     .join(', ');
-  const zone = postcodeZone(b.address.postcode, brand);
   let flag = '';
   if (!b.urgent) {
-    if (zone === 'edge' || zone === 'outside') flag = 'Outside your usual area: confirm travel.';
-    else if (!autoConfirm) flag = 'Auto-confirm is off.';
+    if (isOutsideNi(b.address.postcode)) flag = 'Outside Northern Ireland: check you can travel before you confirm.';
+    else if (!autoConfirm && !enquiry) flag = 'Auto-confirm is off.';
   }
   const unseen = b.seenByOwner === false;
+  const outward = outwardCode(b.address.postcode);
+  const label = b.urgent ? `${first}, urgent emergency` : `New ${pendingWord(b)}: ${first}${outward ? `, ${outward}` : ''}`;
   return html`<${Card} as="article" class=${`td-need${b.urgent ? ' td-need--urgent' : ''}${unseen ? ' is-unseen' : ''}`}
-    data-testid=${`needs-you-card-${b.id}`} aria-label=${`${first}, ${b.urgent ? 'urgent emergency' : 'new request'}`}>
+    data-testid=${`needs-you-card-${b.id}`} aria-label=${label}>
     <div class="td-need__top">
       ${b.urgent
         ? html`<span class="ui-pill ui-pill--urgent"><${Icon} name="siren" size=${16} /><span class="ui-pill__label">URGENT</span></span>`
-        : html`<${StatusPill} status="new" />`}
+        : html`<${BookingPill} booking=${b} />`}
       ${unseen ? html`<span class="u-sr-only">Not opened yet</span>` : null}
     </div>
-    <p class="td-need__who"><a class="td-need__link" href=${`#/bookings/${b.id}`} data-testid=${`needs-you-open-${b.id}`}><strong>${first}</strong></a> · ${outwardCode(b.address.postcode)} · ${fmtTimeAgo(b.createdAt, nowStamp)}</p>
+    <p class="td-need__who"><a class="td-need__link" href=${`#/bookings/${b.id}`} data-testid=${`needs-you-open-${b.id}`}><strong>${first}</strong></a> · ${outward} · ${fmtTimeAgo(b.createdAt, nowStamp)}</p>
     ${b.urgent
       ? html`<div class="td-need__what">
           ${reasons ? html`<p class="td-need__line">${reasons}</p>` : null}
           ${b.notes ? html`<p class="td-need__note">“${b.notes}”</p>` : null}
         </div>`
-      : html`<p class="td-need__line">${b.serviceName}, ${bookingWhen(b)}</p>`}
+      : html`<p class="td-need__line">${enquiry ? `Free survey visit, ${bookingWhen(b)}` : `${b.serviceName}, ${bookingWhen(b)}`}</p>`}
+    <${AnswerChips} booking=${b} />
+    ${isPencilled(b) ? html`<p class="en-pencil-note" data-testid="needs-you-pencilled"><${Icon} name="clock" size=${16} /><span>Pencilled in. ${first} has been told it is provisional until you confirm.</span></p>` : null}
     ${flag ? html`<p class="td-need__flag"><${Icon} name="triangle-alert" size=${16} /><span>${flag}</span></p>` : null}
     <${NeedsYouActions} booking=${b} />
   <//>`;
@@ -137,13 +141,13 @@ function Tile({ icon, label, href, testid, external }) {
 function NextUp({ booking: b, state, brand, nowStamp, today }) {
   if (!b) {
     return html`<${Card} class="td-next td-next--empty">
-      <${EmptyState} icon="calendar-days" title="Nothing booked. Go put the kettle on." data-testid="today-empty" />
+      <${EmptyState} icon="calendar-days" title="No visits or installs coming up. Go put the kettle on." data-testid="today-empty" />
     <//>`;
   }
   const first = firstName(b.customer.name);
   const repeat = selectRepeatInfo(state, b).isRepeat;
   const addressText = [b.address.line1, b.address.postcode].filter(Boolean).join(', ');
-  const hello = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about your booking ${b.ref}.`;
+  const hello = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about your ${isEnquiry(b) ? 'enquiry' : 'booking'} ${b.ref}.`;
   return html`<${Card} as="section" class="td-next" data-testid="next-up" aria-labelledby="td-next-title">
     <div class="td-next__top">
       <h2 class="td-next__eyebrow" id="td-next-title">Next up</h2>
@@ -161,7 +165,8 @@ function NextUp({ booking: b, state, brand, nowStamp, today }) {
       <span>${addressText}</span>
     </a>
     ${b.notes ? html`<p class="td-next__note">“${b.notes}”</p>` : null}
-    <p class="td-next__price">${b.finalPrice === null || b.finalPrice === undefined ? gbp(b.quotedPrice) : gbp(b.finalPrice)}</p>
+    <${AnswerChips} booking=${b} />
+    <p class="td-next__price">${priceLabel(b)}</p>
     <div class="td-next__tiles">
       <${Tile} icon="navigation" label="Navigate" href=${mapsLink(b.address.line1, b.address.postcode)} testid="next-up-navigate" external />
       <${Tile} icon="phone" label="Call" href=${telLink(b.customer.phone)} testid="next-up-call" />
@@ -185,12 +190,12 @@ function Availability({ settings, today, jobsToday }) {
   const onToggle = (checked) => {
     const res = setDayFull(today, !checked);
     if (!res.ok) { failToast(res); return; }
-    doneToast(checked ? 'Taking bookings again today.' : 'Marked full for today. Customers cannot book today.', res.undoToken);
+    doneToast(checked ? 'Taking bookings again today.' : 'Marked full for today. No new survey visits will be pencilled in today.', res.undoToken);
   };
   const takeTomorrow = () => {
     const res = addDaysOff([tomorrow], 'Day off');
     if (!res.ok) { failToast(res); return; }
-    doneToast(`Tomorrow marked as a day off. Customers cannot book it.${res.bookedCount > 0 ? bookedJobsNote(res.bookedCount) : ''}`, res.undoToken);
+    doneToast(`Tomorrow marked as a day off. Nothing new can be pencilled in.${res.bookedCount > 0 ? bookedJobsNote(res.bookedCount) : ''}`, res.undoToken);
   };
   const takeWeek = () => {
     const res = addDaysOff(nextWeek, 'Holiday');
@@ -202,10 +207,10 @@ function Availability({ settings, today, jobsToday }) {
     <h2 class="td-card-title" id="td-avail-title">Availability</h2>
     <${Switch} id="td-taking-bookings" data-testid="today-taking-bookings" checked=${taking} disabled=${closedToday}
       label="Taking bookings today"
-      description=${closedToday ? 'Today is closed.' : taking ? 'Customers can book your free windows today.' : undefined}
+      description=${closedToday ? 'Today is closed.' : taking ? 'Survey visits can be pencilled into your free windows today.' : undefined}
       onChange=${onToggle} />
     ${!closedToday && !taking
-      ? html`<${Banner} tone="warn">Full today. New customers cannot book today.${jobsToday === 0 ? '' : jobsToday === 1 ? ' Your 1 job stays in your diary.' : ` Your ${jobsToday} jobs stay in your diary.`}<//>`
+      ? html`<${Banner} tone="warn">Full today. No new survey visits can be pencilled in today.${jobsToday === 0 ? '' : jobsToday === 1 ? ' Your 1 job stays in your diary.' : ` Your ${jobsToday} jobs stay in your diary.`}<//>`
       : null}
     <div class="td-btnrow">
       <${Button} size="sm" icon="calendar-x" disabled=${tomorrowOff} onClick=${takeTomorrow} data-testid="today-take-tomorrow-off">${tomorrowOff ? 'Tomorrow is off' : 'Take tomorrow off'}<//>
@@ -221,19 +226,19 @@ function Stats({ jobs, done, owedTotal, owedCount, nextFree }) {
     <${Stat} label="Jobs today" value=${jobs} hint=${jobs > 0 ? `${done} done` : undefined} data-testid="stat-jobs-today" />
     <${Stat} label="Owed to you" value=${gbp(owedTotal)} hint=${plural(owedCount, 'job')} tone=${owedCount > 0 ? 'accent' : undefined}
       href="#/insights" data-testid="stat-owed" />
-    <${Stat} class="td-stats__wide" label="Next free slot" value=${nextFree ? nextFree.human : 'None free'} hint="for repairs" data-testid="stat-next-free" />
+    <${Stat} class="td-stats__wide" label="Next free slot" value=${nextFree ? nextFree.human : 'None free'} hint="for free survey visits" data-testid="stat-next-free" />
   </section>`;
 }
 
 // ---------- 5. Today's diary ----------
 
 function JobRow({ booking: b, brand, nowStamp, compact }) {
-  const meta = [firstName(b.customer.name), outwardCode(b.address.postcode), gbp(priceOf(b))];
+  const meta = [firstName(b.customer.name), outwardCode(b.address.postcode), priceLabel(b)].filter(Boolean);
   if (b.urgent && b.etaAt && b.status !== 'done') meta.push(`ETA ${fmtClock(b.etaAt)}`);
   return html`<a class=${`td-row${compact ? ' td-row--compact' : ''}`} href=${`#/bookings/${b.id}`} data-testid=${compact ? undefined : `today-job-${b.id}`}>
     <span class="td-row__head">
       <span class="td-row__when">${bookingWindowLabel(b)}</span>
-      <${StatusPill} status=${b.status} paid=${b.paid} compact />
+      <${BookingPill} booking=${b} compact />
     </span>
     <span class="td-row__svc">${b.serviceName}</span>
     <span class="td-row__meta">${meta.join(' · ')}</span>
@@ -321,14 +326,14 @@ function Tomorrow({ state, brand, nowDate, nowStamp, today }) {
 
 function Share({ brand }) {
   const url = `${SITE_BASE_URL}index.html`;
-  const text = `Book ${brand.name} online: ${url}`;
+  const text = `Get a home EV charger quote from ${brand.name}: ${url}`;
   const onCopy = async () => {
     const ok = await copyText(url);
     toast({ message: ok ? 'Link copied' : 'Could not copy. Select the link and copy it.', tone: ok ? 'default' : 'danger' });
   };
   return html`<${Card} as="section" class="td-share" data-testid="share-card" aria-labelledby="td-share-title">
-    <h2 class="td-card-title" id="td-share-title">Your booking page</h2>
-    <p class="td-share__text">Send this link to customers. It shows your real diary.</p>
+    <h2 class="td-card-title" id="td-share-title">Your enquiry page</h2>
+    <p class="td-share__text">Send this link to customers. They answer your questions and a free survey visit is pencilled into your real diary.</p>
     <p class="td-share__url u-mono">${url}</p>
     <div class="td-btnrow">
       <${Button} size="sm" icon="send" href=${waShareLink(text)} data-testid="share-whatsapp">Send on WhatsApp<//>
@@ -352,7 +357,7 @@ export default function TodayView() {
   const jobsToday = todays.filter((b) => JOB_STATUSES.includes(b.status));
   const doneToday = jobsToday.filter((b) => b.status === 'done').length;
   const owed = selectOwed(state);
-  const nextFree = nextFreeSlot(state, 'fault', { now: nowDate });
+  const nextFree = nextFreeSlot(state, 'ev_quote', { now: nowDate });
   const closedToday = isClosedDay(state.settings, today);
 
   const needText = needs.length === 1 ? '1 needs you' : `${needs.length} need you`;

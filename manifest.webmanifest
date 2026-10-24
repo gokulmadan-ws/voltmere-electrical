@@ -1,12 +1,12 @@
 {
-  "name": "Voltmere Electrical",
-  "short_name": "Voltmere",
-  "description": "Prototype booking site and owner dashboard for a local electrician. Sample data.",
+  "name": "180 Electrical",
+  "short_name": "180",
+  "description": "Prototype enquiry site and owner dashboard for 180 Electrical, home EV charger installers in Northern Ireland. Sample data.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "browser",
-  "background_color": "#FBF8F2",
-  "theme_color": "#FBF8F2",
+  "background_color": "#0B0B0C",
+  "theme_color": "#0B0B0C",
   "icons": [
     { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" },

@@ -4,17 +4,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>Voltmere Electrical: Local electrician. Booked in 60 seconds.</title>
-  <meta name="description" content="Book Voltmere Electrical online in 60 seconds. Real availability, clear prices, a certificate with every job. Prototype with sample data.">
+  <title>180 Electrical: Home EV charger installation in Northern Ireland</title>
+  <meta name="description" content="Home EV charger installation across Northern Ireland. Answer a few short questions and get a free, no-obligation quote from 180 Electrical. Prototype with sample data.">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#FBF8F2" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0B1020" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0B0B0C">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-  <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="modulepreload" href="js/vendor/preact-htm.js">
   <link rel="modulepreload" href="js/ui/index.js">
   <link rel="modulepreload" href="js/core/store.js">
@@ -27,15 +26,20 @@
   <link rel="stylesheet" href="css/booking.css">
   <script>
     (function () {
-      try {
-        var t = localStorage.getItem('vm_theme');
-        if (t === 'light' || t === 'dark') {
-          document.documentElement.setAttribute('data-theme', t);
-          var c = t === 'dark' ? '#0B1020' : '#FBF8F2';
-          var m = document.querySelectorAll('meta[name="theme-color"]');
-          for (var i = 0; i < m.length; i++) m[i].setAttribute('content', c);
-        }
-      } catch (e) {}
+      // Dark is the default look: nothing saved means dark. 'auto' (explicit) follows the OS. Keeps the theme-color meta in step.
+      var t = 'dark';
+      try { var s = localStorage.getItem('vm_theme'); if (s === 'light' || s === 'dark' || s === 'auto') t = s; } catch (e) {}
+      var c = '#0B0B0C';
+      if (t === 'auto') {
+        var dark = true;
+        try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
+        c = dark ? '#0B0B0C' : '#F6F5F3';
+      } else {
+        document.documentElement.setAttribute('data-theme', t);
+        if (t === 'light') c = '#F6F5F3';
+      }
+      var m = document.querySelectorAll('meta[name="theme-color"]');
+      for (var i = 0; i < m.length; i++) m[i].setAttribute('content', c);
     })();
   </script>
 </head>

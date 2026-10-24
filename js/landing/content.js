@@ -1,102 +1,141 @@
-// js/landing/content.js: landing copy (reviews, FAQ, steps, trust items), the hero tile map and the booking link helpers.
-// Owner: WP3
-import { PROMISES } from '../core/config.js';
+// js/landing/content.js: landing copy (his verbatim words), photo paths, and the enquiry-start helpers that open the funnel.
+// Owner: C2 (landing page for 180 Electrical)
 import { bookHref, openBooking } from '../booking/nav.js';
 
-// Sample rating shown on the page. Always followed by a SampleTag or "(sample)" (3.6).
-export const RATING = { score: '4.9', outOf: 5, count: 212 };
+// The only service the website offers: the free survey and written quote (an enquiry, never a booking, never a price).
+export const ENQUIRY_SERVICE_ID = 'ev_quote';
 
-// Hero tiles (13.1 L3): the copy is fixed, the price and the icon come live from the service in the store.
-export const HERO_TILES = [
-  { id: 'fault', title: "Something's gone wrong", sub: 'Tripping, dead sockets, burning smell' },
-  { id: 'eicr', title: 'Landlord safety report', sub: 'EICR certificate' },
-  { id: 'sockets', title: 'Sockets, lights and small jobs', sub: '' },
-  { id: 'consumer', title: 'New fuse box', sub: 'Consumer unit upgrade' }
-];
+// Every CTA on his site has exactly this text.
+export const CTA_LABEL = 'Get my installation quote';
 
-// Icon use map of 4.9, used when a service in the store has no icon of its own.
-export const SERVICE_ICONS = {
-  fault: 'wrench', eicr: 'clipboard-check', consumer: 'toggle-right', sockets: 'lightbulb',
-  ev: 'plug-zap', rewire: 'file-text', emergency: 'siren'
+// His real photos, optimised copies placed by the lead. A photo that fails to load falls back to a neutral dark box.
+export const PHOTOS = {
+  logo: 'img/180/logo.jpg',
+  logoFallback: 'img/logo-180.png',
+  hero: 'img/180/hero-charger.jpg',
+  about: 'img/180/about.jpg',
+  work: ['img/180/work-1.jpg', 'img/180/work-2.jpg', 'img/180/work-3.jpg', 'img/180/work-4.jpg']
 };
 
-// Short labels for the EICR price chips (13.1 L6): Flat, 2–3 bed house, 4+ bed.
-export const VARIANT_SHORT = { flat: 'Flat', house: '2–3 bed house', large: '4+ bed' };
+// Alt text describes what a photo is, without inventing facts about it (no addresses, no charger models).
+export const PHOTO_ALT = {
+  hero: 'A home EV charger fitted to a house wall',
+  about: '180 Electrical installing a home EV charger',
+  work: [
+    'A recent home EV charger installation in Northern Ireland, photo 1',
+    'A recent home EV charger installation in Northern Ireland, photo 2',
+    'A recent home EV charger installation in Northern Ireland, photo 3',
+    'A recent home EV charger installation in Northern Ireland, photo 4'
+  ]
+};
 
-export const TRUST_ITEMS = [
-  { icon: 'star', title: `Rated ${RATING.score} out of ${RATING.outOf}`, sub: `${RATING.count} reviews`, sample: true },
-  { icon: 'shield-check', title: 'Part P registered', sub: 'Certificate with every job', sample: true },
-  { icon: 'badge-check', title: '£2m insured', sub: 'Public liability cover', sample: true },
-  { icon: 'receipt', title: 'Prices agreed first', sub: 'Fixed for standard jobs, written quote for bigger ones', sample: false }
-];
+export const HERO = {
+  eyebrow: 'Local EV charger installation',
+  title: 'Your own EV charger. Installed at home in Northern Ireland.',
+  sub: 'Make charging fit around your day. 180 Electrical helps homeowners across Northern Ireland choose and install the right charger for their home and vehicle.',
+  line1: 'Tell us a little about your home and what you need.',
+  line2: 'Free, no-obligation quote.',
+  ticks: ['Advice on charger options', 'Installation tailored to your property', 'Speak directly with 180 Electrical']
+};
 
-export const QUALIFICATIONS = ['City & Guilds 2365', '18th Edition', 'Inspection and Testing 2391', 'Part P registered'];
+// Used only when the store has no business.credentials / business.brands (they come live from Settings).
+export const DEFAULT_CREDENTIALS = ['Level 3 Electrical Installation', '2391 Inspection and Testing'];
+export const DEFAULT_BRANDS = ['ZAPPI', 'OHME', 'SYNC'];
 
-// The three sample reviews of 3.5 (copy exact). `who` is the byline, `job` the job type, `town` the tag.
-export const REVIEWS = [
-  {
-    quote: 'Fuse box kept tripping every evening. Dan found a faulty immersion heater in 40 minutes and quoted before he touched anything.',
-    name: 'Priya N.', who: 'Priya N.', job: 'Fault finding', town: 'Thornley Green'
-  },
-  {
-    quote: 'Needed an EICR for two flats with a tenant moving in Friday. Booked at 9pm, done Wednesday, certificate in my inbox that afternoon.',
-    name: 'Marcus T.', who: 'Marcus T., landlord', job: 'EICR safety report', town: 'Hollin Cross'
-  },
-  {
-    quote: 'Rang three firms and only Dan gave me a price and a time. Shoe covers on, hoovered up after. New consumer unit in one morning.',
-    name: 'Alison R.', who: 'Alison R.', job: 'New fuse box', town: 'Wexby'
-  }
-];
+export const TRUST_TITLE = 'Accredited and qualified';
 
-export function howSteps(b) {
-  const o = b.ownerFirst;
-  return [
-    { title: 'Pick a time', body: `You see ${o}'s real diary, not a we'll-call-you-back form.` },
-    { title: 'Get it in writing', body: 'Instant confirmation by WhatsApp or text, plus a reminder the evening before.' },
+export const WHY = {
+  title: 'Home charging that works around you.',
+  cards: [
+    { icon: 'house', title: "Charge while you're at home", body: 'Plug in when you arrive and charge around your routine.' },
+    { icon: 'list-checks', title: 'Choose with confidence', body: 'Get help choosing a charger suited to your vehicle, property and preferences.' },
+    { icon: 'gauge', title: 'Make the most of smart charging', body: 'Compatible chargers and suitable electricity tariffs can let you schedule charging for off-peak periods.' }
+  ]
+};
+
+export const ABOUT = {
+  title: 'Meet your local EV charger installers.',
+  p1: '180 Electrical installs home EV chargers for homeowners across Northern Ireland. We take time to understand your property and how you drive, then fit a charger that suits both.',
+  p2: 'Every visit is planned around a safe cable route and a tidy finish, so your charger looks like it belongs on your home.',
+  brandsLabel: 'Charger brands we install',
+  galleryEyebrow: 'Our recent work',
+  galleryTitle: 'Installations across Northern Ireland'
+};
+
+export const STEPS = {
+  title: 'From first enquiry to charging at home.',
+  items: [
+    { n: '01', title: 'Tell us about your home', body: 'Answer a few short questions about your location, parking and plans.' },
+    { n: '02', title: 'Discuss your installation', body: 'The team will review your enquiry and explain the next steps. Photos or a survey may be needed to prepare an accurate quote.' },
+    { n: '03', title: 'Arrange your installation', body: 'Once you are happy with the agreed quote and scope, arrange a suitable installation date.' }
+  ]
+};
+
+export const PRICING = {
+  title: 'Your installation, clearly quoted.',
+  body: 'Costs depend on your charger choice, cable route and any electrical work required. Tell us about your home so the team can advise on the next steps towards an accurate quote.'
+};
+
+export const AREA = {
+  title: 'EV charger installation in Northern Ireland.',
+  body: 'We install home chargers across Northern Ireland. If you are not sure, enter your postcode and we will check.',
+  note: 'Enter your postcode so we can check your location.',
+  // The funnel's own message for a postcode it cannot read (step 1), reused so the two never disagree.
+  invalid: 'Please enter a valid UK postcode so we can check your location.',
+  covered: 'Good news, that postcode is in Northern Ireland.',
+  outside: 'That postcode looks to be outside Northern Ireland. You can still send an enquiry and the team will check.'
+};
+
+export const FAQ = {
+  title: 'Frequently asked questions',
+  items: [
     {
-      title: `${o} turns up, tidy and on time`,
-      body: `A message when ${o} is ${PROMISES.awayMinutes} minutes away. Certificate and receipt when the job is done. You pay after.`
+      q: 'Which charger is right for my car?',
+      a: 'Most home chargers suit most electric and plug-in hybrid cars, but the best choice depends on your vehicle, how you drive and your preferences. We will help you weigh up the options once we know a little about your setup.'
+    },
+    {
+      q: 'Do I need a driveway or private parking?',
+      a: 'A charger needs a suitable parking position and a safe route for the cable that does not create a hazard. We assess this for your property rather than assuming it. Running a cable across a public pavement is not a standard solution, so let us know your setup and we will advise.'
+    },
+    {
+      q: 'How much will installation cost?',
+      a: 'It depends on the charger you choose, the cable route and any electrical work your property needs. We give you a clear quote once we understand your requirements, rather than a headline figure that changes later.'
+    },
+    {
+      q: 'How long does installation take?',
+      a: 'Timing varies with the property and the scope of work involved. Once the team has reviewed your enquiry, they can talk you through what to expect for your specific installation.'
+    },
+    {
+      q: 'Can I have a charger installed before my car arrives?',
+      a: 'Many homeowners plan the installation while waiting for their car. Tell us where you are in the process and we will suggest sensible timing so your charger is ready when you need it.'
+    },
+    {
+      q: 'What happens after I enquire?',
+      a: 'The team reviews your details and contacts you to discuss your installation and the next steps. Submitting the form is an enquiry, not a booking, and it does not produce an instant final price.'
     }
-  ];
-}
+  ]
+};
 
-export function faqItems(b) {
-  const o = b.ownerFirst;
-  return [
-    {
-      q: 'How much will it cost?',
-      a: `The price on each service is what you pay for standard jobs. If ${o} finds something bigger, you get the price in writing before any extra work. You pay after the job by card, bank transfer or cash.`
-    },
-    {
-      q: 'Do I need to be home?',
-      a: `Someone over 18 needs to let ${o} in and show where the fuse box is. Landlords can book with a tenant's number and arrange access by message.`
-    },
-    {
-      q: 'Will I get a certificate?',
-      a: `Yes. Notifiable work is registered through ${o}'s competent person scheme and you get the certificate by email or WhatsApp.`
-    },
-    {
-      q: 'What is an EICR and do I need one?',
-      a: `An Electrical Installation Condition Report is a safety inspection. Landlords in England must have rented homes inspected at least every 5 years, and buyers and lenders often ask for one. Findings are coded C1, C2, C3 or FI and ${o} explains each in plain English.`
-    },
-    {
-      q: 'What does arrival window mean?',
-      a: `${o} arrives at some point in a ${PROMISES.arrivalWindowHours}-hour window, for example 10am to 12, and messages you when ${o} is ${PROMISES.awayMinutes} minutes away.`
-    },
-    {
-      q: 'How do I change or cancel?',
-      a: `Use the Manage booking link on your confirmation, reply to your confirmation message, or call ${o}. It's free up to ${PROMISES.freeChangeHours} hours before.`
-    }
-  ];
-}
+export const FINAL = {
+  title: 'Ready to make charging at home simpler?',
+  body: 'Tell us about your home and plans. 180 Electrical will review your enquiry and help you understand your installation options.'
+};
 
-// Pre-filled WhatsApp texts (13.1 L3 and L13).
-export const waBookText = (b) => `Hi ${b.ownerFirst}, I'd like to book an electrician.`;
-export const waUnsureText = (b) => `Hi ${b.ownerFirst}, I'd like to book an electrician. Not sure what I need yet.`;
+// ---- funnel helpers ---------------------------------------------------------------------------------------------
 
 /**
- * Click handler that opens the booking sheet through the route emitter (11.1) instead of letting a plain
- * hash link push a second history entry. Modified clicks (new tab) keep their default behaviour.
+ * Open the 6-step enquiry funnel (one history push). With a postcode, openBooking (js/booking/nav.js) leaves it in the
+ * funnel's draft so Step 1 opens with it filled in. The funnel never takes a window from the hash: the engine pencils one in.
+ */
+export function startEnquiry({ postcode } = {}) {
+  const opts = { serviceId: ENQUIRY_SERVICE_ID };
+  if (postcode) opts.postcode = postcode;
+  openBooking(opts);
+}
+
+/**
+ * Click handler that opens the funnel through the route emitter (11.1) instead of letting a plain hash link push a
+ * second history entry. Modified clicks (new tab) keep their default behaviour.
  */
 export function bookClick(opts = {}) {
   return (e) => {
@@ -104,11 +143,11 @@ export function bookClick(opts = {}) {
       if (e.defaultPrevented || e.button > 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       if (e.preventDefault) e.preventDefault();
     }
-    openBooking(opts);
+    startEnquiry(opts);
   };
 }
 
-/** Props for an <a> that opens the sheet: a real href (so "open in new tab" works) plus the click handler. */
+/** Props for an <a> that opens the funnel: a real href (so "open in new tab" works) plus the click handler. */
 export function bookLinkProps(opts = {}) {
-  return { href: bookHref(opts), onClick: bookClick(opts) };
+  return { href: bookHref({ serviceId: ENQUIRY_SERVICE_ID }), onClick: bookClick(opts) };
 }

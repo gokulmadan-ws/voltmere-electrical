@@ -1,5 +1,5 @@
 // js/dashboard/views/demo.js: Demo tools (demo phone override, simulate website bookings, customer-site links, reset, status, script).
-// Owner: WP8
+// Owner: WP8, EV enquiry script and sample enquiries by E2
 import { html, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Card, ConfirmDialog, Field, Icon, Input, PageHeader, TextLink,
@@ -23,13 +23,13 @@ const PREP_STEPS = [
   'Tap Reset diary and messages for a fresh diary, then switch to the customer site tab.'
 ];
 const SCRIPT_STEPS = [
-  'Customer site: point at the live next-free chips, the From prices and the sticky Call, WhatsApp and Book bar. Say: this is your website, reading your real diary.',
-  'Tap the Landlord safety report tile, Pick this, Continue, Demo: fill sample details, Confirm booking. Four fields, no account, no card.',
-  'Tap Open the dashboard in the DEMO panel. The booking lands as a job card with a toast and a Messages badge.',
-  'Tap the Messages icon. Show the Compare card, then the new owner alert. Tap Accept (45 min) on the older emergency alert and Open in WhatsApp on the new customer bubble.',
-  'Calendar: open the first open day, tap its free 8-10am row, Block this time, Dentist, Block.',
-  'View customer site: the first chip has moved on and that window now reads Booked. The diary you edit is the availability customers see.',
-  'Flip to dark mode, then open What\'s real in this prototype and read the honest table.'
+  'Customer site: show the hero, the credentials and the "Get my installation quote" button. Say: this is your funnel, now connected to your diary.',
+  'Tap the button and answer the six steps: a BT postcode such as BT9 6QP, Private driveway, "It\'s ordered or arriving soon", As soon as possible, Yes, then a name and mobile. No price is shown and nothing is charged.',
+  'The confirmation says the survey visit is pencilled in, that it is provisional, and that he will be in touch within 24 hours. Say: the customer is never left waiting.',
+  'Tap Open the dashboard in the DEMO panel. The enquiry is a job card under Needs you, with their answers as chips and a Pencilled in label.',
+  'Open the job card: About their home lists all five answers. Tap Messages: the alert to you has the answers in one line. Tap Confirm survey visit and show the customer\'s confirmation.',
+  'Calendar: open the day, tap a free row, Block this time, Dentist, Block. View the customer site: that survey window is no longer offered. The diary you edit is the availability customers see.',
+  'After the survey: open the job, On my way, Mark done, then Quote ready, then Book the install. Flip to dark mode, then open What\'s real and read the honest table.'
 ];
 
 export default function DemoView() {
@@ -102,18 +102,18 @@ export default function DemoView() {
     </section>
 
     <section class="db-section" aria-labelledby="dm-sim-title">
-      <h2 class="db-section__title" id="dm-sim-title">Add a sample website booking</h2>
+      <h2 class="db-section__title" id="dm-sim-title">Add a sample website enquiry</h2>
       <${Card}>
-        <p class="dm-explain">Runs the same code as the website form, so the toast, badge and outbox update exactly as they would for a real customer.</p>
+        <p class="dm-explain">Runs the same code as the website funnel, so the toast, badge, pencilled-in survey visit and outbox update exactly as they would for a real enquiry.</p>
         <div class="dm-sim">
-          <${Button} variant="primary" onClick=${() => simulate('standard')} data-testid="demo-sim-standard">Standard booking<//>
-          <${Button} variant="secondary" onClick=${() => simulate('approval')} data-testid="demo-sim-approval">Needs your OK (edge postcode)<//>
-          <${Button} variant="emergency" onClick=${() => simulate('emergency')} data-testid="demo-sim-emergency">Emergency request<//>
+          <${Button} variant="primary" onClick=${() => simulate('standard')} data-testid="demo-sim-standard">New enquiry<//>
+          <${Button} variant="secondary" onClick=${() => simulate('approval')} data-testid="demo-sim-approval">Enquiry outside Northern Ireland<//>
+          <${Button} variant="emergency" onClick=${() => simulate('emergency')} data-testid="demo-sim-emergency">Emergency request (not offered)<//>
         </div>
         <p class="dm-result" role="status" aria-live="polite" data-testid="demo-sim-result">${result
           ? (result.ok
             ? html`<span>${`Added ${result.booking.ref} for ${firstName(result.booking.customer.name)}.`}</span><${TextLink} href=${routeHref('bookings', { id: result.booking.id })}>View<//>`
-            : 'No free window to book. Free one up in Calendar.')
+            : 'No free survey window to pencil in. Free one up in Calendar.')
           : null}</p>
       <//>
     </section>
@@ -122,7 +122,7 @@ export default function DemoView() {
       <h2 class="db-section__title" id="dm-site-title">Customer site</h2>
       <div class="db-stack">
         <${Button} variant="secondary" block icon="external-link" href=${pageHref('index.html')} target=${pageTarget('index.html')} data-testid="demo-open-site">Open the customer site<//>
-        <${Button} variant="secondary" block icon="calendar-check" href=${pageHref('index.html', '#book')} target=${pageTarget('index.html')} data-testid="demo-open-booking">Open the booking sheet<//>
+        <${Button} variant="secondary" block icon="calendar-check" href=${pageHref('index.html', '#book')} target=${pageTarget('index.html')} data-testid="demo-open-booking">Open the quote funnel<//>
       </div>
     </section>
 

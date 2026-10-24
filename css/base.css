@@ -1,5 +1,5 @@
 /* css/base.css: reset, typography, utilities (u-*), focus ring, safe areas, reduced motion.
-   Owner: WP2 */
+   Owner: WP2; re-skinned for 180 Electrical by role B2 (Inter body, Manrope tight heavy headlines) */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -24,6 +24,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
 }
 
 /* Gutter grows with the screen (tokens.css sets the 16px base). */
@@ -39,8 +40,8 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: var(--tracking-tight);
   overflow-wrap: anywhere;
 }
-h1 { font-size: var(--fs-h1); line-height: var(--lh-tight); }
-h2 { font-size: var(--fs-h2); }
+h1 { font-size: var(--fs-h1); line-height: var(--lh-tight); letter-spacing: -0.03em; text-wrap: balance; }
+h2 { font-size: var(--fs-h2); letter-spacing: -0.03em; text-wrap: balance; }
 h3 { font-size: var(--fs-20); }
 h4, h5, h6 { font-size: var(--fs-17); font-family: var(--font-body); font-weight: var(--fw-bold); letter-spacing: 0; }
 p { margin: 0; max-width: 62ch; }
@@ -78,7 +79,7 @@ a, button, [role="button"], [role="switch"], [role="radio"], input, select, text
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
-/* On navy panels the light-mode blue ring is only 2.4:1, so use the amber ring there (4.3). */
+/* On the black panels the light-mode blue ring is too weak, so use the white ring there (4.3). */
 .u-on-panel :focus-visible,
 .lp-hero :focus-visible, .lp-final :focus-visible, .lp-footer :focus-visible {
   outline-color: var(--focus-on-panel);

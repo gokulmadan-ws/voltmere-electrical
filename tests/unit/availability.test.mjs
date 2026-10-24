@@ -6,7 +6,7 @@ import { makeDefaultSettings } from '../../js/core/config.js';
 import { setClock } from '../../js/core/clock.js';
 import {
   getDaySlots, getDayStatus, getDayLoad, getBookableDays, nextFreeSlot, nextFreeSlots, isSlotFree, occupiedBy,
-  bookingWindowIds, bookingEndStamp, bookingWindowLabel, bookingWhen, windowIdFromStart, slotHuman, describeHours
+  bookingWindowIds, bookingEndStamp, bookingWindowLabel, bookingWhen, windowIdFromStart, slotHuman, describeHours, isUnscheduled
 } from '../../js/core/availability.js';
 
 // A bare state is enough for the engine: settings, bookings and blocks.
@@ -422,4 +422,24 @@ test('describeHours', () => {
   assert.equal(describeHours(afternoons), 'Mon to Wed 1pm to 5pm, Sat 8am to 10am');
   const sundayToo = [[0, 1], [0, 1, 2, 3], [0, 1, 2, 3], [], [], [], []];
   assert.equal(describeHours(sundayToo), 'Mon to Tue 8am to 5pm, Sun 8am to 12pm');
+});
+
+test('a pencilled-in survey holds its window; an enquiry with no window holds nothing and reads "To be arranged"', () => {
+  const settings = makeDefaultSettings();
+  setClock(new Date(2026, 9, 23, 20, 30));
+  const pencilled = { id: 'bk_p', status: 'new', urgent: false, tentative: true, serviceId: 'ev_quote', start: '2026-10-24T08:00', durationMin: 120 };
+  const state = makeState({ bookings: [pencilled], settings });
+  assert.equal(occupiedBy(state, '2026-10-24', 0), 'bk_p', 'a pending, tentative booking still blocks the diary and the website');
+  assert.equal(isSlotFree(state, { date: '2026-10-24', windowId: 0 }), false);
+  assert.equal(nextFreeSlot(state, 'ev_quote').human, 'Tomorrow, 10am–12');
+  assert.equal(isUnscheduled(pencilled), false);
+  const none = { id: 'bk_u', status: 'new', urgent: false, serviceId: 'ev_quote', start: '2026-10-23T20:30', durationMin: 0 };
+  assert.equal(isUnscheduled(none), true);
+  assert.equal(isUnscheduled({ ...none, urgent: true }), false, 'an urgent request is not "unscheduled", it is ASAP');
+  assert.equal(isUnscheduled(null), false);
+  assert.deepEqual(bookingWindowIds(none), []);
+  assert.equal(bookingWindowLabel(none), 'To be arranged');
+  assert.equal(bookingWhen(none), 'To be arranged');
+  assert.equal(occupiedBy(makeState({ bookings: [none], settings }), '2026-10-23', 3), null, 'holds no window');
+  setClock(null);
 });

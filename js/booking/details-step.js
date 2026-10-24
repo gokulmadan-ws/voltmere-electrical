@@ -1,5 +1,5 @@
 // js/booking/details-step.js: Step 2 "Your details" (ticket, four fields, owner extras) and the shared customer fields.
-// Owner: WP3
+// Owner: WP3, quote-led price and Northern Ireland postcode hints by D2
 import { html, useEffect } from '../vendor/preact-htm.js';
 import { Icon, Button, Banner, Field, Input, Textarea, Segmented, Switch, toast } from '../ui/index.js';
 import { createBooking } from '../core/store.js';
@@ -9,7 +9,7 @@ import {
 } from '../core/format.js';
 import { fmtDayShort } from '../core/dates.js';
 import { PROMISES, WINDOWS } from '../core/config.js';
-import { StepTitle, SlotTakenBanner, priceText } from './bk-shared.js';
+import { StepTitle, SlotTakenBanner, priceText, isQuoteLed } from './bk-shared.js';
 import { clearDraft } from './draft.js';
 
 const FIELD_IDS = { name: 'bk-name', phone: 'bk-phone', postcode: 'bk-postcode', line1: 'bk-line1' };
@@ -33,9 +33,9 @@ export function CustomerFields({ ctx, urgent = false }) {
   const zone = postcodeZone(form.postcode, brand);
   const noteOpen = form.noteOpen || !!form.note;
   const hints = {
-    covered: { icon: 'circle-check', text: `In ${brand.ownerFirst}'s area` },
+    covered: { icon: 'circle-check', text: `In ${brand.areaName}` },
     edge: { icon: 'info', text: `On the edge of the area: ${brand.ownerFirst} will confirm any travel charge` },
-    outside: { icon: 'info', text: 'A bit outside the area: you can still send it' }
+    outside: { icon: 'info', text: `Outside ${brand.areaName}: you can still add it` }
   };
   const hint = hints[zone];
 
@@ -91,7 +91,7 @@ function OwnerExtras({ ctx, quoted }) {
     { value: 'referral', label: 'Word of mouth', testid: 'source-referral' }
   ]} />
     </div>
-    <${Field} label="Price (£)" id="bk-price" hint=${`Quoted ${gbp(quoted)}. Change it if you agreed something else.`}>
+    <${Field} label="Price (£)" id="bk-price" hint=${isQuoteLed(ctx.svc) ? `Starting amount ${gbp(quoted)}. Change it to the quote you agreed.` : `Quoted ${gbp(quoted)}. Change it if you agreed something else.`}>
       <${Input} id="bk-price" value=${String(price)} onInput=${(e) => { const d = e.target.value.replace(/[^0-9]/g, '').slice(0, 5); setForm({ price: d === '' ? '' : Number(d) }); }}
         type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" data-testid="field-price" />
     <//>
@@ -137,7 +137,7 @@ export function DetailsFooter({ ctx }) {
   let label = 'Confirm booking';
   if (ownerMode) label = 'Add to diary';
   else if (svc.priceType === 'from') label = `Confirm booking · from ${gbp(quoted)}`;
-  else if (svc.priceType !== 'free') label = `Confirm booking · ${gbp(quoted)}`;
+  else if (svc.priceType !== 'free' && !isQuoteLed(svc)) label = `Confirm booking · ${gbp(quoted)}`;
   return html`<div class="bk-footer">
     <${Button} variant="primary" size="lg" block loading=${submitting} onClick=${() => submitDetails(ctx)} data-testid="booking-submit">${label}<//>
     ${ownerMode ? null : html`<p class="bk-footer__note">No payment now. You pay ${brand.ownerFirst} after the job.</p>

@@ -1,9 +1,11 @@
 // js/booking/nav.js: booking hash helpers and the tiny route emitter that drives the booking sheet (11.1).
 // Owner: WP3
 import { useEffect, useState } from '../vendor/preact-htm.js';
+import { prefillFunnelPostcode } from './draft.js';
 
 // Customer bookable services (the emergency path has its own hash). An unknown id falls back to '#book' (11.1).
-const SERVICE_IDS = ['fault', 'eicr', 'consumer', 'sockets', 'ev', 'rewire'];
+// 'ev_quote' is the website enquiry: the 6-step quote funnel. The others open the classic When / Details flow.
+const SERVICE_IDS = ['ev_quote', 'fault', 'eicr', 'consumer', 'sockets', 'ev', 'rewire'];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const hasWindow = typeof window !== 'undefined' && typeof history !== 'undefined';
@@ -39,7 +41,7 @@ export function parseBookHash(hash) {
   return route;
 }
 
-/** opts: { serviceId, date, windowId } | { emergency: true } | { bookedRef } | { manageRef } | {} -> '#book/fault/2026-10-24/0' */
+/** opts: { serviceId, date, windowId } | { emergency: true } | { bookedRef } | { manageRef } | {} -> '#book/fault/2026-10-24/0' (a postcode in opts is ignored here) */
 export function bookHref(opts = {}) {
   if (opts.bookedRef) return `#booked/${encodeURIComponent(opts.bookedRef)}`;
   if (opts.manageRef) return `#manage/${encodeURIComponent(opts.manageRef)}`;
@@ -85,9 +87,11 @@ function currentRoute() {
   return sameRoute(next, lastRoute) ? lastRoute : next;
 }
 
-/** Opens the sheet from outside it: ONE pushState (11.1). Inside an open sheet it just replaces. */
+/** Opens the sheet from outside it: ONE pushState (11.1). Inside an open sheet it just replaces.
+ *  opts.postcode (optional) is carried into Step 1 of the quote funnel. */
 export function openBooking(opts = {}) {
   if (!hasWindow) return;
+  if (opts && opts.postcode) prefillFunnelPostcode(opts.postcode);
   if (lastRoute) { goBooking(opts); return; }
   history.pushState(null, '', bookHref(opts));
   sync('push');

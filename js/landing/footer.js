@@ -1,8 +1,9 @@
-// js/landing/footer.js: L12 footer: brand block, contact lines, disclosure, owner login, About link, theme choice.
-// Owner: WP3
+// js/landing/footer.js: footer: 180 Electrical, phone, email, "Serving Northern Ireland", owner login, About link, theme choice, disclosure.
+// Owner: C2 (landing page for 180 Electrical)
 import { html } from '../vendor/preact-htm.js';
-import { BrandMark, Icon, PrototypeNotice, ThemeToggle, useBrand, pageHref, pageTarget } from '../ui/index.js';
+import { Icon, PrototypeNotice, ThemeToggle, useBrand, pageHref, pageTarget } from '../ui/index.js';
 import { mailtoLink } from '../core/messages.js';
+import { LogoImg } from './media.js';
 
 export function Footer() {
   const brand = useBrand();
@@ -10,14 +11,12 @@ export function Footer() {
     <footer class="lp-footer" data-testid="footer">
       <div class="lp-container lp-footer__inner">
         <div class="lp-footer__brand">
-          <p class="lp-footer__name"><${BrandMark} size=${32} /><span>${brand.name}</span></p>
+          <p class="lp-footer__name"><${LogoImg} name=${brand.name} class="lp-logo--footer" /><span>${brand.name}</span></p>
           <ul class="lp-footer__contact">
-            <li><a class="lp-footer__link" href=${brand.telHref}><${Icon} name="phone" size=${20} /><span>${brand.phone}</span></a></li>
-            <li><a class="lp-footer__link" href=${mailtoLink(brand.email)}><${Icon} name="send" size=${20} /><span>${brand.email}</span></a></li>
-            <li class="lp-footer__line"><${Icon} name="map-pin" size=${20} /><span>${brand.areaText}</span></li>
-            <li class="lp-footer__line"><${Icon} name="clock" size=${20} /><span>${brand.hoursText}</span></li>
+            <li><a class="lp-footer__link" href=${brand.telHref} data-testid="footer-phone"><${Icon} name="phone" size=${20} /><span>${brand.phone}</span></a></li>
+            <li><a class="lp-footer__link" href=${mailtoLink(brand.email)} data-testid="footer-email"><${Icon} name="send" size=${20} /><span>${brand.email}</span></a></li>
+            <li class="lp-footer__line"><${Icon} name="map-pin" size=${20} /><span>Serving Northern Ireland</span></li>
           </ul>
-          <p class="lp-footer__scheme">${brand.schemeLine}</p>
         </div>
         <div class="lp-footer__side">
           <ul class="lp-footer__links">
@@ -31,7 +30,6 @@ export function Footer() {
         </div>
         <div class="lp-footer__legal">
           <${PrototypeNotice} variant="footer" page="landing" />
-          <p class="lp-footer__small">Privacy and Terms: not in this prototype</p>
         </div>
       </div>
     </footer>

@@ -1,8 +1,8 @@
 // js/dashboard/views/customers.js: Customers list and detail, derived from bookings by phone number (never stored).
-// Owner: WP7
+// Owner: WP7, enquiry wording by E2
 import { html, useMemo, useState } from '../../vendor/preact-htm.js';
 import {
-  Avatar, Button, Card, Chip, EmptyState, Icon, Input, PageHeader, Segmented, Stat, StatusPill,
+  Avatar, Button, Card, Chip, EmptyState, Icon, Input, PageHeader, Segmented, Stat,
   cx, useBrand, useStore
 } from '../../ui/index.js';
 import { selectCustomers, selectCustomerByKey, selectBookingById } from '../../core/selectors.js';
@@ -11,6 +11,7 @@ import { firstName, gbp, outwardCode, plural } from '../../core/format.js';
 import { bookingWhen } from '../../core/availability.js';
 import { mailtoLink, mapsLink, telLink, waLink } from '../../core/messages.js';
 import { goBack, navigate, routeHref } from '../router.js';
+import { BookingPill, isEnquiry, priceLabel } from '../shared/enquiry.js';
 
 export const title = 'Customers';
 export const css = ['css/insights.css'];
@@ -42,8 +43,6 @@ function lastLabel(c) {
   if (c.nextJobAt) return `Next job ${fmtDayShort(stampDay(c.nextJobAt))}`;
   return 'No jobs yet';
 }
-
-const priceOf = (b) => (b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice);
 
 function ViewToggle() {
   return html`<${Segmented}
@@ -93,7 +92,7 @@ function CustomerList({ customers, total, query, onQuery, selectedKey }) {
         data-testid="customers-search" />
     </div>
     ${total === 0
-      ? html`<${EmptyState} icon="users" title="No customers yet. They appear when someone books." data-testid="customers-empty" />`
+      ? html`<${EmptyState} icon="users" title="No customers yet. They appear when someone sends an enquiry." data-testid="customers-empty" />`
       : shown.length === 0
         ? html`<${EmptyState} icon="search" title=${`No customers match "${query.trim()}".`} data-testid="customers-empty" />`
         : html`<ul class="db-list cu-list" data-testid="customers-list">
@@ -109,9 +108,9 @@ function BookingRow({ booking }) {
       <span class="cu-bk__main">
         <span class="cu-bk__when">${bookingWhen(b)}</span>
         <span class="cu-bk__svc">${b.serviceName}${b.variantLabel ? `, ${b.variantLabel}` : ''} · ${b.ref}</span>
-        <span class="cu-bk__status"><${StatusPill} status=${b.status} paid=${b.paid} urgent=${b.urgent} compact /></span>
+        <span class="cu-bk__status"><${BookingPill} booking=${b} compact /></span>
       </span>
-      <span class=${cx('cu-bk__price', b.status === 'cancelled' && 'is-struck')}>${gbp(priceOf(b))}</span>
+      <span class=${cx('cu-bk__price', b.status === 'cancelled' && 'is-struck')}>${priceLabel(b)}</span>
       <${Icon} name="chevron-right" size=${20} class="cu-row__chevron" />
     </a>
   </li>`;
@@ -139,7 +138,7 @@ function CustomerDetail({ state, customerKey, brand }) {
   const doneCount = bookings.filter((b) => b.status === 'done').length;
   const first = firstName(customer.name);
   const waHref = waLink(customer.phone, `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name}.`, brand.demoPhoneDigits);
-  const rebookHref = routeHref('new', {}, { customer: customer.key, service: latest ? latest.serviceId : '' });
+  const rebookHref = routeHref('new', {}, { customer: customer.key, service: latest ? (isEnquiry(latest) ? 'ev' : latest.serviceId) : '' });
 
   return html`<div class="cu-detail" data-testid="customer-detail">
     <${PageHeader} eyebrow="Customer" title=${customer.name} back=${back} />

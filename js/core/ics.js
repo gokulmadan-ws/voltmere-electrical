@@ -92,7 +92,7 @@ export function buildIcs(booking, settings) {
   return `${lines.map(fold).join('\r\n')}\r\n`;
 }
 
-/** 'voltmere-VM-1043.ics' */
+/** '180-EL-1043.ics' */
 export function icsFilename(booking, settings) {
   const short = String(settings.business.shortName || 'booking').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return `${short || 'booking'}-${booking.ref}.ics`;

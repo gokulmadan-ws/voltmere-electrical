@@ -153,6 +153,7 @@
 .ms-card + .ms-card { margin-top: var(--space-3); }
 .ms-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
 .ms-card__to { min-width: 0; }
+.ms-card__chips { padding: 0 var(--space-4) var(--space-3); }
 .ms-card__who { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
 .ms-card__sub { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; }
 .ms-card__meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 50%; }

@@ -1,5 +1,5 @@
 // js/ui/theme.js: theme choice (auto / light / dark): getTheme, setThemeChoice, applyTheme, initTheme and ThemeToggle.
-// Owner: WP2
+// Owner: WP2 (dark is the default look for 180 Electrical, set by role B2: no saved choice means dark; an explicit Auto follows the OS)
 import { h, useReducer } from '../vendor/preact-htm.js';
 import { setTheme as storeSetTheme, subscribe } from '../core/store.js';
 import { IconButton } from './button.js';
@@ -8,9 +8,11 @@ import { useStore } from './hooks.js';
 
 // localStorage['vm_theme'] is the single source of truth (the inline <head> script reads it before first paint).
 // settings.theme in the store is only a mirror that lets the OTHER page notice a change (7.7).
+// Nothing saved means DARK (the brand look). 'auto' is only ever an explicit choice, saved by the Auto option.
 const KEY = 'vm_theme';
-const LIGHT_COLOR = '#FBF8F2'; // same as --bg in tokens.css; the theme-color metas need a literal
-const DARK_COLOR = '#0B1020';
+const DEFAULT_CHOICE = 'dark';
+const LIGHT_COLOR = '#F6F5F3'; // same as --bg in tokens.css; the theme-color metas need a literal
+const DARK_COLOR = '#0B0B0C'; // same as --bg in the dark block
 const CHOICES = ['auto', 'light', 'dark'];
 const ICON = { auto: 'sun-moon', light: 'sun', dark: 'moon' };
 const LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
@@ -18,14 +20,20 @@ const LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
 let memoryChoice = null; // used only when localStorage is blocked
 let started = false;
 
-/** The saved choice: 'auto' | 'light' | 'dark'. Missing means auto. */
+/** The saved choice: 'auto' | 'light' | 'dark'. Missing (or junk) means dark. */
 export function getTheme() {
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'light' || v === 'dark' ? v : 'auto';
+    return CHOICES.includes(v) ? v : (memoryChoice || DEFAULT_CHOICE);
   } catch (e) {
-    return memoryChoice || 'auto';
+    return memoryChoice || DEFAULT_CHOICE;
   }
+}
+
+function osPrefersDark(mediaAttr) {
+  if (/prefers-color-scheme:\s*dark/.test(mediaAttr || '')) return true;
+  if (/prefers-color-scheme:\s*light/.test(mediaAttr || '')) return false;
+  try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return true; }
 }
 
 /** Put the choice on <html data-theme> (auto removes it) and keep both theme-color metas in step. */
@@ -37,14 +45,14 @@ export function applyTheme(choice) {
     let color;
     if (choice === 'light') color = LIGHT_COLOR;
     else if (choice === 'dark') color = DARK_COLOR;
-    else color = /dark/.test(meta.getAttribute('media') || '') ? DARK_COLOR : LIGHT_COLOR;
+    else color = osPrefersDark(meta.getAttribute('media')) ? DARK_COLOR : LIGHT_COLOR; // auto: follow the OS
     meta.setAttribute('content', color);
   });
 }
 
 /** Save and apply a choice. Tells the store too, so the other page (a second tab) flips live. */
 export function setThemeChoice(choice) {
-  if (!CHOICES.includes(choice)) choice = 'auto';
+  if (!CHOICES.includes(choice)) choice = DEFAULT_CHOICE;
   memoryChoice = choice;
   try { storeSetTheme(choice); } catch (e) { /* store not ready: the localStorage write below still works */ }
   try { localStorage.setItem(KEY, choice); } catch (e) { /* blocked: memoryChoice keeps this tab right */ }
@@ -60,6 +68,9 @@ export function initTheme() {
   window.addEventListener('storage', (e) => {
     if (e.key === KEY || e.key === null) applyTheme(getTheme());
   });
+  try { // Auto follows the OS live, so the browser bar colour stays right when the OS flips
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (getTheme() === 'auto') applyTheme('auto'); });
+  } catch (e) { /* no matchMedia: the theme-color meta keeps its last value */ }
 }
 
 const selectThemeMirror = (state) => state.settings.theme;

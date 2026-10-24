@@ -1,5 +1,5 @@
-// js/landing/app.js: customer landing page entry: names the tab, composes L1 to L13, opens the booking sheet from the hash.
-// Owner: WP3
+// js/landing/app.js: customer landing page entry for 180 Electrical: names the tab, composes the sections, opens the enquiry funnel from the hash.
+// Owner: C2
 import { html, useEffect, useErrorBoundary } from '../vendor/preact-htm.js';
 import { bootApp, useBrand } from '../ui/index.js';
 import { makeDefaultSettings } from '../core/config.js';
@@ -8,11 +8,11 @@ import { closeBooking, useBookRoute } from '../booking/nav.js';
 import { BookingSheet } from '../booking/booking-sheet.js';
 import { LandingHeader } from './header.js';
 import { Hero } from './hero.js';
-import { AreaSection, EmergencyStrip, Faq, FinalCta, HowItWorks, Reviews, Services, TrustBar } from './sections.js';
+import { About, AreaSection, Faq, FinalCta, Gallery, HowItWorks, Pricing, TrustBar, WhyCards } from './sections.js';
 import { Footer } from './footer.js';
 import { StickyBar } from './sticky-bar.js';
 
-// Cross-page links target this name, so "View customer site" in the dashboard re-uses this tab (16.1).
+// Cross-page links target this name, so "View customer site" in the dashboard re-uses this tab (16.1). Do not rename.
 window.name = 'vm-site';
 
 /** What the booking sheet should show, from the parsed hash (11.1). */
@@ -33,7 +33,7 @@ function LandingPage() {
     document.title = `${brand.name}: ${brand.tagline}`;
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name', 'description'); document.head.appendChild(meta); }
-    meta.setAttribute('content', `Book ${brand.name} online in 60 seconds. Real availability, clear prices, a certificate with every job. Prototype with sample data.`);
+    meta.setAttribute('content', `Get a free, no-obligation home EV charger installation quote from ${brand.name}, across Northern Ireland. Prototype with sample data.`);
   }, [brand.name, brand.tagline]);
 
   return html`
@@ -42,10 +42,11 @@ function LandingPage() {
     <main id="main" class="lp-main" tabindex="-1">
       <${Hero} />
       <${TrustBar} />
-      <${EmergencyStrip} />
-      <${Services} />
+      <${WhyCards} />
+      <${About} />
+      <${Gallery} />
       <${HowItWorks} />
-      <${Reviews} />
+      <${Pricing} />
       <${AreaSection} />
       <${Faq} />
       <${FinalCta} />

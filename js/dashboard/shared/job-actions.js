@@ -1,5 +1,5 @@
 // js/dashboard/shared/job-actions.js: state-driven job primary action, Needs-you buttons, Mark paid and the ETA / complete / paid / cancel / reschedule sheets.
-// Owner: WP5
+// Owner: WP5, enquiry and quote flow by E2
 import { html, useState, useRef } from '../../vendor/preact-htm.js';
 import {
   Button, IconButton, Chip, Icon, Segmented, Stepper, Switch, Sheet, WhatsAppBubble,
@@ -7,7 +7,7 @@ import {
 } from '../../ui/index.js';
 import {
   getState, confirmBooking, acceptEmergency, declineBooking, markOnTheWay, completeBooking, markPaid, markUnpaid,
-  cancelBooking, rescheduleBooking, sendPaymentNudge, sendReviewRequest
+  cancelBooking, rescheduleBooking, sendPaymentNudge, sendReviewRequest, sendQuickMessage
 } from '../../core/store.js';
 import { buildMessage, telLink, waLink } from '../../core/messages.js';
 import { getDaySlots, getDayStatus, bookingWhen } from '../../core/availability.js';
@@ -17,6 +17,7 @@ import { WINDOWS, PROMISES, PAID_METHODS, PAID_METHOD_LABELS, CANCEL_REASONS } f
 import { firstName, gbp } from '../../core/format.js';
 import { customerKeyOf } from '../../core/selectors.js';
 import { routeHref } from '../router.js';
+import { isEnquiry, quoteProgress } from './enquiry.js';
 
 // The sheets render outside #app, so their styles must be on the page whichever view imported this file.
 // Idempotent: Today and Insights also list the same sheet in their `css` export.
@@ -29,6 +30,9 @@ const firstOf = (b) => firstName(b.customer.name);
 
 const PRIMARY = {
   confirm: { id: 'confirm', label: 'Confirm', icon: 'check' },
+  confirm_survey: { id: 'confirm_survey', label: 'Confirm survey visit', icon: 'calendar-check' },
+  quote_ready: { id: 'quote_ready', label: 'Quote ready', icon: 'send' },
+  book_install: { id: 'book_install', label: 'Book the install', icon: 'plug-zap' },
   accept: { id: 'accept', label: 'Accept', icon: 'check' },
   on_my_way: { id: 'on_my_way', label: 'On my way', icon: 'navigation' },
   mark_done: { id: 'mark_done', label: 'Mark done', icon: 'check-check' },
@@ -37,14 +41,19 @@ const PRIMARY = {
   rebook: { id: 'rebook', label: 'Rebook', icon: 'rotate-ccw' }
 };
 
-/** The one big button for a booking's state (13.6.1), or null when nothing is left to do. Pure. */
-export function primaryActionFor(booking) {
+/**
+ * The one big button for a booking's state (13.6.1), or null when nothing is left to do. Pure.
+ * A free survey visit (ev_quote) confirms as "Confirm survey visit" and, once done, leads to "Quote ready" and then
+ * "Book the install". `ctx` = { quoteSent, installBooked } from quoteProgress().
+ */
+export function primaryActionFor(booking, ctx = {}) {
   if (!booking) return null;
   switch (booking.status) {
-    case 'new': return booking.urgent ? PRIMARY.accept : PRIMARY.confirm;
+    case 'new': return booking.urgent ? PRIMARY.accept : isEnquiry(booking) ? PRIMARY.confirm_survey : PRIMARY.confirm;
     case 'confirmed': return booking.urgent ? PRIMARY.mark_done : PRIMARY.on_my_way;
     case 'on_the_way': return PRIMARY.mark_done;
     case 'done':
+      if (isEnquiry(booking)) return !ctx.quoteSent ? PRIMARY.quote_ready : ctx.installBooked ? null : PRIMARY.book_install;
       if (!booking.paid) return PRIMARY.mark_paid;
       return booking.reviewRequested ? null : PRIMARY.review;
     case 'cancelled': return PRIMARY.rebook;
@@ -64,10 +73,11 @@ const SECONDARY = {
 /** The secondary buttons for a booking's state (13.6.1 table). Pure. */
 function secondaryActionsFor(b) {
   switch (b.status) {
-    case 'new': return [SECONDARY.decline];
+    case 'new': return isEnquiry(b) && !b.urgent ? [SECONDARY.reschedule, SECONDARY.decline] : [SECONDARY.decline];
     case 'confirmed': return b.urgent ? [SECONDARY.cancel] : [SECONDARY.reschedule, SECONDARY.cancel];
     case 'on_the_way': return [SECONDARY.cancel];
     case 'done':
+      if (isEnquiry(b)) return [];
       if (!b.paid) return b.reviewRequested ? [SECONDARY.nudge] : [SECONDARY.nudge, SECONDARY.review];
       return [SECONDARY.unpaid];
     default: return [];
@@ -108,12 +118,28 @@ function useTapGuard() {
   };
 }
 
-const doConfirm = (b) => finish(confirmBooking(b.id), `Confirmed. ${firstOf(b)} has been told (simulated).`);
+const doConfirm = (b) => finish(confirmBooking(b.id), isEnquiry(b)
+  ? `Survey visit confirmed. ${firstOf(b)} has been told (simulated).`
+  : `Confirmed. ${firstOf(b)} has been told (simulated).`);
 const doAccept = (b, eta) => finish(acceptEmergency(b.id, eta), `Accepted. ${firstOf(b)} has been told you're on your way (simulated).`);
 const doDecline = (b) => finish(declineBooking(b.id), `Declined. ${firstOf(b)} has been told (simulated).`);
 const doReview = (b) => finish(sendReviewRequest(b.id), 'Review request logged (simulated).');
 const doNudge = (b) => finish(sendPaymentNudge(b.id), 'Payment reminder logged (simulated).');
 const doUnpaid = (b) => finish(markUnpaid(b.id), 'Marked unpaid.');
+
+const NO_PROGRESS = { quoteSent: false, installBooked: false };
+
+/** "Quote ready": logs the customer_quote_ready message (simulated) and offers the same text in the owner's own WhatsApp. */
+function doQuoteReady(b, brand) {
+  const res = sendQuickMessage(b.id, 'customer_quote_ready');
+  if (!res || !res.ok) { failToast(res); return; }
+  const url = waLink(b.customer.phone, res.message.body, brand.demoPhoneDigits);
+  toast({
+    message: `Quote-ready message to ${firstOf(b)} logged (simulated). Open it in your WhatsApp to send it for real.`,
+    actionLabel: 'Open WhatsApp', duration: 9000,
+    onAction: () => { window.open(url, '_blank', 'noopener,noreferrer'); }
+  });
+}
 
 const ETA_URGENT = [
   { value: 45, label: '45 min' },
@@ -153,6 +179,8 @@ function EtaSheet({ booking, onClose }) {
 }
 
 function CompleteSheet({ booking, onClose }) {
+  const survey = isEnquiry(booking);
+  const install = booking.serviceId === 'ev';
   const [price, setPrice] = useState(booking.finalPrice === null || booking.finalPrice === undefined ? booking.quotedPrice : booking.finalPrice);
   const [method, setMethod] = useState('none');
   const [review, setReview] = useState(true);
@@ -162,17 +190,25 @@ function CompleteSheet({ booking, onClose }) {
     ...PAID_METHODS.map((id) => ({ value: id, label: PAID_METHOD_LABELS[id], testid: `paid-method-${id}` }))
   ];
   const submit = () => guard(() => {
-    const paid = method !== 'none';
-    const res = completeBooking(booking.id, { finalPrice: price, paid, paidMethod: paid ? method : null, sendReview: review });
-    finish(res, paid ? 'Job done. Marked paid.' : `Job done. ${gbp(price)} to collect.`);
+    // A free survey visit has nothing to collect and no review to ask for; the written quote is the next step.
+    const paid = survey ? true : method !== 'none';
+    const res = completeBooking(booking.id, { finalPrice: survey ? 0 : price, paid, paidMethod: paid ? (survey ? 'cash' : method) : null, sendReview: survey ? false : review });
+    finish(res, survey ? `Survey done. Next: send ${firstOf(booking)} the quote.` : paid ? 'Job done. Marked paid.' : `Job done. ${gbp(price)} to collect.`);
     onClose();
   });
-  const footer = html`<${Button} variant="primary" size="lg" block icon="check-check" onClick=${submit} data-testid="complete-submit">Complete job<//>`;
-  return html`<${Sheet} open title="Finish the job" testid="complete-sheet" onClose=${onClose} footer=${footer}>
+  const footer = html`<${Button} variant="primary" size="lg" block icon="check-check" onClick=${submit} data-testid="complete-submit">${survey ? 'Survey done' : install ? 'Install done' : 'Complete job'}<//>`;
+  if (survey) {
+    return html`<${Sheet} open title="Survey visit done" testid="complete-sheet" onClose=${onClose} footer=${footer}>
+      <div class="ja-stack">
+        <p class="ja-lead">The survey visit is free, so there is nothing to collect. Next you send ${firstOf(booking)} the written quote.</p>
+      </div>
+    <//>`;
+  }
+  return html`<${Sheet} open title=${install ? 'Finish the install' : 'Finish the job'} testid="complete-sheet" onClose=${onClose} footer=${footer}>
     <div class="ja-stack">
       <div class="ja-block">
-        <p class="ja-label">Final price</p>
-        <${Stepper} value=${price} onChange=${setPrice} step=${5} label="Final price"
+        <p class="ja-label">${install ? 'Agreed price' : 'Final price'}</p>
+        <${Stepper} value=${price} onChange=${setPrice} step=${5} label=${install ? 'Agreed price' : 'Final price'}
           testids=${{ input: 'complete-price', minus: 'complete-price-minus', plus: 'complete-price-plus' }} />
       </div>
       <div class="ja-block">
@@ -341,19 +377,22 @@ export function JobActionBar({ booking, variant = 'card' }) {
   const [sheet, setSheet] = useState(null); // { kind, id }
   const [eta, setEta] = useState(45);
   const guard = useTapGuard();
+  const brand = useBrand();
+  const progress = useStore((state) => (booking ? quoteProgress(state, booking) : NO_PROGRESS));
   if (!booking) return null;
 
   const kind = sheet && sheet.id === booking.id ? sheet.kind : null;
   const open = (k) => setSheet({ kind: k, id: booking.id });
   const close = () => setSheet(null);
-  const primary = primaryActionFor(booking);
+  const primary = primaryActionFor(booking, progress);
   const secondary = secondaryActionsFor(booking);
   const urgentNew = booking.status === 'new' && booking.urgent;
 
   const runPrimary = () => guard(() => {
     if (!primary) return;
     switch (primary.id) {
-      case 'confirm': doConfirm(booking); break;
+      case 'confirm': case 'confirm_survey': doConfirm(booking); break;
+      case 'quote_ready': doQuoteReady(booking, brand); break;
       case 'accept': doAccept(booking, eta); break;
       case 'on_my_way': open('eta'); break;
       case 'mark_done': open('complete'); break;
@@ -381,8 +420,8 @@ export function JobActionBar({ booking, variant = 'card' }) {
     : null;
 
   let primaryNode;
-  if (primary && primary.id === 'rebook') {
-    const href = routeHref('new', {}, { customer: customerKeyOf(booking.customer.phone), service: booking.serviceId });
+  if (primary && (primary.id === 'rebook' || primary.id === 'book_install')) {
+    const href = routeHref('new', {}, { customer: customerKeyOf(booking.customer.phone), service: primary.id === 'book_install' ? 'ev' : booking.serviceId });
     primaryNode = html`<${Button} variant="primary" size="lg" block icon=${primary.icon} href=${href} data-testid="job-primary">${primary.label}<//>`;
   } else if (primary) {
     primaryNode = html`<${Button} variant="primary" size="lg" block icon=${primary.icon} onClick=${runPrimary} data-testid="job-primary">${primary.label}<//>`;
@@ -435,12 +474,13 @@ export function NeedsYouActions({ booking }) {
   const first = firstOf(booking);
   const text = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about booking ${booking.ref}.`;
   const accept = booking.urgent;
+  const confirmLabel = (primaryActionFor(booking) || PRIMARY.confirm).label;
   return html`<div class="ja-needs">
     ${accept ? html`<${Segmented} class="ja-eta" size="sm" ariaLabel="How long until you arrive" value=${eta} onChange=${setEta}
       options=${ETA_URGENT.map((o) => ({ ...o, testid: `needs-you-eta-${o.value}` }))} />` : null}
     ${accept
       ? html`<${Button} variant="primary" size="lg" block icon="check" onClick=${() => guard(() => doAccept(booking, eta))} data-testid=${`needs-you-accept-${id}`}>Accept<//>`
-      : html`<${Button} variant="primary" size="lg" block icon="check" onClick=${() => guard(() => doConfirm(booking))} data-testid=${`needs-you-confirm-${id}`}>Confirm<//>`}
+      : html`<${Button} variant="primary" size="lg" block icon="check" onClick=${() => guard(() => doConfirm(booking))} data-testid=${`needs-you-confirm-${id}`}>${confirmLabel}<//>`}
     <div class="ja-needs__contact">
       <${Button} variant="secondary" icon="phone" href=${telLink(booking.customer.phone)} data-testid=${`needs-you-call-${id}`}>Call<//>
       <${Button} variant="secondary" icon="message-circle" href=${waLink(booking.customer.phone, text, brand.demoPhoneDigits)} data-testid=${`needs-you-whatsapp-${id}`}>WhatsApp<//>

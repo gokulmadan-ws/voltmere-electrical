@@ -12,9 +12,9 @@ globalThis.document = fakeDocument;
 const fire = (target, type, event = {}) => (handlers[target][type] || []).forEach((fn) => fn(event));
 
 import { setClock, nowStamp as getNowStamp } from '../../js/core/clock.js';
-import { STORAGE_KEYS, makeDefaultSettings } from '../../js/core/config.js';
+import { SCHEMA_VERSION, STORAGE_KEYS, makeDefaultSettings } from '../../js/core/config.js';
 import { SIM_POOL } from '../../js/core/seed.js';
-import { bookingWindowIds, getDayLoad, getDaySlots, isSlotFree, nextFreeSlot } from '../../js/core/availability.js';
+import { bookingWindowIds, getDayLoad, getDaySlots, isSlotFree, isUnscheduled, nextFreeSlot } from '../../js/core/availability.js';
 import {
   selectBookingById, selectBookingByRef, selectInsights, selectMessages, selectNeedsYou, selectOwedTotal, selectRepeatInfo,
   selectUnreadMessageCount, selectCustomers
@@ -53,14 +53,16 @@ afterEach(() => setClock(null));
 
 const draftFor = (over = {}) => ({
   serviceId: 'fault', date: '2026-10-24', windowId: 0,
-  customer: { name: 'Priya Nair', phone: '07700 900231' }, address: { line1: '14 Alder Row', postcode: 'MB3 4QP' }, ...over
+  customer: { name: 'Aoife Magee', phone: '07700 900231' }, address: { line1: '14 Larkfield Gardens', postcode: 'BT9 6QP' }, ...over
 });
 const eicrDraft = (over = {}) => draftFor({ serviceId: 'eicr', variantId: 'house', date: '2026-10-26', windowId: 0, ...over });
 const urgentDraft = (over = {}) => ({
   serviceId: 'emergency', urgent: true, date: '2026-10-23', windowId: null, emergencyReasons: ['no_power'],
-  customer: { name: 'Gareth Pryce', phone: '07700 900500' }, address: { line1: '', postcode: 'MB2 6JN' }, ...over
+  customer: { name: 'Gareth Pryce', phone: '07700 900500' }, address: { line1: '', postcode: 'BT42 6JN' }, ...over
 });
 const ids = (list) => list.map((b) => b.id);
+// The emergency path ships OFF (his business is home EV chargers): tests that exercise it turn it on first.
+const emergenciesOn = () => assert.equal(updateSettings({ takingEmergencies: true }).ok, true);
 const booking = (id) => selectBookingById(getState(), id);
 const kinds = (list) => list.map((m) => m.kind);
 const slotStates = (date, blocks = 1, opts = {}) => getDaySlots(getState(), date, blocks, opts).map((s) => s.state);
@@ -81,7 +83,7 @@ test('round trip through injected storage: saved as vm_state_v1, reloaded withou
   const reloaded = initStore({ storage, force: true });
   assert.equal(reloaded.bookings.length, 16);
   assert.equal(reloaded.meta.rev, rev);
-  assert.equal(selectBookingByRef(reloaded, 'VM-1043').id, made.booking.id);
+  assert.equal(selectBookingByRef(reloaded, 'EL-1043').id, made.booking.id);
   assert.deepEqual(JSON.parse(JSON.stringify(reloaded)), JSON.parse(storage.getItem(STORAGE_KEYS.state)));
 });
 
@@ -108,14 +110,14 @@ test('a stored state with a bad schema is discarded and reseeded', () => {
   const good = JSON.parse(storage.getItem(STORAGE_KEYS.state));
   const bad = [
     'not json at all', '{"v": 99}', '{}', JSON.stringify({ ...good, v: undefined }), JSON.stringify({ ...good, v: 0 }),
-    JSON.stringify({ ...good, v: 2 }), JSON.stringify({ ...good, bookings: 'nope' }), JSON.stringify({ ...good, settings: null }),
+    JSON.stringify({ ...good, v: SCHEMA_VERSION + 1 }), JSON.stringify({ ...good, bookings: 'nope' }), JSON.stringify({ ...good, settings: null }),
     JSON.stringify({ ...good, meta: {} }), 'null', '[]', '42'
   ];
   for (const raw of bad) {
     const s = memStorage({ [STORAGE_KEYS.state]: raw });
     const state = initStore({ storage: s, force: true });
     assert.equal(state.bookings.length, 15, `reseeded from: ${raw.slice(0, 30)}`);
-    assert.equal(state.v, 1);
+    assert.equal(state.v, SCHEMA_VERSION);
     assert.deepEqual(JSON.parse(s.getItem(STORAGE_KEYS.state)).bookings.length, 15, 'and written back');
   }
 });
@@ -124,7 +126,7 @@ test('a fresh store takes its theme mirror from vm_theme', () => {
   const s = memStorage({ [STORAGE_KEYS.theme]: 'dark' });
   assert.equal(initStore({ storage: s, force: true }).settings.theme, 'dark');
   const junk = memStorage({ [STORAGE_KEYS.theme]: 'purple' });
-  assert.equal(initStore({ storage: junk, force: true }).settings.theme, 'auto');
+  assert.equal(initStore({ storage: junk, force: true }).settings.theme, 'dark', 'dark is the default look');
 });
 
 test('storage that throws puts the store in memory mode and everything still works', () => {
@@ -134,7 +136,7 @@ test('storage that throws puts the store in memory mode and everything still wor
   assert.deepEqual(getStorageStatus(), { ok: false, mode: 'memory' });
   const made = createBooking(draftFor());
   assert.equal(made.ok, true);
-  assert.equal(made.booking.ref, 'VM-1043');
+  assert.equal(made.booking.ref, 'EL-1043');
   assert.equal(getState().bookings.length, 16);
   assert.equal(syncFromStorage(), false);
   assert.equal(confirmBooking('bk_seed_11').ok, true);
@@ -233,14 +235,14 @@ test('a subscriber that throws does not stop the others or break the mutation', 
 
 // ---------- createBooking ----------
 
-test('createBooking happy path: VM-1043, confirmed, three messages with the owner alert newest', () => {
+test('createBooking happy path: EL-1043, confirmed, three messages with the owner alert newest', () => {
   const calls = [];
   const off = subscribe((s) => calls.push(s.meta.rev));
   const result = createBooking(eicrDraft());
   off();
   assert.equal(result.ok, true);
   const b = result.booking;
-  assert.equal(b.ref, 'VM-1043');
+  assert.equal(b.ref, 'EL-1043');
   assert.equal(b.status, 'confirmed');
   assert.match(b.id, /^bk_[0-9a-z]{8}$/);
   assert.equal(b.createdAt, NOW);
@@ -258,8 +260,8 @@ test('createBooking happy path: VM-1043, confirmed, three messages with the owne
   assert.equal(b.seed, false);
   assert.equal(b.finalPrice, null);
   assert.equal(b.paid, false);
-  assert.deepEqual(b.customer, { name: 'Priya Nair', phone: '07700 900231', email: '' });
-  assert.deepEqual(b.address, { line1: '14 Alder Row', postcode: 'MB3 4QP' });
+  assert.deepEqual(b.customer, { name: 'Aoife Magee', phone: '07700 900231', email: '' });
+  assert.deepEqual(b.address, { line1: '14 Larkfield Gardens', postcode: 'BT9 6QP' });
   assert.deepEqual(b.history.map((h) => [h.event, h.by]), [['created', 'customer'], ['confirmed', 'system']]);
   assert.equal(getState().refSeq, 1044);
 
@@ -272,17 +274,17 @@ test('createBooking happy path: VM-1043, confirmed, three messages with the owne
   assert.ok(result.messages.every((m) => m.at === NOW && m.bookingId === b.id && m.simulated === true && m.seed === false && /^msg_[0-9a-z]{8}$/.test(m.id)));
   assert.equal(getState().messages.length, 28 + 3);
   assert.equal(getState().meta.msgSeq, 31);
-  assert.ok(confirmed.body.startsWith("Hi Priya, it's Dan from Voltmere Electrical. You're booked in: EICR safety report (House, 2–3 bed), Mon 26 Oct, morning, arriving between 8 and 10am"));
+  assert.ok(confirmed.body.startsWith("Hi Aoife, it's Daniel from 180 Electrical. You're booked in: EICR safety report (House, 2–3 bed), Mon 26 Oct, morning, arriving between 8 and 10am"));
   assert.equal(calls.length, 1, 'one notification for the whole booking');
   assert.equal(getState().bookings.at(-1).id, b.id);
   assert.equal(selectUnreadMessageCount(getState()), 1, 'the owner alert is unread');
-  assert.deepEqual(selectRepeatInfo(getState(), b), { isRepeat: true, nth: 2 }, 'Priya has booked before');
+  assert.deepEqual(selectRepeatInfo(getState(), b), { isRepeat: true, nth: 2 }, 'Aoife has booked before');
 });
 
 test('createBooking normalises and trims what the customer typed', () => {
   const result = createBooking(draftFor({
     customer: { name: `  ${'N'.repeat(80)}  `, phone: '+44 7700 900231', email: ' priya@home.example ' },
-    address: { line1: '  14 Alder Row ', postcode: 'mb34qp' },
+    address: { line1: '  14 Larkfield Gardens ', postcode: 'bt96qp' },
     notes: `  ${'x'.repeat(400)}  `
   }));
   assert.equal(result.ok, true);
@@ -290,8 +292,8 @@ test('createBooking normalises and trims what the customer typed', () => {
   assert.equal(b.customer.name.length, 60);
   assert.equal(b.customer.phone, '07700 900231');
   assert.equal(b.customer.email, 'priya@home.example');
-  assert.equal(b.address.line1, '14 Alder Row');
-  assert.equal(b.address.postcode, 'MB3 4QP');
+  assert.equal(b.address.line1, '14 Larkfield Gardens');
+  assert.equal(b.address.postcode, 'BT9 6QP');
   assert.equal(b.notes.length, 300);
 });
 
@@ -303,9 +305,9 @@ test('createBooking validation: exact messages, and nothing is written', () => {
   assert.deepEqual(empty.errors, {
     name: 'Enter your name', phone: 'Enter your mobile number', postcode: 'Enter your postcode', line1: 'Enter your house number and street'
   });
-  const wrong = createBooking(draftFor({ customer: { name: 'P', phone: '01234 567890' }, address: { line1: '14 Alder Row', postcode: 'xx' } }));
+  const wrong = createBooking(draftFor({ customer: { name: 'P', phone: '01234 567890' }, address: { line1: '14 Larkfield Gardens', postcode: 'xx' } }));
   assert.deepEqual(wrong.errors, {
-    name: 'Enter your name', phone: "That doesn't look like a UK mobile. It should start 07 or +44 7", postcode: 'Enter a UK postcode, like MB3 4QP'
+    name: 'Enter your name', phone: "That doesn't look like a UK mobile. It should start 07 or +44 7", postcode: 'Enter a UK postcode, like BT9 6QP'
   });
   assert.deepEqual(createBooking(draftFor({ date: 'tomorrow' })).errors, { date: 'Choose a day' });
   assert.deepEqual(createBooking(draftFor({ date: '2026-02-30' })).errors, { date: 'Choose a day' });
@@ -328,9 +330,9 @@ test('createBooking: the same window twice gives slot_taken with 3 alternatives,
   assert.equal(second.ok, false);
   assert.equal(second.reason, 'slot_taken');
   assert.equal(second.alternatives.length, 3);
-  assert.deepEqual(second.alternatives.map((a) => a.human), ['Mon 26 Oct, 8–10am', 'Mon 26 Oct, 10am–12', 'Thu 29 Oct, 10am–12']);
+  assert.deepEqual(second.alternatives.map((a) => a.human), ['Mon 26 Oct, 8–10am', 'Mon 26 Oct, 10am–12', 'Thu 29 Oct, 1–3pm']);
   assert.ok(second.alternatives.every((a) => 'date' in a && 'windowId' in a && 'blocks' in a && 'label' in a));
-  assert.equal(getState().refSeq, 1044, 'the failed attempt did not consume VM-1044');
+  assert.equal(getState().refSeq, 1044, 'the failed attempt did not consume EL-1044');
   assert.equal(getState().bookings.length, 16);
   // a taken half-day pair, a blocked window, a booked window and a full day are all slot_taken
   assert.equal(createBooking(draftFor({ date: '2026-10-27', windowId: 0 })).reason, 'slot_taken', 'Tuesday is full');
@@ -342,11 +344,14 @@ test('createBooking: the same window twice gives slot_taken with 3 alternatives,
 });
 
 test('createBooking: edge postcode, outside postcode and auto-confirm off all wait for the owner', () => {
-  const edge = createBooking(draftFor({ address: { line1: 'Mill Cottage', postcode: 'MB12 6AB' } }));
+  // there is no edge zone by default: the owner can add one
+  const covered = getState().settings.business.coveredOutward;
+  assert.equal(updateSettings({ business: { edgeOutward: ['BT30'], coveredOutward: covered.filter((o) => o !== 'BT30') } }).ok, true);
+  const edge = createBooking(draftFor({ address: { line1: 'Mill Cottage', postcode: 'BT30 6AB' } }));
   assert.equal(edge.booking.status, 'new');
   assert.deepEqual(kinds(edge.messages), ['customer_received', 'owner_new_booking']);
-  assert.ok(edge.messages[0].body.includes('I just need to check travel to MB12 6AB.'));
-  assert.ok(edge.messages[1].body.includes('Needs your OK: outside your usual area (MB12).'));
+  assert.ok(edge.messages[0].body.includes('We just need to check travel to BT30 6AB.'));
+  assert.ok(edge.messages[1].body.includes('Needs your OK: outside your usual area (BT30).'));
   assert.deepEqual(edge.booking.history.map((h) => h.event), ['created']);
   const outside = createBooking(draftFor({ date: '2026-10-26', windowId: 0, address: { line1: '1 High St', postcode: 'AB1 2CD' } }));
   assert.equal(outside.booking.status, 'new');
@@ -372,6 +377,7 @@ test('createBooking: no reminder when remindersOn is false or there is no time f
 });
 
 test('urgent bookings never take a window and are never auto-confirmed', () => {
+  emergenciesOn();
   const before = JSON.stringify(['2026-10-23', '2026-10-24', '2026-10-26'].map((d) => getDayLoad(getState(), d)));
   const result = createBooking(urgentDraft());
   assert.equal(result.ok, true);
@@ -385,11 +391,11 @@ test('urgent bookings never take a window and are never auto-confirmed', () => {
   assert.equal(b.address.line1, '');
   assert.equal(b.quotedPrice, 95);
   assert.deepEqual(kinds(result.messages), ['customer_emergency_received', 'owner_emergency']);
-  assert.ok(result.messages[1].body.startsWith('*URGENT: emergency request VM-1043*'));
+  assert.ok(result.messages[1].body.startsWith('*URGENT: emergency request EL-1043*'));
   assert.equal(JSON.stringify(['2026-10-23', '2026-10-24', '2026-10-26'].map((d) => getDayLoad(getState(), d))), before);
   assert.equal(nextFreeSlot(getState(), 'fault').human, 'Tomorrow, 8–10am');
-  // the order of Needs you (F3): seeded Ngozi, the new emergency, seeded Sam
-  assert.deepEqual(ids(selectNeedsYou(getState())), ['bk_seed_07', b.id, 'bk_seed_11']);
+  // the order of Needs you (F3): the emergency first, then the two seeded enquiries oldest first
+  assert.deepEqual(ids(selectNeedsYou(getState())), [b.id, 'bk_seed_11', 'bk_seed_07']);
   // reasons are required, unknown ones are dropped, a street is optional
   assert.deepEqual(createBooking(urgentDraft({ emergencyReasons: [] })).errors, { emergencyReasons: 'Choose what is happening' });
   assert.deepEqual(createBooking(urgentDraft({ emergencyReasons: ['nope'] })).errors, { emergencyReasons: 'Choose what is happening' });
@@ -397,16 +403,20 @@ test('urgent bookings never take a window and are never auto-confirmed', () => {
   assert.equal(createBooking(urgentDraft({ address: { line1: '', postcode: '' } })).errors.postcode, 'Enter your postcode');
 });
 
-test('emergencies_off and service_unavailable', () => {
-  updateSettings({ takingEmergencies: false });
+test('emergencies_off (the default) and service_unavailable', () => {
+  assert.equal(getState().settings.takingEmergencies, false, 'the emergency path ships off');
   const off = createBooking(urgentDraft());
   assert.equal(off.ok, false);
   assert.equal(off.reason, 'emergencies_off');
+  assert.equal(getState().refSeq, 1043);
+  emergenciesOn();
+  assert.equal(createBooking(urgentDraft()).ok, true, 'and works once he turns it on');
+  updateSettings({ takingEmergencies: false });
   updateSettings({ takingEmergencies: true });
   assert.equal(updateService('ev', { active: false }).ok, true);
   assert.equal(createBooking(eicrDraft({ serviceId: 'ev', variantId: undefined })).reason, 'service_unavailable');
   assert.equal(createBooking(draftFor({ serviceId: 'nonsense' })).reason, 'service_unavailable');
-  assert.equal(getState().refSeq, 1043);
+  assert.equal(getState().refSeq, 1044, 'only the one emergency used a reference');
 });
 
 test('owner mode: confirmed at once, no owner alert, lead time and full days ignored, price override, notify switch', () => {
@@ -447,18 +457,24 @@ test('confirmBooking: new -> confirmed with the confirmation and a scheduled rem
   assert.equal(result.booking.seenByOwner, true);
   assert.ok(result.undoToken);
   assert.deepEqual(result.booking.history.at(-1), { at: NOW, event: 'confirmed', by: 'owner' });
+  assert.equal(result.booking.tentative, false, 'the pencilled-in survey is firm once the owner confirms it');
   const added = selectMessages(getState(), { bookingId: 'bk_seed_11' }).filter((m) => !m.seed);
   assert.deepEqual(kinds(added), ['customer_confirmed', 'customer_reminder'], 'newest first: the confirmation is on top');
   assert.equal(added[1].sendAt, '2026-10-26T18:00');
   assert.equal(selectMessages(getState())[0].kind, 'customer_confirmed', 'F2: the newest message is the confirmation');
   assert.equal(confirmBooking('bk_seed_11').reason, 'bad_transition');
   assert.equal(confirmBooking('bk_seed_08').reason, 'bad_transition', 'already confirmed');
-  assert.equal(confirmBooking('bk_seed_07').reason, 'bad_transition', 'an emergency is accepted, not confirmed');
+  emergenciesOn();
+  const emergency = createBooking(urgentDraft());
+  assert.equal(confirmBooking(emergency.booking.id).reason, 'bad_transition', 'an emergency is accepted, not confirmed');
   assert.equal(confirmBooking('nope').reason, 'not_found');
 });
 
 test('acceptEmergency: urgent new -> confirmed with an ETA', () => {
-  const result = acceptEmergency('bk_seed_07', 45);
+  emergenciesOn();
+  const urgent = createBooking(urgentDraft());
+  const urgentId = urgent.booking.id;
+  const result = acceptEmergency(urgentId, 45);
   assert.equal(result.ok, true);
   assert.equal(result.booking.status, 'confirmed');
   assert.equal(result.booking.etaMinutes, 45);
@@ -467,10 +483,10 @@ test('acceptEmergency: urgent new -> confirmed with an ETA', () => {
   const msg = selectMessages(getState())[0];
   assert.equal(msg.kind, 'customer_emergency_accepted');
   assert.ok(msg.body.includes('about 45 minutes away (around 21:15)'));
-  assert.ok(!ids(selectNeedsYou(getState())).includes('bk_seed_07'));
-  assert.equal(acceptEmergency('bk_seed_07', 45).reason, 'bad_transition');
+  assert.ok(!ids(selectNeedsYou(getState())).includes(urgentId));
+  assert.equal(acceptEmergency(urgentId, 45).reason, 'bad_transition');
   assert.equal(acceptEmergency('bk_seed_11', 45).reason, 'bad_transition', 'not an emergency');
-  for (const eta of [0, -5, 1.5, '45', null, undefined]) assert.equal(acceptEmergency('bk_seed_07', eta).reason, 'invalid', String(eta));
+  for (const eta of [0, -5, 1.5, '45', null, undefined]) assert.equal(acceptEmergency(urgentId, eta).reason, 'invalid', String(eta));
   assert.equal(acceptEmergency('nope', 60).reason, 'not_found');
   const other = createBooking(urgentDraft());
   assert.equal(acceptEmergency(other.booking.id, 90).booking.etaMinutes, 90, 'any positive whole number is accepted');
@@ -487,12 +503,13 @@ test('declineBooking: new -> cancelled (declined), frees the window, tells the c
   assert.equal(slotStates('2026-10-27')[1], 'free');
   const msg = selectMessages(getState())[0];
   assert.equal(msg.kind, 'customer_declined');
-  assert.ok(msg.body.includes("Sorry, I can't do Sockets, switches and lights on Tue 27 Oct, 10am–12."));
+  assert.ok(msg.body.includes("Sorry, I can't do the free survey visit on Tue 27 Oct, 10am–12."));
   assert.ok(msg.body.includes('My next free visit is Tomorrow, 8–10am.'), 'never offers the window that was just released');
   assert.ok(!msg.body.includes('Reason:'));
   assert.equal(declineBooking('bk_seed_11').reason, 'bad_transition');
   assert.equal(declineBooking('bk_seed_08').reason, 'bad_transition', 'a confirmed job is cancelled, not declined');
-  const urgent = declineBooking('bk_seed_07');
+  emergenciesOn();
+  const urgent = declineBooking(createBooking(urgentDraft()).booking.id);
   assert.equal(urgent.ok, true);
   assert.ok(selectMessages(getState())[0].body.includes("Sorry, I can't do your emergency visit."));
 });
@@ -506,7 +523,7 @@ test('markOnTheWay: confirmed -> on_the_way with ETA and message', () => {
   assert.ok(result.undoToken);
   const msg = selectMessages(getState())[0];
   assert.equal(msg.kind, 'customer_on_my_way');
-  assert.ok(msg.body.includes("I'm on my way to 2 Linnet Close, 30 minutes away (around 21:00)"));
+  assert.ok(msg.body.includes("I'm on my way to BT41 8PY, 30 minutes away (around 21:00)"), 'a postcode-only enquiry falls back to the postcode');
   assert.deepEqual(result.booking.history.at(-1), { at: NOW, event: 'on_the_way', by: 'owner', note: '21:00' });
   assert.equal(markOnTheWay('bk_seed_08', 30).reason, 'bad_transition');
   assert.equal(markOnTheWay('bk_seed_11', 30).reason, 'bad_transition', 'still waiting for approval');
@@ -540,7 +557,7 @@ test('completeBooking: confirmed or on_the_way -> done, with money and the revie
   assert.equal(paid.booking.reviewRequested, false);
   assert.deepEqual(kinds(selectMessages(getState(), { bookingId: 'bk_seed_14' }).filter((m) => !m.seed)), ['customer_completed']);
   assert.ok(selectMessages(getState())[0].body.includes('Paid with thanks, £85.'));
-  assert.equal(selectInsights(getState(), NOW).collectedMonth, 850 + 85, 'F4: collected rises');
+  assert.equal(selectInsights(getState(), NOW).collectedMonth, 1209 + 85, 'F4: collected rises');
   assert.deepEqual(paid.booking.history.map((h) => h.event).slice(-2), ['done', 'paid']);
 
   const fromTheWay = markOnTheWay('bk_seed_10', 15);
@@ -569,7 +586,7 @@ test('markPaid and markUnpaid', () => {
   assert.equal(result.booking.paidAt, NOW);
   assert.ok(result.undoToken);
   assert.equal(selectOwedTotal(getState()), 170);
-  assert.equal(selectInsights(getState(), NOW).collectedMonth, 925, 'markPaid then Insights collectedMonth rises');
+  assert.equal(selectInsights(getState(), NOW).collectedMonth, 1209 + 75, 'markPaid then Insights collectedMonth rises');
   assert.equal(markPaid('bk_seed_06', 'cash').reason, 'bad_transition', 'already paid');
   assert.equal(markPaid('bk_seed_08', 'cash').reason, 'bad_transition', 'not done');
   assert.equal(markPaid('bk_seed_04', 'cheque').reason, 'invalid');
@@ -609,7 +626,9 @@ test('cancelBooking by the owner frees the window and tells the customer (or not
   assert.equal(cancelBooking('bk_seed_10', 'somebody').reason, 'invalid');
   assert.equal(markOnTheWay('bk_seed_12', 20).ok, true);
   assert.equal(cancelBooking('bk_seed_12', 'owner').ok, true, 'an on_the_way job can be cancelled by the owner');
-  assert.equal(cancelBooking('bk_seed_07', 'owner').ok, true, 'and an unaccepted emergency');
+  assert.equal(cancelBooking('bk_seed_07', 'owner').ok, true, 'and a pencilled-in enquiry, which then holds no window');
+  assert.equal(booking('bk_seed_07').tentative, false);
+  assert.equal(slotStates('2026-10-29')[1], 'free');
 });
 
 test('cancelBooking by the customer: refused inside 24 hours, for urgent jobs and other statuses; F8 happy path', () => {
@@ -627,11 +646,12 @@ test('cancelBooking by the customer: refused inside 24 hours, for urgent jobs an
   assert.ok(alert.body.includes('That window is free again.'));
   assert.ok(!selectMessages(getState(), { bookingId: made.booking.id }).some((m) => m.kind === 'customer_reminder'), 'the scheduled reminder is gone');
 
-  // inside the 24 hour cut-off (Hannah, tomorrow 10:00)
+  // inside the 24 hour cut-off (Eoin's survey, tomorrow 10:00)
   assert.equal(cancelBooking('bk_seed_08', 'customer').reason, 'not_allowed');
   assert.equal(booking('bk_seed_08').status, 'confirmed');
   // an urgent request is always "close"
-  assert.equal(cancelBooking('bk_seed_07', 'customer').reason, 'not_allowed');
+  emergenciesOn();
+  assert.equal(cancelBooking(createBooking(urgentDraft()).booking.id, 'customer').reason, 'not_allowed');
   // statuses other than new / confirmed
   assert.equal(cancelBooking('bk_seed_01', 'customer').reason, 'not_allowed');
   markOnTheWay('bk_seed_14', 20);
@@ -661,21 +681,21 @@ test('rescheduleBooking by the owner: moves the job, replaces the reminder, tell
   assert.equal(result.booking.history.at(-1).event, 'rescheduled');
   assert.equal(slotStates('2026-10-24')[1], 'free', 'the old window is free');
   assert.equal(slotStates('2026-10-26')[1], 'booked', 'the new one is booked');
-  // Hannah's seeded reminder (18:00 tonight) was already due, so it is history; a fresh one is scheduled for the new day
+  // Eoin's seeded reminder (18:00 tonight) was already due, so it is history; a fresh one is scheduled for the new day
   const scheduled = getState().messages.filter((m) => m.bookingId === 'bk_seed_08' && m.kind === 'customer_reminder' && m.sendAt > NOW);
   assert.equal(scheduled.length, 1, 'exactly one unsent reminder');
   assert.equal(scheduled[0].sendAt, '2026-10-25T18:00');
   assert.ok(!scheduled[0].seed);
   const msg = selectMessages(getState())[0];
   assert.equal(msg.kind, 'customer_rescheduled');
-  assert.ok(msg.body.includes('moved your Fault finding and repairs from Sat 24 Oct, 10am–12 to Mon 26 Oct, 10am–12 at 2 Linnet Close'));
+  assert.ok(msg.body.includes('moved your Home EV charger quote from Sat 24 Oct, 10am–12 to Mon 26 Oct, 10am–12 at BT41 8PY'));
   // silent reschedule
   const quiet = rescheduleBooking('bk_seed_08', { date: '2026-10-26', windowId: 0 }, 'owner', { notify: false });
   assert.equal(quiet.ok, true);
   assert.equal(selectMessages(getState())[0].kind, 'customer_reminder');
   // half-day jobs move between their own windows and only to 0 or 2
   const eicr = rescheduleBooking('bk_seed_09', { date: '2026-10-26', windowId: 0 });
-  assert.equal(eicr.ok, false, 'Monday morning now holds Hannah');
+  assert.equal(eicr.ok, false, 'Monday morning now holds Eoin');
   assert.equal(eicr.reason, 'slot_taken');
   assert.equal(eicr.alternatives.length, 3);
   // Marcus's EICR reminder was still scheduled (Sun 25 Oct 18:00): moving the job deletes it and schedules a new one
@@ -695,11 +715,15 @@ test('rescheduleBooking by the owner: moves the job, replaces the reminder, tell
   assert.equal(rescheduleBooking('bk_seed_08', { date: '2026-10-28', windowId: 0 }).reason, 'slot_taken', 'Van MOT');
   // statuses
   assert.equal(rescheduleBooking('bk_seed_01', { date: '2026-10-29', windowId: 0 }).reason, 'bad_transition', 'done');
-  assert.equal(rescheduleBooking('bk_seed_07', { date: '2026-10-29', windowId: 0 }).reason, 'bad_transition', 'urgent');
+  emergenciesOn();
+  assert.equal(rescheduleBooking(createBooking(urgentDraft()).booking.id, { date: '2026-10-29', windowId: 2 }).reason, 'bad_transition', 'urgent');
   assert.equal(rescheduleBooking('nope', { date: '2026-10-29', windowId: 0 }).reason, 'not_found');
   // a `new` booking can be moved too, and gets no reminder until confirmed
-  const moved = rescheduleBooking('bk_seed_11', { date: '2026-10-29', windowId: 1 });
+  assert.equal(booking('bk_seed_11').tentative, true, 'a pencilled-in survey');
+  const moved = rescheduleBooking('bk_seed_11', { date: '2026-10-30', windowId: 0 });
   assert.equal(moved.ok, true);
+  assert.equal(moved.booking.status, 'new', 'still waiting for his OK');
+  assert.equal(moved.booking.tentative, false, 'but the owner chose the time, so it is no longer a provisional pencil mark');
   assert.ok(!getState().messages.some((m) => m.bookingId === 'bk_seed_11' && m.kind === 'customer_reminder' && !m.seed));
 });
 
@@ -712,7 +736,8 @@ test('rescheduleBooking by the customer follows the cut-off and customer-mode sl
   assert.ok(selectMessages(getState())[0].body.includes('moved EICR safety report from Mon 26 Oct, morning, 8–10am to Thu 29 Oct, afternoon, 1–3pm'));
   assert.equal(rescheduleBooking(made.booking.id, { date: '2026-12-01', windowId: 0 }, 'customer').reason, 'slot_taken', 'customers keep the horizon');
   assert.equal(rescheduleBooking('bk_seed_08', { date: '2026-10-26', windowId: 1 }, 'customer').reason, 'not_allowed', 'inside 24 hours');
-  assert.equal(rescheduleBooking('bk_seed_07', { date: '2026-10-26', windowId: 1 }, 'customer').reason, 'not_allowed', 'urgent');
+  emergenciesOn();
+  assert.equal(rescheduleBooking(createBooking(urgentDraft()).booking.id, { date: '2026-10-26', windowId: 1 }, 'customer').reason, 'not_allowed', 'urgent');
   assert.equal(rescheduleBooking('bk_seed_01', { date: '2026-10-26', windowId: 1 }, 'customer').reason, 'not_allowed', 'done');
   assert.equal(rescheduleBooking(made.booking.id, { date: '2026-10-26', windowId: 0 }, 'robot').reason, 'invalid');
 });
@@ -725,7 +750,7 @@ test('updateBooking: only internalNotes, quotedPrice and finalPrice; no-ops do n
   assert.equal(result.booking.quotedPrice, 80);
   assert.equal(result.booking.finalPrice, 90);
   assert.equal(result.booking.status, 'confirmed', 'unknown keys are ignored');
-  assert.equal(result.booking.customer.name, 'Hannah Whitfield');
+  assert.equal(result.booking.customer.name, 'Eoin McCartney');
   assert.equal(getState().meta.rev, rev + 1);
   assert.equal(updateBooking('bk_seed_08', { internalNotes: 'Key safe 4411' }).ok, true);
   assert.equal(getState().meta.rev, rev + 1, 'same value: nothing written');
@@ -795,6 +820,7 @@ test('sendMessageNow turns a scheduled message into a sent one', () => {
 });
 
 test('message seq strictly increases and unread counts follow markMessagesSeen', () => {
+  emergenciesOn();
   const seqs = [];
   const a = createBooking(draftFor());
   const b = createBooking(eicrDraft());
@@ -810,7 +836,7 @@ test('message seq strictly increases and unread counts follow markMessagesSeen',
   assert.equal(selectUnreadMessageCount(getState()), 0);
   assert.equal(getState().meta.messagesSeenSeq, getState().meta.msgSeq);
   // same frozen minute, after the owner looked: still counts
-  assert.equal(createBooking(draftFor({ date: '2026-10-29', windowId: 1 })).ok, true);
+  assert.equal(createBooking(draftFor({ date: '2026-10-29', windowId: 2 })).ok, true);
   assert.equal(selectUnreadMessageCount(getState()), 1);
   assert.equal(getState().messages.at(-1).at, NOW);
 });
@@ -826,7 +852,7 @@ test('addBlock, blockRange, removeBlock, removeBlockGroup', () => {
   assert.ok(one.undoToken);
   assert.equal(slotStates('2026-10-24')[0], 'blocked');
   assert.equal(nextFreeSlot(getState(), 'fault').human, 'Mon 26 Oct, 8–10am', 'F7: the landing page moves on');
-  assert.equal(addBlock({ date: '2026-10-24', windowId: 1 }).reason, 'booked', 'Hannah is in window 1');
+  assert.equal(addBlock({ date: '2026-10-24', windowId: 1 }).reason, 'booked', 'Eoin is in window 1');
   assert.equal(addBlock({ date: '2026-10-24', windowId: 0 }).reason, 'invalid', 'already blocked');
   assert.equal(addBlock({ date: 'nope', windowId: 0 }).reason, 'invalid');
   assert.equal(addBlock({ date: '2026-10-26', windowId: 9 }).reason, 'invalid');
@@ -844,13 +870,13 @@ test('addBlock, blockRange, removeBlock, removeBlockGroup', () => {
 test('blockRange: one shared groupId, defaults, validation and unblocking a group', () => {
   const range = blockRange({ fromDate: '2026-10-29', label: 'Training' });
   assert.equal(range.ok, true);
-  assert.deepEqual(range.added.map((b) => b.windowId), [1, 2, 3], 'Kwame holds window 0');
-  assert.deepEqual(range.skipped, [{ date: '2026-10-29', windowId: 0, reason: 'booked' }]);
+  assert.deepEqual(range.added.map((b) => b.windowId), [2, 3], 'Ciaran holds window 0 and Sinead\'s pencilled-in survey window 1');
+  assert.deepEqual(range.skipped, [{ date: '2026-10-29', windowId: 0, reason: 'booked' }, { date: '2026-10-29', windowId: 1, reason: 'booked' }]);
   const group = new Set(range.added.map((b) => b.groupId));
   assert.equal(group.size, 1);
   assert.match([...group][0], /^grp_[0-9a-z]{8}$/);
   assert.ok(range.undoToken);
-  assert.equal(slotStates('2026-10-29').join(), 'booked,blocked,blocked,blocked');
+  assert.equal(slotStates('2026-10-29').join(), 'booked,booked,blocked,blocked');
   // until a date, days off excluded by the engine but blocks are still stored per window
   const week = blockRange({ fromDate: '2026-11-02', toDate: '2026-11-04', windowIds: [0, 1], label: 'Holiday' });
   assert.equal(week.added.length, 6);
@@ -889,14 +915,14 @@ test('addDaysOff, removeDayOff, setDayFull and what customers see (F9, F10)', ()
   assert.equal(result.added[0].date, '2026-10-24');
   assert.equal(result.added[0].label, 'Day off');
   assert.match(result.added[0].id, /^off_[0-9a-z]{8}$/);
-  assert.equal(result.bookedCount, 1, 'Hannah stays in the diary');
+  assert.equal(result.bookedCount, 1, 'Eoin stays in the diary');
   assert.ok(result.undoToken);
   assert.equal(booking('bk_seed_08').status, 'confirmed');
   assert.equal(nextFreeSlot(getState(), 'fault').human, 'Mon 26 Oct, 8–10am');
   assert.equal(getDayLoad(getState(), '2026-10-24').level, 'closed');
   const week = addDaysOff(['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-24', '2026-10-26'], 'Holiday');
   assert.deepEqual(week.added.map((d) => d.date), ['2026-10-26', '2026-10-27', '2026-10-28'], 'duplicates and existing days are skipped');
-  assert.equal(week.bookedCount, 6, 'Monday EICR, four Tuesday jobs and Hannah on the already-off Saturday; they all stay');
+  assert.equal(week.bookedCount, 6, 'Monday install, four Tuesday jobs and Eoin on the already-off Saturday; they all stay');
   assert.equal(addDaysOff([]).reason, 'invalid');
   assert.equal(addDaysOff(['nope']).reason, 'invalid');
   assert.equal(addDaysOff('2026-10-24').reason, 'invalid');
@@ -931,19 +957,23 @@ test('updateSettings: trims, normalises the phone, merges business, replaces hou
   assert.equal(biz.name, 'Ashby Sparks');
   assert.equal(biz.shortName, 'Ashby');
   assert.equal(biz.ownerFirstName, 'Lee');
-  assert.equal(biz.ownerFullName, 'Lee Mercer', 'the first word of the full name follows the first name');
+  assert.equal(biz.ownerFullName, 'Lee', 'the full name is just the first name, so it follows it');
   assert.equal(biz.phone, '07700 900555');
   assert.equal(biz.tagline, 'Spark joy.');
-  assert.equal(biz.email, 'dan@voltmere.example', 'untouched fields stay');
-  assert.deepEqual(biz.coveredOutward.slice(0, 2), ['MB1', 'MB2']);
+  assert.equal(biz.email, 'daniel@180electrical.co.uk', 'untouched fields stay');
+  assert.deepEqual(biz.coveredOutward.slice(0, 2), ['BT1', 'BT2']);
+  assert.deepEqual(biz.credentials, ['Level 3 Electrical Installation', '2391 Inspection and Testing']);
   assert.equal(result.settings, getState().settings);
   // the rebrand reaches the next message
   const made = createBooking(draftFor());
-  assert.ok(made.messages[1].body.startsWith("Hi Priya, it's Lee from Ashby Sparks."));
-  assert.equal(made.messages.at(-1).toName, 'Lee Mercer');
+  assert.ok(made.messages[1].body.startsWith("Hi Aoife, it's Lee from Ashby Sparks."));
+  assert.equal(made.messages.at(-1).toName, 'Lee');
   assert.equal(made.messages.at(-1).toPhone, '07700 900555');
   updateSettings({ business: { ownerFullName: 'Lee Ashby' } });
   assert.equal(getState().settings.business.ownerFullName, 'Lee Ashby');
+  updateSettings({ business: { ownerFirstName: 'Leo' } });
+  assert.equal(getState().settings.business.ownerFullName, 'Leo Ashby', 'the first word of a longer full name follows the first name');
+  updateSettings({ business: { ownerFirstName: 'Lee' } });
   updateSettings({ business: { ownerFirstName: 'Pat', ownerFullName: 'Patricia Ashby' } });
   assert.equal(getState().settings.business.ownerFullName, 'Patricia Ashby', 'an explicit full name wins');
 
@@ -968,7 +998,7 @@ test('updateSettings validation: exact messages, and a failed patch changes noth
   });
   assert.equal(getState(), before);
   assert.equal(storage.getItem(STORAGE_KEYS.state), raw);
-  assert.equal(getState().settings.business.tagline, 'Local electrician. Booked in 60 seconds.', 'the valid part was not applied either');
+  assert.equal(getState().settings.business.tagline, 'Home EV charger installation across Northern Ireland.', 'the valid part was not applied either');
   for (const lead of [60, 90, 120, 180, 240]) assert.equal(updateSettings({ leadMinutes: lead }).ok, true, String(lead));
   for (const days of [7, 14, 21, 28]) assert.equal(updateSettings({ maxDaysAhead: days }).ok, true, String(days));
   assert.equal(updateSettings({ leadMinutes: '90' }).reason, 'invalid');
@@ -983,9 +1013,9 @@ test('settings changes reach the availability engine at once (notice, horizon, h
   assert.equal(slotStates('2026-10-24')[0], 'free');
   updateSettings({ hours: [[], [0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3], [1]] });
   assert.equal(slotStates('2026-10-24')[0], 'closed');
-  assert.equal(nextFreeSlot(getState(), 'fault').human, 'Mon 26 Oct, 8–10am', 'Saturday window 1 is Hannah and window 0 is now closed');
+  assert.equal(nextFreeSlot(getState(), 'fault').human, 'Mon 26 Oct, 8–10am', 'Saturday window 1 is Eoin and window 0 is now closed');
   updateSettings({ maxDaysAhead: 7 });
-  assert.equal(isSlotFree(getState(), { date: '2026-10-29', windowId: 1 }), true);
+  assert.equal(isSlotFree(getState(), { date: '2026-10-29', windowId: 2 }), true);
   assert.equal(isSlotFree(getState(), { date: '2026-10-30', windowId: 1 }), false);
 });
 
@@ -996,7 +1026,7 @@ test('updateService: prices, variants, headline recompute, free and inactive ser
   assert.equal(fault.service.name, 'Fault finding');
   assert.equal(fault.service.description, 'Found and fixed.');
   assert.equal(createBooking(draftFor()).booking.quotedPrice, 80, 'new bookings quote the live price');
-  assert.equal(booking('bk_seed_08').quotedPrice, 75, 'existing bookings keep theirs');
+  assert.equal(booking('bk_seed_10').quotedPrice, 75, 'existing bookings keep theirs');
 
   const eicr = updateService('eicr', { variants: [{ id: 'flat', price: 120 }, { id: 'house', price: 180 }, { id: 'large', price: 240 }] });
   assert.equal(eicr.ok, true);
@@ -1077,7 +1107,7 @@ test('resetDemo keeps settings by default and clears days off, full days and mes
   assert.equal(s.settings.theme, 'dark');
   assert.deepEqual(s.settings.daysOff, []);
   assert.deepEqual(s.settings.fullDays, []);
-  assert.equal(s.bookings.find((b) => b.id === 'bk_seed_08').quotedPrice, 99, 'the seed uses the live prices');
+  assert.equal(s.bookings.find((b) => b.id === 'bk_seed_10').quotedPrice, 99, 'the seed uses the live prices');
   assert.ok(s.messages.every((m) => m.seed));
   assert.equal(s.messages.length, 28);
   assert.equal(s.meta.rev, revBefore + 1, 'rev keeps counting up');
@@ -1085,7 +1115,7 @@ test('resetDemo keeps settings by default and clears days off, full days and mes
   assert.equal(s.meta.messagesSeenSeq, 28);
   assert.equal(s.meta.simCursor, 0);
   assert.equal(selectUnreadMessageCount(s), 0);
-  assert.equal(createBooking(draftFor()).booking.ref, 'VM-1043', 'F11: the next booking is VM-1043 again');
+  assert.equal(createBooking(draftFor()).booking.ref, 'EL-1043', 'F11: the next booking is EL-1043 again');
 });
 
 test('resetDemo({ keepSettings: false }) restores defaults except theme and demo phone', () => {
@@ -1097,7 +1127,7 @@ test('resetDemo({ keepSettings: false }) restores defaults except theme and demo
   resetDemo({ keepSettings: false });
   const s = getState();
   const defaults = makeDefaultSettings();
-  assert.deepEqual({ ...s.settings, theme: 'auto', demoPhoneDigits: '' }, defaults);
+  assert.deepEqual({ ...s.settings, theme: defaults.theme, demoPhoneDigits: '' }, defaults);
   assert.equal(s.settings.theme, 'light');
   assert.equal(s.settings.demoPhoneDigits, '447700900555');
   assert.equal(s.bookings.length, 15);
@@ -1107,25 +1137,35 @@ test('simulateIncomingBooking: standard, approval and emergency, cycling through
   const standard = simulateIncomingBooking();
   assert.equal(standard.ok, true);
   const b = standard.booking;
-  assert.equal(b.ref, 'VM-1043');
+  assert.equal(b.ref, 'EL-1043');
   assert.equal(b.source, 'website');
-  assert.equal(b.serviceId, 'fault');
-  assert.equal(b.status, 'confirmed');
-  assert.equal(b.start, '2026-10-24T08:00', 'the earliest free window');
+  assert.equal(b.serviceId, 'ev_quote', 'a website enquiry for the free survey');
+  assert.equal(b.status, 'new', 'a survey is never auto-confirmed');
+  assert.equal(b.tentative, true);
+  assert.equal(b.start, '2026-10-24T08:00', 'the next free survey window is pencilled in');
   assert.equal(b.customer.name, SIM_POOL[0].name);
   assert.equal(b.customer.phone, SIM_POOL[0].phone);
+  assert.deepEqual(b.address, { line1: '', postcode: SIM_POOL[0].postcode }, 'like the funnel, only the postcode');
+  assert.deepEqual(b.answers, { postcode: SIM_POOL[0].postcode, ...SIM_POOL[0].answers });
   assert.equal(b.seenByOwner, false);
   assert.equal(getState().meta.simCursor, 1);
-  assert.equal(kinds(standard.messages).at(-1), 'owner_new_booking');
+  assert.deepEqual(kinds(standard.messages), ['customer_received', 'owner_new_booking']);
+  assert.ok(standard.messages[1].body.includes('Parking: private driveway. Car: has one. Timing: as soon as possible. Permission: yes.'));
 
   const approval = simulateIncomingBooking({ kind: 'approval' });
   assert.equal(approval.booking.status, 'new');
-  assert.equal(approval.booking.address.postcode, 'MB11 5HD');
+  assert.equal(approval.booking.address.postcode, 'DG9 8PQ', 'outside Northern Ireland');
   assert.equal(approval.booking.customer.name, SIM_POOL[1].name);
-  assert.equal(approval.booking.start, '2026-10-26T08:00', 'Saturday is now full of Hannah and the first sample');
+  assert.equal(approval.booking.start, '2026-10-26T08:00', 'Saturday is now full of Eoin and the first sample');
   assert.deepEqual(kinds(approval.messages), ['customer_received', 'owner_new_booking']);
+  assert.ok(approval.messages[1].body.includes('Outside Northern Ireland (DG9).'));
   assert.ok(ids(selectNeedsYou(getState())).includes(approval.booking.id));
 
+  // the emergency path ships off, so the simulator says so; once he turns it on it works
+  const refused = simulateIncomingBooking({ kind: 'emergency' });
+  assert.equal(refused.reason, 'emergencies_off');
+  assert.equal(getState().meta.simCursor, 2, 'a refused simulation does not move the cursor');
+  emergenciesOn();
   const emergency = simulateIncomingBooking({ kind: 'emergency' });
   assert.equal(emergency.booking.urgent, true);
   assert.equal(emergency.booking.status, 'new');
@@ -1142,19 +1182,21 @@ test('simulateIncomingBooking: standard, approval and emergency, cycling through
   assert.equal(getState().meta.simCursor, 9);
 });
 
-test('simulateIncomingBooking follows the settings and reports slot_taken when nothing is free', () => {
+test('simulateIncomingBooking: an enquiry is never lost when the diary has no free survey window', () => {
   updateSettings({ autoConfirm: false });
-  assert.equal(simulateIncomingBooking().booking.status, 'new', 'standard follows the auto-confirm setting');
-  updateSettings({ autoConfirm: true, takingEmergencies: false });
-  const off = simulateIncomingBooking({ kind: 'emergency' });
-  assert.equal(off.ok, false);
-  assert.equal(off.reason, 'emergencies_off');
+  assert.equal(simulateIncomingBooking().booking.status, 'new', 'standard enquiries are pending whatever the auto-confirm setting');
+  updateSettings({ autoConfirm: true });
   const cursor = getState().meta.simCursor;
   updateSettings({ hours: [[], [], [], [], [], [], []] });
   const none = simulateIncomingBooking();
-  assert.equal(none.ok, false);
-  assert.equal(none.reason, 'slot_taken');
-  assert.equal(getState().meta.simCursor, cursor, 'a failed simulation does not move the cursor');
+  assert.equal(none.ok, true, 'kept, not refused');
+  assert.equal(none.booking.durationMin, 0, 'holding no window');
+  assert.equal(none.booking.tentative, undefined, 'nothing was pencilled in');
+  assert.equal(none.booking.status, 'new');
+  assert.equal(getState().meta.simCursor, cursor + 1);
+  assert.ok(none.messages[0].body.includes('Daniel will be in touch within 24 hours to arrange your free survey visit.'));
+  assert.ok(!none.messages[0].body.includes('pencilled'));
+  assert.ok(none.messages[1].body.includes('Survey: time to be arranged'));
 });
 
 // ---------- undo ----------
@@ -1188,10 +1230,12 @@ test('undo returns stale after a later change to the same record, and for unknow
 });
 
 test('undo of every status change puts everything back exactly', () => {
+  emergenciesOn();
+  const urgentId = createBooking(urgentDraft()).booking.id;
   const snapshot = () => JSON.stringify({ b: getState().bookings, m: getState().messages, blocks: getState().blocks, s: getState().settings });
   const cases = [
     () => confirmBooking('bk_seed_11'),
-    () => acceptEmergency('bk_seed_07', 60),
+    () => acceptEmergency(urgentId, 60),
     () => declineBooking('bk_seed_11'),
     () => markOnTheWay('bk_seed_08', 30),
     () => completeBooking('bk_seed_08', { finalPrice: 95, paid: true, paidMethod: 'card' }),
@@ -1282,7 +1326,7 @@ test('syncFromStorage picks up an externally written newer rev and notifies subs
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], getState());
   assert.equal(calls[0][1].bookings.length, 15);
-  assert.equal(selectBookingByRef(getState(), 'VM-1043').id, made.booking.id);
+  assert.equal(selectBookingByRef(getState(), 'EL-1043').id, made.booking.id);
   assert.equal(syncFromStorage(), false, 'the same string again changes nothing');
   assert.equal(calls.length, 1);
   off();
@@ -1307,13 +1351,13 @@ test('every mutation re-reads storage first, so two tabs cannot clobber each oth
   const tabB = await otherTab();
   tabB.initStore({ storage, force: true });
   const fromB = tabB.createBooking(draftFor());
-  assert.equal(fromB.booking.ref, 'VM-1043');
+  assert.equal(fromB.booking.ref, 'EL-1043');
   // tab A has NOT synced; its booking must see tab B's and get the next ref, not overwrite it
   const fromA = createBooking(draftFor({ date: '2026-10-26', windowId: 1 }));
   assert.equal(fromA.ok, true);
-  assert.equal(fromA.booking.ref, 'VM-1044');
+  assert.equal(fromA.booking.ref, 'EL-1044');
   assert.equal(getState().bookings.length, 17);
-  assert.ok(selectBookingByRef(getState(), 'VM-1043'));
+  assert.ok(selectBookingByRef(getState(), 'EL-1043'));
   // and the race of F7: both tabs go for the same window; the second one gets slot_taken
   const clash = tabB.createBooking(draftFor({ date: '2026-10-26', windowId: 1, customer: { name: 'Tom Hargreaves', phone: '07700 900288' } }));
   assert.equal(clash.reason, 'slot_taken');
@@ -1334,12 +1378,12 @@ test('browser events trigger a re-read: storage, pageshow, focus and visibilityc
   assert.ok(handlers.window.focus?.length >= 1);
   assert.ok(handlers.document.visibilitychange?.length >= 1);
   const count = () => getState().bookings.length;
-  const slots = [['2026-10-26', 0], ['2026-10-26', 1], ['2026-10-29', 1], ['2026-10-29', 2], ['2026-10-29', 3], ['2026-10-30', 0], ['2026-10-30', 1]];
+  const slots = [['2026-10-26', 0], ['2026-10-26', 1], ['2026-10-29', 2], ['2026-10-30', 2], ['2026-10-30', 3], ['2026-11-02', 0], ['2026-11-02', 1]];
   let n = 0;
   const next = () => {
     const [date, windowId] = slots[n];
     n += 1;
-    return tabB.createBooking(draftFor({ date, windowId, customer: { name: `Visitor ${n}`, phone: '07700 900288' }, address: { line1: `${n} Road`, postcode: 'MB3 4QP' }, serviceId: 'sockets' })).ok;
+    return tabB.createBooking(draftFor({ date, windowId, customer: { name: `Visitor ${n}`, phone: '07700 900288' }, address: { line1: `${n} Road`, postcode: 'BT9 6QP' }, serviceId: 'sockets' })).ok;
   };
   assert.equal(next(), true);
   fire('window', 'storage', { key: 'some_other_key' });
@@ -1433,7 +1477,7 @@ test('a new day reseeds the demo records but keeps what the owner and customers 
   assert.equal(state.messages.some((m) => m.id === 'msg_seed_07_alert'), true);
   // a booking made after the rollover still gets the next ref
   const slot = nextFreeSlot(getState(), 'fault');
-  assert.equal(createBooking(draftFor({ date: slot.date, windowId: slot.windowId })).booking.ref, `VM-${refSeqBefore}`);
+  assert.equal(createBooking(draftFor({ date: slot.date, windowId: slot.windowId })).booking.ref, `EL-${refSeqBefore}`);
 });
 
 test('the rollover does not run on tab focus or sync, only when the store starts', () => {
@@ -1461,28 +1505,29 @@ test('starting twice on the same day does not reseed (bookings made earlier stay
 
 test('F1: a landing page EICR booking becomes a repeat customer job card with three messages', () => {
   const made = createBooking(eicrDraft());
-  assert.equal(made.booking.ref, 'VM-1043');
-  assert.equal(selectCustomers(getState()).length, 11, 'Priya is an existing customer');
+  assert.equal(made.booking.ref, 'EL-1043');
+  assert.equal(selectCustomers(getState()).length, 11, 'Aoife is an existing customer');
   assert.deepEqual(selectRepeatInfo(getState(), made.booking), { isRepeat: true, nth: 2 });
   const forBooking = selectMessages(getState(), { bookingId: made.booking.id });
   assert.deepEqual(kinds(forBooking), ['owner_new_booking', 'customer_confirmed', 'customer_reminder']);
   assert.equal(forBooking[2].sendAt > NOW, true);
   assert.equal(selectUnreadMessageCount(getState()), 1);
-  assert.equal(nextFreeSlot(getState(), 'eicr').human, 'Thu 29 Oct, afternoon, arrive 1–3pm', 'Monday is now full of EICRs, Tuesday is full, Wednesday is the MOT, Thursday morning has Kwame');
+  assert.equal(nextFreeSlot(getState(), 'eicr').human, 'Thu 29 Oct, afternoon, arrive 1–3pm', 'Monday morning is now taken, Monday afternoon and Tuesday are booked, Wednesday is the MOT, Thursday morning holds Ciaran and Sinead');
 });
 
 test('F3: an emergency never changes a window, is accepted from the message bubble and leaves Needs you', () => {
+  emergenciesOn();
   const loads = () => JSON.stringify(['2026-10-24', '2026-10-26', '2026-10-27'].map((d) => getDayLoad(getState(), d)));
   const before = loads();
-  const made = createBooking(urgentDraft({ customer: { name: 'Ngozi Okafor', phone: '07700 900344' }, address: { line1: '9 Orchard Close', postcode: 'MB2 6JN' } }));
+  const made = createBooking(urgentDraft({ customer: { name: 'Ngozi Okafor', phone: '07700 900344' }, address: { line1: '9 Orchard Close', postcode: 'BT42 6JN' } }));
   assert.equal(loads(), before, 'Mon 26 Oct load unchanged');
-  assert.deepEqual(ids(selectNeedsYou(getState())), ['bk_seed_07', made.booking.id, 'bk_seed_11']);
-  const accepted = acceptEmergency('bk_seed_07', 45);
+  assert.deepEqual(ids(selectNeedsYou(getState())), [made.booking.id, 'bk_seed_11', 'bk_seed_07'], 'the emergency first, then the enquiries oldest first');
+  const accepted = acceptEmergency(made.booking.id, 45);
   assert.equal(accepted.ok, true);
   const top = selectMessages(getState())[0];
   assert.equal(top.kind, 'customer_emergency_accepted');
   assert.ok(top.body.includes('45 minutes'));
-  assert.deepEqual(ids(selectNeedsYou(getState())), [made.booking.id, 'bk_seed_11']);
+  assert.deepEqual(ids(selectNeedsYou(getState())), ['bk_seed_11', 'bk_seed_07']);
 });
 
 test('F7: a calendar block moves the landing page on and a taken window is recovered', () => {
@@ -1545,6 +1590,16 @@ function assertDiaryInvariants(label) {
     if (b.paid) assert.equal(b.status, 'done', `${label}: ${b.id} is paid so it is done`);
     if (b.status === 'done') assert.ok(Number.isInteger(b.finalPrice), `${label}: ${b.id} has a final price`);
     assert.equal(b.status === 'cancelled', b.cancelledBy !== null, `${label}: ${b.id} cancelledBy`);
+    if (b.tentative) {
+      assert.equal(b.status, 'new', `${label}: ${b.id} is tentative so it is still pending`);
+      assert.equal(b.serviceId, 'ev_quote', `${label}: ${b.id} only a survey is pencilled in`);
+      assert.ok(b.durationMin > 0, `${label}: ${b.id} a pencilled survey holds a window`);
+    }
+    if (isUnscheduled(b)) {
+      assert.equal(b.serviceId, 'ev_quote', `${label}: ${b.id} only an enquiry can be unscheduled`);
+      assert.equal(b.status === 'confirmed' || b.status === 'on_the_way', false, `${label}: ${b.id} cannot be confirmed without a window`);
+    }
+    if (b.answers) for (const k of Object.keys(b.answers)) assert.ok(['postcode', 'parking', 'vehicle', 'timing', 'permission', 'marketingOptIn'].includes(k), `${label}: ${b.id} answers key ${k}`);
   }
   const cancelled = new Set(st.bookings.filter((b) => b.status === 'cancelled').map((b) => b.id));
   for (const m of st.messages) {
@@ -1555,9 +1610,9 @@ function assertDiaryInvariants(label) {
 }
 
 test('property: random sequences of every operation, undo included, keep the diary consistent', () => {
-  const SERVICES = ['fault', 'eicr', 'consumer', 'sockets', 'ev', 'rewire'];
-  const PEOPLE = [['Priya Nair', '07700 900231'], ['Tom Hargreaves', '07700 900288'], ['Zed Ford', '07700 900612'], ['Amy Lowe', '07700 900613']];
-  const POSTCODES = ['MB3 4QP', 'MB12 6AB', 'AB1 2CD', 'MB9 3UE'];
+  const SERVICES = ['fault', 'eicr', 'consumer', 'sockets', 'ev', 'rewire', 'ev_quote'];
+  const PEOPLE = [['Aoife Magee', '07700 900231'], ['Tom Hargreaves', '07700 900288'], ['Zed Ford', '07700 900612'], ['Amy Lowe', '07700 900613']];
+  const POSTCODES = ['BT9 6QP', 'BT48 4XJ', 'DG9 8AB', 'BT94 5HD'];
   const origin = new Date(2026, 9, 23, 9, 0);
   for (let seed = 1; seed <= 12; seed += 1) {
     const rand = mulberry32(seed);
@@ -1566,6 +1621,7 @@ test('property: random sequences of every operation, undo included, keep the dia
     setClock(origin);
     storage = memStorage();
     initStore({ storage, force: true });
+    updateSettings({ takingEmergencies: true });
     let tokens = [];
     let minutes = 0;
     for (let step = 0; step < 120; step += 1) {
@@ -1582,13 +1638,15 @@ test('property: random sequences of every operation, undo included, keep the dia
         const sid = pick(SERVICES);
         const half = st.settings.services.find((x) => x.id === sid).blocks === 2;
         const [person, phone] = pick(PEOPLE);
+        const pencil = sid === 'ev_quote' && chance(0.6);
         result = createBooking({
           serviceId: sid, variantId: sid === 'eicr' ? pick(['flat', 'house', 'large', undefined]) : undefined,
-          date: day(Math.floor(rand() * 16)), windowId: half ? pick([0, 2, 1]) : Math.floor(rand() * 4),
-          customer: { name: person, phone }, address: { line1: '1 Test Road', postcode: pick(POSTCODES) },
+          ...(pencil ? { pencil: true } : { date: day(Math.floor(rand() * 16)), windowId: half ? pick([0, 2, 1]) : Math.floor(rand() * 4) }),
+          customer: { name: person, phone }, address: { line1: sid === 'ev_quote' && chance(0.5) ? '' : '1 Test Road', postcode: pick(POSTCODES) },
+          answers: chance(0.5) ? { parking: pick(['driveway', 'garage', 'moon']), timing: pick(['asap', 'month']), permission: 'yes' } : undefined,
           asOwner: chance(0.3), notifyCustomer: chance(0.7), source: pick(['website', 'phone', 'whatsapp'])
         });
-        name = 'createBooking';
+        name = pencil ? 'createBooking (pencilled enquiry)' : 'createBooking';
       } else if (op === 3) {
         result = createBooking(urgentDraft());
         name = 'createBooking (urgent)';
@@ -1626,6 +1684,314 @@ test('property: random sequences of every operation, undo included, keep the dia
       assertDiaryInvariants(`seed ${seed} step ${step} (${name})`);
     }
   }
+});
+
+// ---------- the free-survey enquiry: answers, pencil, tentative, postcode-only addresses ----------
+
+const ANSWERS = { parking: 'driveway', vehicle: 'ordered', timing: 'asap', permission: 'yes', marketingOptIn: false };
+const enquiryDraft = (over = {}) => ({
+  serviceId: 'ev_quote', pencil: true, customer: { name: 'Sinead Doherty', phone: '07700 900344' },
+  address: { line1: '', postcode: 'BT42 6JN' }, answers: ANSWERS, ...over
+});
+
+test('createBooking stores answers: unknown keys ignored, invalid values dropped, the postcode filled in', () => {
+  const made = createBooking(enquiryDraft({ answers: { ...ANSWERS, parking: 'moon', junk: 1, postcode: 'bt42 6jn' } }));
+  assert.equal(made.ok, true);
+  assert.deepEqual(made.booking.answers, { postcode: 'BT42 6JN', vehicle: 'ordered', timing: 'asap', permission: 'yes', marketingOptIn: false });
+  assert.deepEqual(getState().bookings.at(-1).answers, made.booking.answers, 'persisted with the booking');
+  assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEYS.state)).bookings.at(-1).answers, made.booking.answers);
+  // the postcode falls back to the address postcode
+  const fallback = createBooking(enquiryDraft({ customer: { name: 'Maeve Corr', phone: '07700 900501' }, address: { line1: '', postcode: 'bt270hd' }, answers: { parking: 'garage' } }));
+  assert.deepEqual(fallback.booking.answers, { postcode: 'BT27 0HD', parking: 'garage' });
+  // nothing valid: no answers object at all (a booking without answers behaves exactly as before)
+  for (const answers of [undefined, null, {}, 'driveway', { parking: 'moon' }]) {
+    const plain = createBooking(draftFor({ date: '2026-10-29', windowId: 2, answers }));
+    assert.equal(plain.ok, true);
+    assert.equal('answers' in plain.booking, false, JSON.stringify(answers));
+    cancelBooking(plain.booking.id, 'owner');
+  }
+  // answers are accepted on any service
+  const fault = createBooking(draftFor({ date: '2026-10-30', windowId: 0, answers: { timing: 'month' } }));
+  assert.deepEqual(fault.booking.answers, { postcode: 'BT9 6QP', timing: 'month' });
+});
+
+test('a free-survey enquiry is never auto-confirmed, needs only a postcode, and {line1} falls back to it', () => {
+  assert.equal(getState().settings.autoConfirm, true);
+  const made = createBooking(enquiryDraft());
+  assert.equal(made.ok, true, JSON.stringify(made));
+  const b = made.booking;
+  assert.equal(b.status, 'new', 'pending, even for a covered BT postcode with auto-confirm on');
+  assert.equal(b.serviceName, 'Home EV charger quote');
+  assert.equal(b.quotedPrice, 0);
+  assert.deepEqual(b.address, { line1: '', postcode: 'BT42 6JN' });
+  assert.deepEqual(b.history.map((h) => [h.event, h.by]), [['created', 'customer']]);
+  assert.deepEqual(kinds(made.messages), ['customer_received', 'owner_new_booking'], 'no reminder until he confirms');
+  assert.equal(b.seenByOwner, false);
+  // the street stays required for every other service
+  assert.deepEqual(createBooking(draftFor({ address: { line1: '', postcode: 'BT9 6QP' } })).errors, { line1: 'Enter your house number and street' });
+  // and a postcode is always required, a name and a mobile too
+  assert.deepEqual(createBooking(enquiryDraft({ address: { line1: '', postcode: '' }, customer: { name: '', phone: '' } })).errors, {
+    name: 'Enter your name', phone: 'Enter your mobile number', postcode: 'Enter your postcode'
+  });
+  // a street typed by the customer (or taken on the phone) is kept and used
+  const street = createBooking(enquiryDraft({ customer: { name: 'Maeve Corr', phone: '07700 900501' }, address: { line1: ' 41 Willow Bank ', postcode: 'BT27 5HD' } }));
+  assert.equal(street.booking.address.line1, '41 Willow Bank');
+  assert.ok(street.messages.at(-1).body.includes('\n41 Willow Bank, BT27 5HD\n'));
+});
+
+test('a covered-postcode survey for an owner-entered booking is confirmed at once (only the website enquiry is pending)', () => {
+  const made = createBooking(enquiryDraft({ asOwner: true, source: 'phone' }));
+  assert.equal(made.booking.status, 'confirmed');
+  assert.equal(made.booking.tentative, undefined, 'the owner chose it, so nothing is provisional');
+  assert.deepEqual(kinds(made.messages), ['customer_reminder', 'customer_confirmed']);
+  assert.ok(made.messages[1].body.includes("You're booked in: Home EV charger quote, Sat 24 Oct, arriving between 8 and 10am, at BT42 6JN."));
+});
+
+test('pencil: the next free survey window is taken automatically and marked tentative', () => {
+  const first = createBooking(enquiryDraft());
+  assert.equal(first.ok, true);
+  assert.equal(first.booking.start, '2026-10-24T08:00', 'Saturday 8am is the next free survey window');
+  assert.equal(first.booking.durationMin, 120);
+  assert.equal(first.booking.tentative, true);
+  assert.equal(first.booking.status, 'new');
+  assert.equal(slotStates('2026-10-24')[0], 'booked', 'the diary and the website both see the pencilled window as taken');
+  // the next enquiry gets the next window, then the next
+  const second = createBooking(enquiryDraft({ customer: { name: 'Maeve Corr', phone: '07700 900501' } }));
+  const third = createBooking(enquiryDraft({ customer: { name: 'Callum Blair', phone: '07700 900502' } }));
+  assert.equal(second.booking.start, '2026-10-26T08:00');
+  assert.equal(third.booking.start, '2026-10-26T10:00');
+  assert.equal(nextFreeSlot(getState(), 'ev_quote').human, 'Thu 29 Oct, 1–3pm', 'Monday afternoon is booked, Tuesday is full, Wednesday is the MOT');
+  // the same through the second argument, and not for other services
+  assert.equal(createBooking({ ...enquiryDraft({ customer: { name: 'Owen Mulholland', phone: '07700 900506' } }), pencil: undefined }, { pencil: true }).booking.tentative, true);
+  assert.deepEqual(createBooking(draftFor({ date: undefined, windowId: undefined, pencil: true })).errors, { date: 'Choose a day', windowId: 'Choose a time' }, 'only the survey is pencilled in');
+  // without `pencil` a window is still required
+  assert.deepEqual(createBooking(enquiryDraft({ pencil: undefined })).errors, { date: 'Choose a day', windowId: 'Choose a time' });
+  // a window the customer names is theirs to take: no pencil mark, still pending, and it must be free
+  const named = createBooking(enquiryDraft({ customer: { name: 'Shane Kelly', phone: '07700 900504' }, date: '2026-10-30', windowId: 1 }));
+  assert.equal(named.ok, true);
+  assert.equal(named.booking.start, '2026-10-30T10:00');
+  assert.equal(named.booking.tentative, undefined);
+  assert.equal(named.booking.status, 'new');
+  assert.equal(createBooking(enquiryDraft({ date: '2026-10-30', windowId: 1 })).reason, 'slot_taken');
+  // `window: { date, windowId }` is the same as naming them
+  const viaWindow = createBooking(enquiryDraft({ customer: { name: 'Joanne Moore', phone: '07700 900503' }, window: { date: '2026-10-30', windowId: 2 } }));
+  assert.equal(viaWindow.booking.start, '2026-10-30T13:00');
+  assert.equal(viaWindow.booking.tentative, undefined);
+  // a half-day service is not an enquiry and is not pencilled in
+  assert.equal(createBooking(eicrDraft({ pencil: true, date: undefined, windowId: undefined })).ok, false);
+});
+
+test('pencil: the owner alert and the customer text carry the answers, the pencilled window and the 24 hour promise', () => {
+  const made = createBooking(enquiryDraft());
+  const [received, alert] = made.messages;
+  assert.equal(received.kind, 'customer_received');
+  assert.equal(received.to, 'customer');
+  assert.equal(
+    received.body,
+    'Hi Sinead, thanks for getting in touch with 180 Electrical. Your free survey visit is pencilled in for Sat 24 Oct, 8–10am. This is provisional, so please do not plan around it yet. Daniel will be in touch within 24 hours to confirm it. Ref EL-1043. Need us sooner? Call 07885 496800.'
+  );
+  assert.equal(alert.kind, 'owner_new_booking');
+  assert.equal(alert.to, 'owner');
+  assert.equal(
+    alert.body.split('\n').slice(0, 8).join('\n'),
+    '*New enquiry EL-1043*\nSinead Doherty · 07700 900344\nHome EV charger quote · Free\nSurvey pencilled in: Sat 24 Oct, arriving between 8 and 10am (provisional)\nBT42 6JN\nParking: private driveway. Car: ordered. Timing: as soon as possible. Permission: yes.\nNeeds you: review the enquiry, then confirm the pencilled-in survey.\nOpen: ' + alert.body.split('\nOpen: ')[1]
+  );
+  assert.ok(alert.seq > received.seq, 'the owner alert is the newest of its group');
+  assert.equal(selectUnreadMessageCount(getState()), 1);
+  // outside Northern Ireland: still accepted, flagged on the owner alert, travel check on the customer text
+  const far = createBooking(enquiryDraft({ customer: { name: 'Conor Brennan', phone: '07700 900219' }, address: { line1: '', postcode: 'dg9 8ab' } }));
+  assert.equal(far.ok, true);
+  assert.equal(far.booking.address.postcode, 'DG9 8AB');
+  assert.ok(far.messages[1].body.includes('Outside Northern Ireland (DG9). Check you can travel before you confirm the survey.'));
+  assert.ok(far.messages[0].body.includes('We just need to check travel to DG9 8AB.'));
+  assert.ok(far.messages[0].body.includes('within 24 hours'));
+});
+
+test('tentative is cleared when the owner confirms or reschedules, kept when the customer moves it, and undo puts it back', () => {
+  const made = createBooking(enquiryDraft());
+  const id = made.booking.id;
+  assert.equal(booking(id).tentative, true);
+  // the owner confirms: firm, confirmation and reminder go out
+  const confirmed = confirmBooking(id);
+  assert.equal(confirmed.ok, true);
+  assert.equal(booking(id).status, 'confirmed');
+  assert.equal(booking(id).tentative, false);
+  assert.equal(selectMessages(getState(), { bookingId: id })[0].kind, 'customer_confirmed');
+  assert.ok(selectMessages(getState(), { bookingId: id })[0].body.includes('at BT42 6JN'), '{line1} is the postcode');
+  assert.equal(undo(confirmed.undoToken).ok, true);
+  assert.equal(booking(id).tentative, true, 'undo restores the pencil mark');
+  assert.equal(booking(id).status, 'new');
+  // the owner moves it: his choice, so no longer provisional (and still waiting for his OK)
+  const moved = rescheduleBooking(id, { date: '2026-10-26', windowId: 1 });
+  assert.equal(moved.ok, true);
+  assert.equal(booking(id).tentative, false);
+  assert.equal(booking(id).status, 'new');
+  assert.equal(selectMessages(getState(), { bookingId: id })[0].kind, 'customer_rescheduled');
+  assert.equal(undo(moved.undoToken).ok, true);
+  assert.equal(booking(id).tentative, true);
+  assert.equal(booking(id).start, '2026-10-24T08:00');
+  // the customer moves a second enquiry (Monday, so more than 24 hours' notice): still pending, still provisional
+  const other = createBooking(enquiryDraft({ customer: { name: 'Maeve Corr', phone: '07700 900501' } }));
+  assert.equal(other.booking.start, '2026-10-26T08:00');
+  const byCustomer = rescheduleBooking(other.booking.id, { date: '2026-10-26', windowId: 1 }, 'customer');
+  assert.equal(byCustomer.ok, true);
+  assert.equal(booking(other.booking.id).tentative, true);
+  assert.equal(booking(other.booking.id).start, '2026-10-26T10:00');
+  // declining or cancelling drops the pencil mark and frees the window
+  const declined = declineBooking(other.booking.id);
+  assert.equal(declined.ok, true);
+  assert.equal(booking(other.booking.id).tentative, false);
+  assert.equal(slotStates('2026-10-26')[1], 'free');
+  const again = createBooking(enquiryDraft({ customer: { name: 'Callum Blair', phone: '07700 900502' } }));
+  assert.equal(again.booking.start, '2026-10-26T08:00', 'the freed survey window is offered again');
+  assert.equal(cancelBooking(again.booking.id, 'customer').ok, true);
+  assert.equal(booking(again.booking.id).tentative, false);
+});
+
+test('an enquiry is kept (unscheduled) when no survey window is free, and the owner places it before confirming', () => {
+  updateSettings({ hours: [[], [], [], [], [], [], []] });
+  const made = createBooking(enquiryDraft());
+  assert.equal(made.ok, true, 'a lead is never lost to a full diary');
+  const b = made.booking;
+  assert.equal(b.durationMin, 0);
+  assert.equal(b.start, NOW);
+  assert.equal(b.status, 'new');
+  assert.equal(b.tentative, undefined);
+  assert.equal(isUnscheduled(b), true);
+  assert.deepEqual(bookingWindowIds(b), []);
+  assert.ok(made.messages[0].body.includes('Daniel will be in touch within 24 hours to arrange your free survey visit.'));
+  assert.ok(made.messages[1].body.includes('Survey: time to be arranged'));
+  assert.equal(confirmBooking(b.id).reason, 'unscheduled', 'confirm needs a window first');
+  assert.equal(booking(b.id).status, 'new');
+  // the owner places it (opening hours still apply to him, so a day is opened first)
+  updateSettings({ hours: [[], [0, 1, 2, 3], [], [], [], [], []] });
+  const placed = rescheduleBooking(b.id, { date: '2026-10-26', windowId: 0 });
+  assert.equal(placed.ok, true, JSON.stringify(placed));
+  assert.equal(booking(b.id).start, '2026-10-26T08:00');
+  assert.equal(booking(b.id).durationMin, 120, 'a survey takes one window');
+  assert.equal(isUnscheduled(booking(b.id)), false);
+  assert.equal(confirmBooking(b.id).ok, true);
+  assert.equal(booking(b.id).status, 'confirmed');
+});
+
+test('line1 of the postcode-only address appears as the postcode in every customer message kind', () => {
+  const made = createBooking(enquiryDraft());
+  const id = made.booking.id;
+  confirmBooking(id);
+  assert.ok(selectMessages(getState(), { bookingId: id }).some((m) => m.kind === 'customer_confirmed' && m.body.includes('at BT42 6JN')));
+  markOnTheWay(id, 20);
+  assert.ok(selectMessages(getState(), { bookingId: id })[0].body.includes("I'm on my way to BT42 6JN, 20 minutes away"));
+  sendQuickMessage(id, 'customer_need_access');
+  assert.ok(selectMessages(getState(), { bookingId: id })[0].body.includes("I'm outside BT42 6JN."));
+  sendQuickMessage(id, 'customer_quote_ready');
+  assert.equal(selectMessages(getState(), { bookingId: id })[0].body, "Hi Sinead, it's Daniel from 180 Electrical. Your written quote is ready. Reply here or call 07885 496800 and I'll talk you through it. Ref EL-1043");
+  for (const m of selectMessages(getState(), { bookingId: id })) {
+    assert.ok(!/[{}]/.test(m.body) && !m.body.includes('undefined') && !m.body.includes('!'), m.kind);
+  }
+});
+
+// ---------- settings that belong to the 180 model ----------
+
+test('updateService can show or hide a service on the website; updateSettings keeps credentials and brands', () => {
+  assert.equal(updateService('fault', { showOnWebsite: true }).service.showOnWebsite, true);
+  assert.equal(getState().settings.services.find((x) => x.id === 'fault').showOnWebsite, true);
+  assert.equal(updateService('ev_quote', { showOnWebsite: false }).service.showOnWebsite, false);
+  assert.equal(updateService('fault', { showOnWebsite: 0 }).service.showOnWebsite, false);
+  assert.equal(updateService('ev', { price: 949 }).service.price, 949, 'the quote-led installation keeps an amount for the owner');
+  assert.equal(updateService('ev', { price: -1 }).reason, 'invalid');
+  const result = updateSettings({ business: { credentials: [' Level 3 Electrical Installation ', '', 'City & Guilds 2391'], brands: ['ZAPPI', 'OHME'] } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(getState().settings.business.credentials, ['Level 3 Electrical Installation', 'City & Guilds 2391']);
+  assert.deepEqual(getState().settings.business.brands, ['ZAPPI', 'OHME']);
+  assert.deepEqual(updateSettings({ business: { brands: 'ZAPPI' } }).ok, true, 'a non-array is ignored');
+  assert.deepEqual(getState().settings.business.brands, ['ZAPPI', 'OHME']);
+});
+
+// ---------- an older stored state is migrated, not thrown away ----------
+
+function oldShapeState(mutate = () => {}) {
+  const old = JSON.parse(JSON.stringify(getState()));
+  old.v = 1;
+  old.settings.business = { ...old.settings.business, phone: '07700 900412', email: 'hello@180electrical.example', ownerFirstName: 'Dan', ownerFullName: 'Dan', schemeLine: 'Competent person scheme, reg. no. 000000 (sample)', insuranceLine: '£2m public liability cover (sample)' };
+  delete old.settings.business.credentials;
+  delete old.settings.business.brands;
+  old.settings.services = old.settings.services.map(({ showOnWebsite, ...rest }) => rest);
+  old.settings.takingEmergencies = true;
+  old.settings.theme = 'auto';
+  mutate(old);
+  return old;
+}
+
+test('a stored v1 state is migrated to the 180 model: new fields and services, his real contact details, the customer data kept', () => {
+  const mine = createBooking(draftFor({ date: '2026-10-29', windowId: 2 }));
+  assert.equal(mine.ok, true);
+  const old = oldShapeState((o) => {
+    o.settings.services.find((x) => x.id === 'ev_quote').name = 'EV charger quote visit';
+    o.settings.services.find((x) => x.id === 'ev').price = 949;
+    o.settings.services.find((x) => x.id === 'fault').price = 80;
+    o.settings.business.towns = ['Belfast', 'Lisburn'];
+  });
+  const s = memStorage({ [STORAGE_KEYS.state]: JSON.stringify(old) });
+  const state = initStore({ storage: s, force: true });
+  assert.equal(state.v, SCHEMA_VERSION);
+  assert.equal(JSON.parse(s.getItem(STORAGE_KEYS.state)).v, SCHEMA_VERSION, 'written back as v2');
+  assert.equal(STORAGE_KEYS.state, 'vm_state_v1', 'under the same key');
+  const biz = state.settings.business;
+  assert.equal(biz.phone, '07885 496800');
+  assert.equal(biz.email, 'daniel@180electrical.co.uk');
+  assert.equal(biz.ownerFirstName, 'Daniel');
+  assert.equal(biz.ownerFullName, 'Daniel');
+  assert.deepEqual(biz.credentials, ['Level 3 Electrical Installation', '2391 Inspection and Testing']);
+  assert.deepEqual(biz.brands, ['ZAPPI', 'OHME', 'SYNC']);
+  assert.equal(biz.schemeLine, '');
+  assert.equal(biz.insuranceLine, '');
+  assert.deepEqual(biz.towns, ['Belfast', 'Lisburn'], 'what the owner edited stays');
+  const services = state.settings.services;
+  assert.deepEqual(services.map((x) => x.id), ['ev_quote', 'ev', 'fault', 'eicr', 'consumer', 'sockets', 'rewire', 'emergency']);
+  assert.equal(services[0].name, 'Home EV charger quote');
+  assert.equal(services[0].showOnWebsite, true);
+  assert.equal(services[1].priceType, 'quoted');
+  assert.equal(services[1].price, 949, 'his own amount for the installation stays');
+  assert.equal(services.find((x) => x.id === 'fault').price, 80);
+  assert.ok(services.filter((x) => x.id !== 'ev_quote').every((x) => x.showOnWebsite === false));
+  assert.equal(state.settings.takingEmergencies, false, 'the emergency path is off in the new model');
+  assert.equal(state.settings.theme, 'auto', 'a valid saved theme mirror stays');
+  // the customer's booking and its messages survive; the demo diary is re-seeded EV-led
+  assert.ok(state.bookings.some((b) => b.id === mine.booking.id && !b.seed));
+  assert.equal(state.bookings.filter((b) => b.seed).length, 15);
+  assert.equal(state.bookings.length, 16);
+  assert.equal(state.seededFor, '2026-10-23');
+  assert.ok(state.messages.some((m) => m.bookingId === mine.booking.id));
+  assert.ok(state.bookings.find((b) => b.id === 'bk_seed_07').answers, 'the fresh seed has answers');
+  assert.equal(state.meta.msgSeq, Math.max(...state.messages.map((m) => m.seq)));
+  // and the store works as normal afterwards
+  assert.equal(createBooking(enquiryDraft()).ok, true);
+});
+
+test('an old generic (MB postcodes) v1 state gets the 180 business wholesale; a v1 state with no services or business still loads', () => {
+  const generic = oldShapeState((o) => {
+    o.settings.business = { ...o.settings.business, name: 'Voltmere Electrical', shortName: 'Voltmere', phone: '07700 900412', coveredOutward: ['MB1', 'MB2'], edgeOutward: ['MB11'], towns: ['Marlbury'] };
+  });
+  const state = initStore({ storage: memStorage({ [STORAGE_KEYS.state]: JSON.stringify(generic) }), force: true });
+  assert.equal(state.settings.business.name, '180 Electrical');
+  assert.equal(state.settings.business.coveredOutward.length, 94);
+  assert.deepEqual(state.settings.business.edgeOutward, []);
+  assert.equal(state.settings.services[0].id, 'ev_quote');
+  // sparse v1 settings do not break the migration
+  const sparse = oldShapeState((o) => {
+    delete o.settings.services;
+    o.settings.business = { name: 'Ashby Sparks', shortName: 'Ashby', ownerFirstName: 'Lee', ownerFullName: 'Lee Ashby' };
+  });
+  const loaded = initStore({ storage: memStorage({ [STORAGE_KEYS.state]: JSON.stringify(sparse) }), force: true });
+  assert.equal(loaded.v, SCHEMA_VERSION);
+  assert.equal(loaded.settings.business.name, 'Ashby Sparks', 'a rebrand the owner made is kept');
+  assert.equal(loaded.settings.business.ownerFullName, 'Lee Ashby');
+  assert.equal(loaded.settings.business.phone, '07885 496800', 'missing fields come from the defaults');
+  assert.equal(loaded.settings.services.length, 8);
+  assert.equal(loaded.bookings.length, 15);
+  // a v1 state that is genuinely broken is still discarded and reseeded
+  const broken = oldShapeState((o) => { o.bookings = 'nope'; });
+  assert.equal(initStore({ storage: memStorage({ [STORAGE_KEYS.state]: JSON.stringify(broken) }), force: true }).bookings.length, 15);
 });
 
 test('every function named in section 8.1 is exported', () => {

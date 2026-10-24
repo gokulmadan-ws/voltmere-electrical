@@ -1,5 +1,5 @@
 // js/dashboard/views/settings.js: Settings (business and brand, services and prices, hours and days off, rules and theme). Saves as you go.
-// Owner: WP8
+// Owner: WP8, website switches, credentials and brands by E2
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import {
   BrandMark, Button, Card, Chip, Field, Icon, IconButton, Input, PageHeader, Select, Switch, ThemeToggle,
@@ -20,10 +20,18 @@ export const css = ['css/settings.css'];
 const FAIL_TEXT = 'That did not work: the diary changed. Please check and try again.';
 const failToast = () => toast({ message: FAIL_TEXT, tone: 'danger' });
 
+// Business lists (credentials, brands) are stored as arrays and edited as one comma-separated line.
+const listText = (list) => (Array.isArray(list) ? list.join(', ') : String(list || ''));
+const parseList = (text) => text.split(',').map((t) => t.trim()).filter(Boolean);
+const listNormalise = (text) => parseList(text).join(', ');
+
 // Selectors live outside the components so useStore gets stable functions. Plain strings, so shallowEqual holds between saves.
 const selectBiz = (state) => {
   const b = state.settings.business;
-  return { name: b.name, shortName: b.shortName, ownerFirst: b.ownerFirstName, tagline: b.tagline, phone: b.phone, email: b.email, area: b.areaName, areaText: b.areaText };
+  return {
+    name: b.name, shortName: b.shortName, ownerFirst: b.ownerFirstName, tagline: b.tagline, phone: b.phone, email: b.email, area: b.areaName, areaText: b.areaText,
+    credentials: listText(b.credentials), brands: listText(b.brands)
+  };
 };
 const selectAllServices = (state) => selectServices(state, { activeOnly: false });
 const selectHours = (state) => state.settings.hours;
@@ -90,7 +98,7 @@ function EditField({ id, label, hint, value, check, commit, normalise, prefix, o
 // ---------- A. Business and brand ----------
 
 const requiredCheck = (text) => (text ? '' : "This can't be empty.");
-const emailCheck = (text) => (!text || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) ? '' : 'Enter an email like dan@example.com');
+const emailCheck = (text) => (!text || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) ? '' : 'Enter an email like name@example.co.uk');
 const phoneCheck = (text) => (normalisePhone(text) ? '' : 'Enter a UK mobile like 07700 900412');
 
 function BusinessSection({ onSaved }) {
@@ -106,7 +114,13 @@ function BusinessSection({ onSaved }) {
     if (res.ok) { onSaved(); return ''; }
     return (res.errors && res.errors[storeKey]) || FAIL_TEXT;
   };
-  // CONTRACT-GAP: the Area input edits areaName; areaText ("Marlbury and 15 miles around") keeps its tail and follows the new name.
+  // Save a comma-separated line as a list (credentials, brands).
+  const saveBizList = (storeKey, text) => {
+    const res = updateSettings({ business: { [storeKey]: parseList(text) } });
+    if (res.ok) { onSaved(); return ''; }
+    return (res.errors && res.errors[storeKey]) || FAIL_TEXT;
+  };
+  // CONTRACT-GAP: the Area input edits areaName; areaText ("Across Northern Ireland") keeps its tail and follows the new name.
   const saveArea = (text) => {
     const tail = biz.areaText.startsWith(biz.area) ? biz.areaText.slice(biz.area.length) : null;
     const patch = { areaName: text };
@@ -126,6 +140,10 @@ function BusinessSection({ onSaved }) {
         <${EditField} id="setting-phone" label="Phone" value=${biz.phone} check=${phoneCheck} normalise=${normalisePhone} commit=${saveBiz('phone')} inputProps=${{ type: 'tel', inputmode: 'tel', autocomplete: 'tel' }} />
       </div>
       <${EditField} id="setting-tagline" label="Tagline" value=${biz.tagline} commit=${saveBiz('tagline')} onDraft=${track('tagline')} />
+      <${EditField} id="settings-credentials" label="Credentials" hint="Comma separated. Shown in the trust bar on the website. Leave empty to hide it."
+        value=${biz.credentials} normalise=${listNormalise} commit=${(text) => saveBizList('credentials', text)} />
+      <${EditField} id="settings-brands" label="Charger brands we install" hint="Comma separated. Shown as plain text on the website."
+        value=${biz.brands} normalise=${listNormalise} commit=${(text) => saveBizList('brands', text)} />
       <div class="st-fields st-fields--2">
         <${EditField} id="setting-email" label="Email" value=${biz.email} check=${emailCheck} commit=${saveBiz('email')} inputProps=${{ type: 'email', inputmode: 'email', autocomplete: 'email' }} />
         <${EditField} id="setting-area" label="Area" value=${biz.area} check=${requiredCheck} commit=${saveArea} />
@@ -137,9 +155,9 @@ function BusinessSection({ onSaved }) {
           <p class="st-preview__name">${draft('name')}</p>
           <p class="st-preview__tag">${draft('tagline') || biz.tagline}</p>
         </div>
-        <span class="ui-btn ui-btn--primary st-preview__btn" aria-hidden="true">Book a visit</span>
+        <span class="ui-btn ui-btn--primary st-preview__btn" aria-hidden="true">Get my installation quote</span>
       </div>
-      <p class="st-note">Reviews, ratings and the registration line stay sample content after you rebrand.</p>
+      <p class="st-note">Your website shows no reviews, so none are added. Credentials and charger brands appear on the website as typed.</p>
     <//>
   </section>`;
 }
@@ -162,15 +180,21 @@ function ServiceRow({ service, onSaved }) {
     if (res.ok) { onSaved(); return ''; }
     return (res.errors && res.errors.price) || FAIL_TEXT;
   };
-  const setActive = (checked) => { if (save({ active: checked })) failToast(); };
+  // The website switch is the service's showOnWebsite flag; an older store without the flag falls back to `active`.
+  const hasFlag = service.showOnWebsite !== undefined;
+  const onWebsite = hasFlag ? !!service.showOnWebsite : !!service.active;
+  const setWebsite = (checked) => { if (save(hasFlag ? { showOnWebsite: checked } : { active: checked })) failToast(); };
   const byVariant = service.variants.length > 0;
-  return html`<${Card} as="div" class=${`st-service${service.active ? '' : ' is-off'}`} role="group" aria-label=${service.name}>
+  const quoted = service.priceType === 'quoted' || service.priceType === 'quote';
+  return html`<${Card} as="div" class=${`st-service${onWebsite ? '' : ' is-off'}`} role="group" aria-label=${service.name}>
     <div class="st-service__head">
       <h3 class="st-service__name">${service.name}</h3>
       <span class="st-service__price">${servicePriceLabel(service)}</span>
     </div>
-    ${service.id === 'emergency' ? null : html`<div class="st-service__switch">
-      <${Switch} id=${`svc-active-${service.id}`} checked=${service.active} label="Show on website" onChange=${setActive} data-testid=${`service-active-${service.id}`} />
+    ${service.id === 'emergency' ? html`<p class="st-free">Follows the emergency rule below, which is off by default.</p>` : html`<div class="st-service__switch">
+      <${Switch} id=${`svc-active-${service.id}`} checked=${onWebsite} label="Show on website"
+        description=${onWebsite ? 'Customers can pick this on your website.' : 'Not on your website. You can still book it from the dashboard.'}
+        onChange=${setWebsite} data-testid=${`service-active-${service.id}`} />
     </div>`}
     ${service.priceType === 'free'
       ? html`<p class="st-free">Free visit, no price to set.</p>`
@@ -178,8 +202,9 @@ function ServiceRow({ service, onSaved }) {
         ? html`<div class="st-variants">${service.variants.map((v) => html`<${PriceField} key=${v.id} id=${`service-variant-price-${v.id}`}
             label=${v.label} ariaLabel=${`${service.name}: ${v.label} price`} value=${v.price}
             commit=${(n) => save({ variants: [{ id: v.id, price: n }] })} />`)}</div>`
-        : html`<${PriceField} id=${`service-price-${service.id}`} label="Price" ariaLabel=${`Price for ${service.name}`}
-            value=${service.price} commit=${(n) => save({ price: n })} />`)}
+        : html`<${PriceField} id=${`service-price-${service.id}`} label=${quoted ? 'Starting price' : 'Price'} ariaLabel=${`Price for ${service.name}`}
+            value=${service.price} commit=${(n) => save({ price: n })} />
+          ${quoted ? html`<p class="st-free">Used as the starting price when you book it. The website never shows a price for it.</p>` : null}`)}
   <//>`;
 }
 
@@ -187,7 +212,7 @@ function ServicesSection({ onSaved }) {
   const services = useStore(selectAllServices);
   return html`<section class="db-section" aria-labelledby="st-svc-title">
     <h2 class="db-section__title" id="st-svc-title">Services and prices</h2>
-    <p class="st-intro">Prices show on the website straight away. Whole pounds only.</p>
+    <p class="st-intro">Your website offers the free survey visit and a quote for each home. Switch a service on to show it there. Whole pounds only.</p>
     <div class="st-services">${services.map((s) => html`<${ServiceRow} key=${s.id} service=${s} onSaved=${onSaved} />`)}</div>
   </section>`;
 }
@@ -320,11 +345,11 @@ function RulesSection({ onSaved }) {
   return html`<section class="db-section" aria-labelledby="st-rules-title">
     <h2 class="db-section__title" id="st-rules-title">Rules and look</h2>
     <${Card} class="st-rules">
-      <${Switch} id="rule-auto" checked=${rules.autoConfirm} label="Confirm normal bookings instantly"
-        description="Emergency requests and bookings outside your usual area always wait for you."
+      <${Switch} id="rule-auto" checked=${rules.autoConfirm} label="Confirm other bookings instantly"
+        description="Website enquiries (free survey visits) always wait for you to confirm, whatever this says."
         onChange=${(c) => set({ autoConfirm: c })} data-testid="setting-auto-confirm" />
       <${Switch} id="rule-emergency" checked=${rules.emergencies} label="I'm taking emergency visits"
-        description="Off hides the emergency request on your website."
+        description="Off by default: your website only offers EV charger quotes. On adds the emergency request to your website."
         onChange=${(c) => set({ takingEmergencies: c })} data-testid="setting-emergencies" />
       <${Switch} id="rule-reminders" checked=${rules.reminders} label="Day-before reminders"
         onChange=${(c) => set({ remindersOn: c })} data-testid="setting-reminders" />

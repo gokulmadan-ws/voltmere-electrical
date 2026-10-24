@@ -1,8 +1,8 @@
 // js/dashboard/views/booking-detail.js: BookingDetail named component (job card, timeline, messages, sticky action bar).
-// Owner: WP5
+// Owner: WP5, enquiry card and quote trail by E2
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import {
-  Avatar, Button, Card, Chip, EmptyState, Field, Icon, PageHeader, StatusPill, Textarea, TextLink,
+  Avatar, Banner, Button, Card, Chip, EmptyState, Field, Icon, PageHeader, Textarea, TextLink,
   toast, useNow, useStore
 } from '../../ui/index.js';
 import { markSeen, updateBooking, sendQuickMessage } from '../../core/store.js';
@@ -10,12 +10,13 @@ import {
   selectBookingById, selectBrand, selectMessages, selectRepeatInfo, selectService, customerKeyOf
 } from '../../core/selectors.js';
 import { KIND_LABELS, messageIsScheduled, telLink, smsLink, mailtoLink, waLink, mapsLink } from '../../core/messages.js';
-import { bookingWindowLabel } from '../../core/availability.js';
+import { bookingWhen, bookingWindowLabel } from '../../core/availability.js';
 import { fmtDayShort, fmtTimeAgo, stampDay, stampTime, weekdayOf, DAY_SHORT, fmtClock, toStamp } from '../../core/dates.js';
-import { SOURCE_LABELS, PAID_METHOD_LABELS, EMERGENCY_REASONS } from '../../core/config.js';
+import { SOURCE_LABELS, PAID_METHOD_LABELS, EMERGENCY_REASONS, answerLabel } from '../../core/config.js';
 import { gbp } from '../../core/format.js';
 import { routeHref } from '../router.js';
 import { JobActionBar } from '../shared/job-actions.js';
+import { BookingPill, answersOf, isEnquiry, isOutsideNi, isPencilled, quoteProgress } from '../shared/enquiry.js';
 
 const selectAll = (state) => state;
 
@@ -31,15 +32,18 @@ function ordinal(n) {
 const SOURCE_PHRASE = { website: 'website', phone: 'phone', whatsapp: 'WhatsApp', referral: 'word of mouth' };
 
 /** One timeline line of 13.5 item 4. History notes follow the store's convention (see store.js CONTRACT-GAP). */
-function historyText(e) {
+function historyText(e, b) {
   const note = e.note || '';
+  const enquiry = isEnquiry(b);
   switch (e.event) {
-    case 'created': return note && SOURCE_PHRASE[note] ? `Booked via ${SOURCE_PHRASE[note]}` : 'Booked';
-    case 'confirmed': return 'Confirmed';
+    case 'created':
+      if (enquiry) return note && SOURCE_PHRASE[note] ? `Enquiry received via ${SOURCE_PHRASE[note]}` : 'Enquiry received';
+      return note && SOURCE_PHRASE[note] ? `Booked via ${SOURCE_PHRASE[note]}` : 'Booked';
+    case 'confirmed': return enquiry ? 'Survey visit confirmed' : 'Confirmed';
     case 'declined': return 'Declined';
     case 'on_the_way': return note ? `On the way, about ${note}` : 'On the way';
     case 'done': return 'Done';
-    case 'paid': return note ? `Paid by ${(PAID_METHOD_LABELS[note] || note).toLowerCase()}` : 'Paid';
+    case 'paid': return enquiry ? 'No charge (free survey visit)' : note ? `Paid by ${(PAID_METHOD_LABELS[note] || note).toLowerCase()}` : 'Paid';
     case 'unpaid': return 'Marked unpaid';
     case 'cancelled': return `Cancelled by ${e.by === 'customer' ? 'customer' : 'you'}${note ? `: ${note}` : ''}`;
     case 'rescheduled': return note ? `Moved to ${note}` : 'Moved';
@@ -96,14 +100,16 @@ function InternalNotes({ booking }) {
   <p class="bd-saved" role="status" aria-live="polite">${saved ? html`<${Icon} name="check" size=${16} /> Saved` : ''}</p>`;
 }
 
-function Row({ label, children, testid, wide }) {
-  return html`<div class=${wide ? 'bd-row bd-row--wide' : 'bd-row'} data-testid=${testid}>
+function Row({ label, children, testid, wide, muted }) {
+  return html`<div class=${`bd-row${wide ? ' bd-row--wide' : ''}${muted ? ' bd-row--muted' : ''}`} data-testid=${testid}>
     <dt class="bd-row__label">${label}</dt>
     <dd class="bd-row__value">${children}</dd>
   </div>`;
 }
 
 function priceBlock(b) {
+  if (isEnquiry(b)) return html`<strong>Free</strong> <span class="bd-muted">survey and written quote</span>`;
+  if (b.status !== 'done' && b.serviceId === 'ev' && !b.quotedPrice) return html`<strong>To quote</strong> <span class="bd-muted">agreed after the survey</span>`;
   if (b.status === 'done') {
     const amount = gbp(b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice);
     if (!b.paid) return html`<strong>${amount}</strong> <span class="bd-muted">to collect</span>`;
@@ -111,6 +117,55 @@ function priceBlock(b) {
     return html`<strong>${amount}</strong> <span class="bd-muted">${`paid${how}`}</span>`;
   }
   return html`<strong>${gbp(b.quotedPrice)}</strong> <span class="bd-muted">quoted</span>`;
+}
+
+/** "About their home": the five funnel answers in the customer's own terms. Hidden when the booking has none. */
+function HomeCard({ booking: b }) {
+  const a = answersOf(b);
+  if (!a) return null;
+  const postcode = a.postcode || b.address.postcode;
+  const outside = isOutsideNi(postcode);
+  const rows = [['parking', 'Parking'], ['vehicle', 'Electric car'], ['timing', 'Wants it installed'], ['permission', 'Can authorise work']];
+  return html`<${Card} class="bd-card bd-answers" aria-label="About their home" data-testid="detail-answers">
+    <h2 class="bd-card__title">About their home</h2>
+    <dl class="bd-rows">
+      <${Row} label="Postcode" testid="detail-answer-postcode">${postcode}${outside
+        ? html`<${Chip} tone="danger" icon="triangle-alert" class="en-outside" data-testid="detail-outside-ni">Outside Northern Ireland<//>` : null}<//>
+      ${rows.filter(([k]) => a[k]).map(([k, label]) => html`<${Row} key=${k} label=${label} testid=${`detail-answer-${k}`}>${answerLabel(k, a[k]) || a[k]}<//>`)}
+      ${typeof a.marketingOptIn === 'boolean' ? html`<${Row} label="Offers and tips" muted testid="detail-answer-optin">${a.marketingOptIn ? 'Opted in' : 'Not opted in'}<//>` : null}
+    </dl>
+    ${outside ? html`<p class="bd-answers__note">This postcode is not in Northern Ireland. Check you can travel before you confirm.</p>` : null}
+  <//>`;
+}
+
+/** Where a free survey visit has got to, from the enquiry to the booked install. */
+function QuoteTrail({ booking: b, progress }) {
+  const done = b.status === 'done';
+  const visitDone = done;
+  const steps = [
+    { id: 'enquiry', label: 'Enquiry received', sub: 'Their answers are above.', state: 'done' },
+    { id: 'survey', label: 'Free survey visit',
+      sub: visitDone ? 'Done.' : isPencilled(b) ? `Pencilled in for ${bookingWhen(b)}. Confirm it.` : `${fmtDayShort(stampDay(b.start))} · ${bookingWindowLabel(b)}`,
+      state: visitDone ? 'done' : 'now' },
+    { id: 'quote', label: 'Written quote sent', sub: visitDone && !progress.quoteSent ? 'Tap Quote ready to tell them it is ready.' : progress.quoteSent ? 'Quote-ready message sent (simulated).' : 'After the survey.',
+      state: progress.quoteSent ? 'done' : visitDone ? 'now' : 'todo' },
+    { id: 'install', label: 'Install booked', sub: progress.installBooked ? 'An install is in the diary.' : progress.quoteSent ? 'Book the install once they accept the quote.' : 'Once they agree the quote.',
+      state: progress.installBooked ? 'done' : progress.quoteSent ? 'now' : 'todo' }
+  ];
+  return html`<section class="bd-section" aria-labelledby="bd-trail-title">
+    <h2 class="db-section__title" id="bd-trail-title">From enquiry to install</h2>
+    <${Card} class="bd-card">
+      <ol class="en-trail" data-testid="detail-quote-trail">
+        ${steps.map((st) => html`<li class=${`en-trail__item is-${st.state}`} key=${st.id} data-testid=${`trail-${st.id}`} data-state=${st.state}>
+          <span class="en-trail__mark" aria-hidden="true">${st.state === 'done' ? html`<${Icon} name="check" size=${14} />` : null}</span>
+          <span class="en-trail__text">
+            <span class="en-trail__label">${st.label}<span class="u-sr-only">${st.state === 'done' ? ', done' : st.state === 'now' ? ', next' : ', later'}</span></span>
+            <span class="en-trail__sub">${st.sub}</span>
+          </span>
+        </li>`)}
+      </ol>
+    <//>
+  </section>`;
 }
 
 // ---------- BookingDetail ----------
@@ -146,6 +201,8 @@ export function BookingDetail({ id, backHref = '#/bookings', embedded = false })
   const waText = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about booking ${b.ref}.`;
   const msgs = selectMessages(state, { bookingId: b.id });
   const latest = msgs.slice(0, 3);
+  const enquiry = isEnquiry(b);
+  const progress = quoteProgress(state, b);
   const live = b.status === 'confirmed' || b.status === 'on_the_way';
   const showEta = b.etaAt && (b.status === 'confirmed' || b.status === 'on_the_way');
 
@@ -169,10 +226,14 @@ export function BookingDetail({ id, backHref = '#/bookings', embedded = false })
 
     <div class="bd-stack">
       <div class="bd-status">
-        <${StatusPill} status=${b.status} paid=${b.paid} urgent=${b.urgent} urgentTestid="detail-urgent" data-testid="detail-status" />
+        <${BookingPill} booking=${b} urgentTestid="detail-urgent" data-testid="detail-status" />
         <${Chip} data-testid="detail-source">${SOURCE_LABELS[b.source] || b.source}<//>
-        <span class="bd-muted">${ago === 'Yesterday' ? 'Booked yesterday' : `Booked ${ago}`}</span>
+        <span class="bd-muted">${enquiry ? `Received ${ago === 'Yesterday' ? 'yesterday' : ago}` : ago === 'Yesterday' ? 'Booked yesterday' : `Booked ${ago}`}</span>
       </div>
+
+      ${isPencilled(b)
+        ? html`<${Banner} tone="warn" data-testid="detail-pencilled">Survey visit pencilled in for ${bookingWhen(b)}. ${first} has been told it is provisional and that ${brand.ownerFirst} will confirm within 24 hours.<//>`
+        : null}
 
       <${Card} class="bd-card" aria-label="Customer">
         <div class="bd-who">
@@ -197,6 +258,8 @@ export function BookingDetail({ id, backHref = '#/bookings', embedded = false })
         <p class="bd-cust-link"><${TextLink} href=${routeHref('customers', { key: customerKeyOf(b.customer.phone) })}>${`All bookings from ${first}`}<//></p>
       <//>
 
+      <${HomeCard} booking=${b} />
+
       <${Card} class="bd-card" aria-label="Job">
         <h2 class="bd-card__title">${b.variantLabel ? `${b.serviceName} (${b.variantLabel})` : b.serviceName}</h2>
         <dl class="bd-rows">
@@ -214,12 +277,14 @@ export function BookingDetail({ id, backHref = '#/bookings', embedded = false })
         <${InternalNotes} key=${b.id} booking=${b} />
       <//>
 
+      ${enquiry && b.status !== 'cancelled' ? html`<${QuoteTrail} booking=${b} progress=${progress} />` : null}
+
       <section class="bd-section" aria-labelledby="bd-timeline-title">
         <h2 class="db-section__title" id="bd-timeline-title">Timeline</h2>
         <${Card} class="bd-card">
           <ol class="bd-timeline" data-testid="detail-timeline">
             ${b.history.map((e, i) => html`<li class="bd-timeline__item" key=${i}>
-              <span class="bd-timeline__when">${stampText(e.at)}</span> · <span class="bd-timeline__text">${historyText(e)}</span>
+              <span class="bd-timeline__when">${stampText(e.at)}</span> · <span class="bd-timeline__text">${historyText(e, b)}</span>
             </li>`)}
           <//>
         <//>

@@ -1,5 +1,5 @@
 // js/dashboard/views/messages.js: Messages, the WhatsApp outbox (simulated): banner, compare card, filters, live bubble buttons, wa.me links.
-// Owner: WP8
+// Owner: WP8, enquiry chips and wording by E2
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Chip, EmptyState, Icon, PageHeader, PrototypeNotice, Segmented, Sheet, WhatsAppBubble,
@@ -15,9 +15,10 @@ import { firstName } from '../../core/format.js';
 import { nextFreeSlot } from '../../core/availability.js';
 import { SAMPLE_CUSTOMER } from '../../core/seed.js';
 import { routeHref } from '../router.js';
+import { AnswerChips, hasAnswers } from '../shared/enquiry.js';
 
 export const title = 'Messages';
-export const css = ['css/settings.css'];
+export const css = ['css/settings.css', 'css/bookings.css'];
 
 const BANNER_TEXT = 'SIMULATED. Nothing is sent from this prototype. These are the messages the live system would send through the WhatsApp Business Platform. Tap "Open in WhatsApp" to try one on your own phone.';
 const HINT_TEXT = 'Open in WhatsApp goes to the number on the message. These numbers are fictional, so it will not reach a real person. Add your own mobile in Demo tools and every link opens your WhatsApp instead.';
@@ -75,26 +76,27 @@ function runAction(id, booking) {
 // ---------- compare card ----------
 
 function CompareCard({ state, alert, booking, nowS }) {
-  // The typical ping and the alert come from the SAME booking. With no alert in the store, use the sample customer and the next free repair slot.
+  // The typical ping and the alert come from the SAME booking. With no alert in the store, use the sample customer and the next free quote visit slot.
   let name; let phone; let at; let body;
   if (alert && booking) {
     name = booking.customer.name; phone = booking.customer.phone; at = alert.at; body = alert.body;
   } else {
-    const slot = nextFreeSlot(state, 'fault');
+    const slot = nextFreeSlot(state, 'ev_quote');
     name = SAMPLE_CUSTOMER.name; phone = SAMPLE_CUSTOMER.phone;
     at = slot ? slot.startsAt : nowS;
-    const when = slot ? `${fmtDayShort(slot.date)}, arriving ${WINDOWS[slot.windowId].arrive}` : 'as soon as possible';
-    body = ['*New booking*', `${name} · ${phone}`, `Fault finding and repairs`, when, `${SAMPLE_CUSTOMER.line1}, ${SAMPLE_CUSTOMER.postcode}`, 'Confirmed automatically.'].join('\n');
+    const when = slot ? `${fmtDayShort(slot.date)}, ${WINDOWS[slot.windowId].label}` : 'the next free window';
+    body = ['*New enquiry*', `${name} · ${phone}`, SAMPLE_CUSTOMER.postcode, 'Parking: private driveway. Car: ordered. Timing: as soon as possible. Permission: yes.',
+      `Free survey visit pencilled in: ${when}`].join('\n');
   }
   const [, mm, dd] = stampDay(at).split('-');
-  const ping = `New booking received. ${name} ${phone}. ${dd}/${mm} ${stampTime(at)}.`;
+  const ping = `New enquiry received. ${name} ${phone}. ${dd}/${mm} ${stampTime(at)}.`;
   const actions = alert ? actionsFor(alert, booking, nowS) : [];
   return html`<details class="ms-compare" open data-testid="messages-compare">
     <summary class="ms-compare__summary">Is this better than a ping?<${Icon} name="chevron-down" size=${22} class="ms-compare__chev" /></summary>
     <div class="ms-compare__body">
       <div class="ms-compare__col">
         <h3 class="ms-compare__head">A typical ping</h3>
-        <p class="ms-compare__cap">illustrative, not your agency's exact message</p>
+        <p class="ms-compare__cap">illustrative: a plain notification</p>
         <div class="ms-card__chat"><${WhatsAppBubble} direction="in" body=${ping} /></div>
       </div>
       <div class="ms-compare__col">
@@ -135,6 +137,7 @@ function MessageCard({ m, booking, nowS, demoDigits, isNew }) {
         <span class="ms-card__time">${time}</span>
       </div>
     </div>
+    ${toOwner && booking && hasAnswers(booking) ? html`<${AnswerChips} booking=${booking} class="ms-card__chips" />` : null}
     <div class="ms-card__chat">
       <${WhatsAppBubble} direction=${toOwner ? 'in' : 'out'} body=${m.body} messageId=${m.id}
         scheduled=${scheduled} time=${scheduled ? undefined : stampTime(m.sendAt || m.at)}
@@ -233,7 +236,7 @@ export default function MessagesView({ route }) {
       ${list.length === 0
         ? html`<${EmptyState} icon="message-circle"
             title=${state.messages.length === 0 ? 'No messages yet.' : 'Nothing here.'}
-            body=${state.messages.length === 0 ? 'Make a booking on the website and watch this fill up.' : 'No messages match this filter.'} />`
+            body=${state.messages.length === 0 ? 'Send an enquiry from the website and watch this fill up.' : 'No messages match this filter.'} />`
         : html`<div class="ms-list" data-testid="messages-list">${groups.map((g) => html`<section key=${g.day} aria-label=${fmtRelativeDay(g.day)}>
             <h2 class="ms-day">${fmtRelativeDay(g.day)}</h2>
             ${g.items.map((m) => html`<${MessageCard} key=${m.id} m=${m} booking=${m.bookingId ? bookingsById.get(m.bookingId) || null : null}

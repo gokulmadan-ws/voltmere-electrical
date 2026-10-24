@@ -54,7 +54,7 @@ export function normaliseDemoPhone(input) {
   return digits.length >= 8 && digits.length <= 15 ? digits : null;
 }
 
-/** 'mb34qp' -> 'MB3 4QP'. Input under 5 characters comes back trimmed and upper-cased. */
+/** 'bt96qp' -> 'BT9 6QP'. Input under 5 characters comes back trimmed and upper-cased. */
 export function normalisePostcode(input) {
   const trimmed = String(input === null || input === undefined ? '' : input).trim().toUpperCase();
   const compact = trimmed.replace(/\s+/g, '');
@@ -67,19 +67,45 @@ export function isValidPostcode(input) {
   return /^[A-Z]{1,2}[0-9][A-Z0-9]? [0-9][A-Z]{2}$/.test(normalisePostcode(input));
 }
 
-/** 'MB3 4QP' -> 'MB3'; '' when invalid. */
+/** 'BT9 6QP' -> 'BT9'; '' when invalid. */
 export function outwardCode(input) {
   if (!isValidPostcode(input)) return '';
   return normalisePostcode(input).split(' ')[0];
 }
 
-/** 'invalid' | 'covered' | 'edge' | 'outside'. `business` carries coveredOutward and edgeOutward arrays. */
+// BT1 to BT94 is the whole of Northern Ireland (BT83 to BT91 are unused but harmless).
+const BT_OUTWARD = /^BT([1-9]|[1-8]\d|9[0-4])$/;
+
+/** True for a valid Northern Ireland (BT) postcode: 'BT9 6QP', 'bt96qp'. A BT lookalike such as 'BT95 1AA' is not. */
+export function isBtPostcode(input) {
+  return BT_OUTWARD.test(outwardCode(input));
+}
+
+/**
+ * 'invalid' | 'covered' | 'edge' | 'outside'. `business` carries coveredOutward and edgeOutward arrays.
+ * The owner's lists decide. By default coveredOutward holds BT1 to BT94, so every valid BT postcode is 'covered' (the area is all
+ * of Northern Ireland) and any other valid UK postcode is 'outside' (the funnel accepts it; the owner's card flags it).
+ */
 export function postcodeZone(input, business) {
   const outward = outwardCode(input);
   if (!outward) return 'invalid';
   if (business && Array.isArray(business.coveredOutward) && business.coveredOutward.includes(outward)) return 'covered';
   if (business && Array.isArray(business.edgeOutward) && business.edgeOutward.includes(outward)) return 'edge';
   return 'outside';
+}
+
+/** 'Outside Northern Ireland' for a valid non-BT postcode, else ''. */
+export function outsideAreaLabel(input) {
+  const outward = outwardCode(input);
+  return outward && !BT_OUTWARD.test(outward) ? 'Outside Northern Ireland' : '';
+}
+
+/** '14 Larkfield Gardens, BT9 6QP', or just the postcode when no street was given (the funnel only collects the postcode). */
+export function addressLine(address) {
+  const a = address || {};
+  const line1 = String(a.line1 === null || a.line1 === undefined ? '' : a.line1).trim();
+  const postcode = String(a.postcode === null || a.postcode === undefined ? '' : a.postcode).trim();
+  return [line1, postcode].filter(Boolean).join(', ');
 }
 
 // Validators return '' when valid, otherwise the exact message from 13.2.3.
@@ -96,14 +122,14 @@ export function validatePhone(v) {
 
 export function validatePostcode(v) {
   if (blank(v)) return 'Enter your postcode';
-  return isValidPostcode(v) ? '' : 'Enter a UK postcode, like MB3 4QP';
+  return isValidPostcode(v) ? '' : 'Enter a UK postcode, like BT9 6QP';
 }
 
 export function validateLine1(v) {
   return blank(v) ? 'Enter your house number and street' : '';
 }
 
-/** 'Priya Nair' -> 'PN'; one word -> its first two letters; blank -> '?'. */
+/** 'Aoife Magee' -> 'AM'; one word -> its first two letters; blank -> '?'. */
 export function initials(name) {
   const words = String(name === null || name === undefined ? '' : name).trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return '?';

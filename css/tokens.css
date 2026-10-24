@@ -1,171 +1,218 @@
 /* css/tokens.css: every design token, light and dark. The only file allowed to hold hex colours
-   (plus the two brand SVGs in img/). Re-skin the whole site by editing this file.
-   Owner: WP2
+   (plus the brand SVGs in img/). Re-skin the whole site by editing this file.
+   Owner: WP2; re-skinned for 180 Electrical (near-black, near-white, brand red #E11414) by role B2.
 
    Rules (contract 4.3): light values on :root; the dark block appears TWICE, byte-identical (once
    under prefers-color-scheme with :root:not([data-theme="light"]), once under :root[data-theme="dark"]);
-   body gets its background and colour explicitly. Do not change a colour without re-running the
-   contrast check (tests/qa/contrast.mjs). */
+   body gets its background and colour explicitly. DARK IS THE DEFAULT: with no saved choice js/ui/theme.js and the
+   inline <head> script put data-theme="dark" on <html>; "Auto" (explicit) follows the OS; light still works.
+   Do not change a colour without re-running the contrast check (every text pair 4.5:1, every UI edge 3:1).
+
+   180 Electrical brand (from his own site): brand red #E11414 (hover #B00E12), ink #F5F5F4, page #0B0B0C, card #151517
+   (gradient #17181B to #111214), selected option = brand border on rgba(225,20,20,.10), pill buttons, rounded cards.
+   Inter body, Manrope headings (local files).
+
+   Colour roles (token names are unchanged from the contract, meanings moved):
+   --cta / --cta-ink      brand red FILL with white text (white on #E11414 is 4.87:1, so the brand red itself is used):
+                          primary buttons, selected chips, active tab, step marks, the "PROTOTYPE" badge.
+   --cta-press            #B00E12, his hover red: hover and pressed state of a primary button, chip borders.
+   --cta-soft             brand tint (rgba(225,20,20,.10) in dark): selected option / highlighted card background.
+   --cta-text             brand red used as TEXT or an icon. #E11414 on #0B0B0C is only 4.0:1 and 3.7:1 on a card, so
+                          dark uses the lighter #FF5252 (5.6:1 on a card); light uses the darker #C41010 (5.4:1 on the tint).
+                          NEVER use --cta itself as text colour.
+   --panel-accent         the same red text/icon on the black panels (hero, final CTA, footer), both themes.
+   --brand / --brand-dark the literal brand red and his hover red (never change with the theme). --card-bg: card surface
+                          (his #17181B to #111214 gradient in dark, flat white in light).
+   --logo-red / --logo-bg / --logo-edge   the BrandMark: #111111 rounded square, red #E11414 bolt, hairline edge on black.
+   --danger family        bright ORANGE-red with DARK text, an outline and an icon: emergency, urgent, destructive, invalid.
+                          Deliberately a different hue and weight from the brand red so a destructive action can never be
+                          mistaken for the primary one. Always paired with an icon or a word.
+   --status-cancelled     plum, so it can never be read as the brand red or as the orange danger.
+   Warning is amber (--status-on-the-way-*, --dot-few); info and links are blue; success is green. */
 
 :root {
   color-scheme: light;
   /* surfaces */
-  --bg: #FBF8F2;            /* page, "paper" */
+  --bg: #F6F5F3;            /* page, warm off-white */
   --surface: #FFFFFF;       /* cards, sheets, inputs */
-  --surface-2: #F3EEE4;     /* sunken areas, "sand" */
-  --line: #E3DCCD;          /* hairlines, dividers */
-  --field-border: #7D7766;  /* input and control borders (4.4:1 on white, 4.2:1 on --bg; UI needs 3:1) */
-  --scrim: rgba(11, 16, 32, 0.55);
+  --surface-2: #ECEAE6;     /* sunken areas, warm grey */
+  --line: #DAD6D0;          /* hairlines, dividers */
+  --field-border: #77726B;  /* input and control borders (UI needs 3:1) */
+  --scrim: rgba(11, 11, 12, 0.6);
+  --card-bg: #FFFFFF;       /* card surface (a gradient in dark) */
   /* text */
-  --text: #14213D;          /* 15:1 on --bg */
-  --text-2: #465065;        /* 7.6:1 */
-  --text-3: #5A647C;        /* 5.6:1 on --bg, 5.1:1 on --surface-2 */
-  --link: #1E4FD8;
-  --focus: #1E4FD8;         /* 3px ring, 2px offset */
-  --focus-on-panel: #FFD15C; /* the same ring on navy panels (hero, final CTA, footer): 10:1 on --panel; --focus is only 2.4:1 there */
-  /* brand: spark amber (primary action) */
-  --cta: #FFB400;
-  --cta-ink: #14213D;       /* text on --cta, 9:1 */
-  --cta-press: #F2A200;
-  --cta-soft: #FFF1C7;      /* tinted backgrounds */
-  --cta-text: #8A5A00;      /* amber used as TEXT on --bg */
-  /* navy panels (hero, final CTA, footer) */
-  --panel: #14213D;
-  --panel-2: #1D2E57;
-  --panel-text: #FFF8E8;
-  --panel-muted: #C3CDE3;   /* 10:1 on --panel */
+  --text: #0B0B0C;
+  --text-2: #403C38;
+  --text-3: #5A554F;
+  --link: #1D4ED8;
+  --focus: #1D4ED8;         /* 3px ring, 2px offset */
+  --focus-on-panel: #FFFFFF; /* the same ring on the black panels (hero, final CTA, footer) */
+  /* brand: 180 red (primary action) */
+  --brand: #E11414;         /* literal brand red, both themes */
+  --brand-dark: #B00E12;    /* his hover red, both themes */
+  --cta: #E11414;           /* FILL only (white text on it, 4.87:1) */
+  --cta-ink: #FFFFFF;       /* text on --cta */
+  --cta-press: #B00E12;     /* hover / pressed fill and chip borders (white on it 7.2:1) */
+  --cta-soft: #FDECEB;      /* tinted backgrounds */
+  --cta-text: #C41010;      /* brand red used as TEXT or icon on light surfaces (5.1:1 on the warm grey) */
+  /* black panels (hero, final CTA, footer): near-black in both themes, like his logo card */
+  --panel: #0B0B0C;
+  --panel-2: #1A1A1D;
+  --panel-text: #F5F5F4;
+  --panel-muted: #A9A9AE;
+  --panel-accent: #FF5252;  /* brand red as TEXT or icon on the black panels (5.8:1 on --panel-2) */
+  --logo-red: #E11414;      /* the bolt of the BrandMark (same hex as img/logo-mark.svg) */
+  --logo-bg: #111111;       /* the BrandMark square, same as his favicon */
+  --logo-edge: rgba(255, 255, 255, 0.16); /* hairline that keeps the square visible on black */
   /* semantic */
-  --danger: #C8281E;        /* solid emergency / destructive */
-  --danger-ink: #FFFFFF;    /* text on --danger, 5.6:1 */
-  --danger-tint: #FDE6E3;
-  --danger-text: #A3180D;   /* 6.5:1 on --danger-tint */
-  --ok: #1B7F45;            /* icons, dots (4.4:1 on sand) */
+  --danger: #E4500F;        /* solid emergency / destructive / urgent: bright orange-red, NOT the brand red */
+  --danger-ink: #1C0A02;    /* text on --danger */
+  --danger-tint: #FFEDE2;
+  --danger-text: #A33C00;   /* on --danger-tint, bg, surface */
+  --ok: #1B7F45;            /* icons, dots */
   --ok-text: #146C3A;
   --ok-tint: #D9F5E3;
   /* booking status: one pair per status (bg / fg) */
-  --status-new-bg: #E3ECFF;        --status-new-fg: #1E4FD8;
+  --status-new-bg: #E3ECFF;        --status-new-fg: #1D4ED8;
   --status-confirmed-bg: #D9F5E3;  --status-confirmed-fg: #146C3A;
   --status-on-the-way-bg: #FFEBC2; --status-on-the-way-fg: #8A4B00;
-  --status-done-bg: #E6EAF0;       --status-done-fg: #3B4658;
-  --status-cancelled-bg: #FDE3E8;  --status-cancelled-fg: #9B1C3A;
-  --status-urgent-bg: #C8281E;     --status-urgent-fg: #FFFFFF;
+  --status-done-bg: #E7E5E1;       --status-done-fg: #3B3834;
+  --status-cancelled-bg: #F3E5F8;  --status-cancelled-fg: #7A2B91;
+  --status-urgent-bg: #E4500F;     --status-urgent-fg: #1C0A02;
   /* availability dots (customer and owner calendars) */
   --dot-free: #1B7F45;
   --dot-few: #B87400;
-  --dot-full: #857F6E;
+  --dot-full: #8A857D;
   /* simulated WhatsApp-style chat */
-  --chat-bg: #EFE8D8;
-  --bubble-out-bg: #DDF6D2;  --bubble-out-fg: #14213D;   /* to customers */
-  --bubble-in-bg: #FFFFFF;   --bubble-in-fg: #14213D;    /* owner alerts */
+  --chat-bg: #EAE4DA;
+  --bubble-out-bg: #DDF6D2;  --bubble-out-fg: #0B0B0C;   /* to customers */
+  --bubble-in-bg: #FFFFFF;   --bubble-in-fg: #0B0B0C;    /* owner alerts */
   /* elevation */
-  --shadow-1: 0 1px 2px rgba(20, 33, 61, 0.08), 0 2px 8px rgba(20, 33, 61, 0.06);
-  --shadow-2: 0 8px 28px -8px rgba(20, 33, 61, 0.28);
-  --shadow-bar: 0 -2px 12px rgba(20, 33, 61, 0.08);
+  --shadow-1: 0 1px 2px rgba(11, 11, 12, 0.08), 0 2px 8px rgba(11, 11, 12, 0.06);
+  --shadow-2: 0 8px 28px -8px rgba(11, 11, 12, 0.34);
+  --shadow-bar: 0 -2px 12px rgba(11, 11, 12, 0.08);
+  --shadow-brand: 0 8px 22px -10px rgba(225, 20, 20, 0.55); /* soft red glow under a primary button */
 }
 
-/* Dark ("van at night": no pure black, no pure white). Auto: follows the OS unless the user forced light. */
+/* Dark (the default look: near-black, near-white, red accents). Auto: follows the OS unless the user forced light. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0B1020;
-    --surface: #141B2F;
-    --surface-2: #1B2440;
-    --line: #2A3453;
-    --field-border: #6B7597;
-    --scrim: rgba(0, 0, 0, 0.65);
-    --text: #F3F1EA;
-    --text-2: #AEB6C8;
-    --text-3: #8D97B0;
-    --link: #8FB0FF;
-    --focus: #FFD15C;
-    --focus-on-panel: #FFD15C;
-    --cta: #FFC233;
-    --cta-ink: #14213D;
-    --cta-press: #FFD15C;
-    --cta-soft: #3A2D07;
-    --cta-text: #FFC233;
-    --panel: #16213E;
-    --panel-2: #1D2B52;
-    --panel-text: #FFF8E8;
-    --panel-muted: #B9C4DC;
-    --danger: #FF6B5E;
-    --danger-ink: #2A0A07;
-    --danger-tint: #3A1512;
-    --danger-text: #FF9D91;
+    --bg: #0B0B0C;
+    --surface: #151517;
+    --surface-2: #1F2023;
+    --line: #2C2D31;
+    --field-border: #7A7A80;
+    --scrim: rgba(0, 0, 0, 0.72);
+    --card-bg: linear-gradient(180deg, #17181B 0%, #111214 100%);
+    --text: #F5F5F4;
+    --text-2: #C6C6C8;
+    --text-3: #909095;
+    --link: #7FB2FF;
+    --focus: #FFFFFF;
+    --focus-on-panel: #FFFFFF;
+    --brand: #E11414;
+    --brand-dark: #B00E12;
+    --cta: #E11414;
+    --cta-ink: #FFFFFF;
+    --cta-press: #B00E12;
+    --cta-soft: rgba(225, 20, 20, 0.10);
+    --cta-text: #FF5252;
+    --panel: #0B0B0C;
+    --panel-2: #1A1A1D;
+    --panel-text: #F5F5F4;
+    --panel-muted: #A9A9AE;
+    --panel-accent: #FF5252;
+    --logo-red: #E11414;
+    --logo-bg: #111111;
+    --logo-edge: rgba(255, 255, 255, 0.16);
+    --danger: #FF6A2B;
+    --danger-ink: #1C0A02;
+    --danger-tint: #3A1A0C;
+    --danger-text: #FFA070;
     --ok: #4ADE80;
     --ok-text: #6EE7A0;
-    --ok-tint: #0F3220;
-    --status-new-bg: #1B2A55;        --status-new-fg: #9DB8FF;
-    --status-confirmed-bg: #0F3220;  --status-confirmed-fg: #6EE7A0;
+    --ok-tint: #0F2A1B;
+    --status-new-bg: #14224A;        --status-new-fg: #9DB8FF;
+    --status-confirmed-bg: #0F2A1B;  --status-confirmed-fg: #6EE7A0;
     --status-on-the-way-bg: #3D2C06; --status-on-the-way-fg: #FFD166;
-    --status-done-bg: #232C3D;       --status-done-fg: #C3CCDA;
-    --status-cancelled-bg: #3E1521;  --status-cancelled-fg: #FFA3B5;
-    --status-urgent-bg: #FF6B5E;     --status-urgent-fg: #2A0A07;
+    --status-done-bg: #26272A;       --status-done-fg: #D0D0D2;
+    --status-cancelled-bg: #2E1838;  --status-cancelled-fg: #E6B8F6;
+    --status-urgent-bg: #FF6A2B;     --status-urgent-fg: #1C0A02;
     --dot-free: #4ADE80;
     --dot-few: #FFC233;
-    --dot-full: #7A84A6;
+    --dot-full: #85858A;
     --chat-bg: #0B141A;
     --bubble-out-bg: #12453B;  --bubble-out-fg: #E8F5EE;
-    --bubble-in-bg: #1B2440;   --bubble-in-fg: #F3F1EA;
+    --bubble-in-bg: #202225;   --bubble-in-fg: #F5F5F4;
     --shadow-1: none;
     --shadow-2: 0 0 0 1px var(--line);
     --shadow-bar: 0 -1px 0 var(--line);
+    --shadow-brand: 0 8px 24px -10px rgba(225, 20, 20, 0.7);
   }
 }
 
-/* Dark, forced by the user (ThemeToggle). Identical to the block above. */
+/* Dark, forced by the user (ThemeToggle) or by default when nothing is saved. Identical to the block above. */
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #0B1020;
-    --surface: #141B2F;
-    --surface-2: #1B2440;
-    --line: #2A3453;
-    --field-border: #6B7597;
-    --scrim: rgba(0, 0, 0, 0.65);
-    --text: #F3F1EA;
-    --text-2: #AEB6C8;
-    --text-3: #8D97B0;
-    --link: #8FB0FF;
-    --focus: #FFD15C;
-    --focus-on-panel: #FFD15C;
-    --cta: #FFC233;
-    --cta-ink: #14213D;
-    --cta-press: #FFD15C;
-    --cta-soft: #3A2D07;
-    --cta-text: #FFC233;
-    --panel: #16213E;
-    --panel-2: #1D2B52;
-    --panel-text: #FFF8E8;
-    --panel-muted: #B9C4DC;
-    --danger: #FF6B5E;
-    --danger-ink: #2A0A07;
-    --danger-tint: #3A1512;
-    --danger-text: #FF9D91;
+    --bg: #0B0B0C;
+    --surface: #151517;
+    --surface-2: #1F2023;
+    --line: #2C2D31;
+    --field-border: #7A7A80;
+    --scrim: rgba(0, 0, 0, 0.72);
+    --card-bg: linear-gradient(180deg, #17181B 0%, #111214 100%);
+    --text: #F5F5F4;
+    --text-2: #C6C6C8;
+    --text-3: #909095;
+    --link: #7FB2FF;
+    --focus: #FFFFFF;
+    --focus-on-panel: #FFFFFF;
+    --brand: #E11414;
+    --brand-dark: #B00E12;
+    --cta: #E11414;
+    --cta-ink: #FFFFFF;
+    --cta-press: #B00E12;
+    --cta-soft: rgba(225, 20, 20, 0.10);
+    --cta-text: #FF5252;
+    --panel: #0B0B0C;
+    --panel-2: #1A1A1D;
+    --panel-text: #F5F5F4;
+    --panel-muted: #A9A9AE;
+    --panel-accent: #FF5252;
+    --logo-red: #E11414;
+    --logo-bg: #111111;
+    --logo-edge: rgba(255, 255, 255, 0.16);
+    --danger: #FF6A2B;
+    --danger-ink: #1C0A02;
+    --danger-tint: #3A1A0C;
+    --danger-text: #FFA070;
     --ok: #4ADE80;
     --ok-text: #6EE7A0;
-    --ok-tint: #0F3220;
-    --status-new-bg: #1B2A55;        --status-new-fg: #9DB8FF;
-    --status-confirmed-bg: #0F3220;  --status-confirmed-fg: #6EE7A0;
+    --ok-tint: #0F2A1B;
+    --status-new-bg: #14224A;        --status-new-fg: #9DB8FF;
+    --status-confirmed-bg: #0F2A1B;  --status-confirmed-fg: #6EE7A0;
     --status-on-the-way-bg: #3D2C06; --status-on-the-way-fg: #FFD166;
-    --status-done-bg: #232C3D;       --status-done-fg: #C3CCDA;
-    --status-cancelled-bg: #3E1521;  --status-cancelled-fg: #FFA3B5;
-    --status-urgent-bg: #FF6B5E;     --status-urgent-fg: #2A0A07;
+    --status-done-bg: #26272A;       --status-done-fg: #D0D0D2;
+    --status-cancelled-bg: #2E1838;  --status-cancelled-fg: #E6B8F6;
+    --status-urgent-bg: #FF6A2B;     --status-urgent-fg: #1C0A02;
     --dot-free: #4ADE80;
     --dot-few: #FFC233;
-    --dot-full: #7A84A6;
+    --dot-full: #85858A;
     --chat-bg: #0B141A;
     --bubble-out-bg: #12453B;  --bubble-out-fg: #E8F5EE;
-    --bubble-in-bg: #1B2440;   --bubble-in-fg: #F3F1EA;
+    --bubble-in-bg: #202225;   --bubble-in-fg: #F5F5F4;
     --shadow-1: none;
     --shadow-2: 0 0 0 1px var(--line);
     --shadow-bar: 0 -1px 0 var(--line);
+    --shadow-brand: 0 8px 24px -10px rgba(225, 20, 20, 0.7);
 }
 
 /* Non-colour tokens: same in both themes. */
 :root {
-  /* type */
-  --font-display: 'Bricolage Grotesque', ui-rounded, 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* type: Manrope (headings), Inter (body); both local variable fonts, see css/fonts.css */
+  --font-display: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --fs-12: 0.75rem;   /* captions, chips, tab labels. NEVER smaller. */
   --fs-14: 0.875rem;  /* meta, helper text */
@@ -174,16 +221,16 @@
   --fs-17: 1.0625rem; /* card titles, button labels */
   --fs-20: 1.25rem;
   --fs-26: 1.625rem;
-  --fs-h1: clamp(2rem, 8.8vw, 3.5rem);     /* about 33px at 375, 56px from 640 */
+  --fs-h1: clamp(2.125rem, 9.6vw, 3.5rem);  /* about 36px at 375, 56px from 590 */
   --fs-h2: clamp(1.625rem, 5vw, 2.25rem);  /* 26px at 375, 36px from 720 */
-  --lh-tight: 1.05;  --lh-snug: 1.25;  --lh-body: 1.5;
+  --lh-tight: 1.08;  --lh-snug: 1.25;  --lh-body: 1.5;
   --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700; --fw-heavy: 800;
-  --tracking-tight: -0.02em;  --tracking-caps: 0.06em;
+  --tracking-tight: -0.025em;  --tracking-caps: 0.06em;
   /* spacing, 4px grid */
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
   --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
-  /* radii */
-  --r-sm: 8px;  --r-md: 12px;  /* inputs, buttons */  --r-lg: 16px;  /* cards */
+  /* radii: pill buttons and chips, 18px cards (his rounded-2xl), 12px inputs */
+  --r-sm: 8px;  --r-md: 12px;  /* inputs */  --r-lg: 18px;  /* cards */
   --r-xl: 24px; /* sheet top */ --r-2xl: 28px; /* hero bottom */ --r-pill: 999px;
   /* sizes */
   --tap: 44px;  --h-input: 52px;  --h-btn: 48px;  --h-btn-lg: 56px;

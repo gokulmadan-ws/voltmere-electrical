@@ -1,5 +1,31 @@
-/* css/bookings.css: Bookings list (bl-), booking detail (bd-) and the shared job actions and their sheets (ja-).
-   Owner: WP5. Colours and sizes come from tokens.css only. Loaded by Bookings, Today and Insights. */
+/* css/bookings.css: Bookings list (bl-), booking detail (bd-), the shared job actions and their sheets (ja-) and the enquiry bits (en-).
+   Owner: WP5, enquiry styles by E2. Colours and sizes come from tokens.css only. Loaded by Bookings, Today, Insights and Messages. */
+
+/* ================= en-: enquiry answers, pencilled-in marks, quote trail ================= */
+.en-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.en-chips > li { min-width: 0; max-width: 100%; }
+.en-chip.ui-chip { min-height: 24px; padding: 1px 9px; font-size: var(--fs-12); font-weight: var(--fw-semibold); }
+.en-pencil { border-color: currentColor; border-style: dashed; }
+.en-pencil-note { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; overflow-wrap: anywhere; }
+.en-pencil-note svg { flex: none; margin-top: 2px; }
+.en-outside { display: inline-flex; margin-left: var(--space-2); vertical-align: middle; }
+.bd-answers .bd-row__value { font-weight: var(--fw-semibold); }
+.bd-answers .bd-row--muted .bd-row__value { font-weight: var(--fw-regular); color: var(--text-2); }
+.bd-answers__note { margin: 0; color: var(--text-2); font-size: var(--fs-14); }
+
+.en-trail { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.en-trail__item { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: start; gap: var(--space-3); font-size: var(--fs-16); }
+.en-trail__mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; box-sizing: border-box;
+  border: 2px solid var(--field-border); border-radius: 50%; color: var(--text-3);
+}
+.en-trail__item.is-done .en-trail__mark { background: var(--ok-tint); border-color: var(--ok); color: var(--ok-text); }
+.en-trail__item.is-now .en-trail__mark { background: var(--cta); border-color: var(--cta-press); color: var(--cta-ink); }
+.en-trail__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.en-trail__label { font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.en-trail__item:not(.is-done):not(.is-now) .en-trail__label { color: var(--text-2); font-weight: var(--fw-semibold); }
+.en-trail__sub { color: var(--text-2); font-size: var(--fs-14); overflow-wrap: anywhere; }
+
 
 /* ================= ja-: job actions (bar, Needs-you buttons, sheets) ================= */
 .ja-bar { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
@@ -121,6 +147,8 @@
   color: inherit; text-decoration: none;
 }
 .bl-row:active { background: var(--surface-2); }
+/* The answer chips run under the whole row, not inside the narrow name column. */
+.bl-row .bl-row__chips { grid-column: 1 / -1; margin-top: calc(var(--space-1) * -1); }
 .bl-row.is-selected { background: var(--cta-soft); }
 .bl-row__time { display: flex; flex-direction: column; min-width: 0; white-space: nowrap; }
 .bl-row__time-main { font-size: var(--fs-14); font-weight: var(--fw-bold); line-height: 1.25; font-variant-numeric: tabular-nums; }

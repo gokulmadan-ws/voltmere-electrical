@@ -1,14 +1,13 @@
 // js/booking/when-step.js: Step 1 "When suits you?" (service chip, EICR size, Soonest card, day picker, windows).
-// Owner: WP3
+// Owner: WP3, price label by D2
 import { html } from '../vendor/preact-htm.js';
 import { Icon, Button, Chip, Segmented } from '../ui/index.js';
 import { getBookableDays, getDaySlots, nextFreeSlot } from '../core/availability.js';
-import { servicePriceLabel } from '../core/selectors.js';
 import { PROMISES, WINDOWS } from '../core/config.js';
 import { fmtDayShort, fmtDayLong } from '../core/dates.js';
 import { todayKey } from '../core/clock.js';
 import { gbp } from '../core/format.js';
-import { StepTitle, SlotTakenBanner, ContactButtons } from './bk-shared.js';
+import { StepTitle, SlotTakenBanner, ContactButtons, listPrice } from './bk-shared.js';
 import { DayPicker, dayIsSelectable } from './day-picker.js';
 
 export function WhenStep({ ctx }) {
@@ -37,7 +36,7 @@ export function WhenStep({ ctx }) {
 
   return html`<div class="bk-step">
     <${StepTitle}>When suits you?<//>
-    <${Chip} class="bk-svc-chip" icon=${svc.icon} onClick=${() => go({})} data-testid="booking-service-chip">${svc.name} · ${servicePriceLabel(svc)} · Change<//>
+    <${Chip} class="bk-svc-chip" icon=${svc.icon} onClick=${() => go({})} data-testid="booking-service-chip">${svc.name} · ${listPrice(svc)} · Change<//>
 
     ${variants.length ? html`<div class="bk-block">
       <p class="bk-eyebrow" id="bk-size-label">Property size</p>

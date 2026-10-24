@@ -2,10 +2,10 @@
 // Owner: WP1
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeDefaultSettings, SOURCE_LABELS } from '../../js/core/config.js';
+import { ENQUIRY_STEPS, SCHEMA_VERSION, SOURCE_LABELS, answerLabel, makeDefaultSettings, normaliseAnswers } from '../../js/core/config.js';
 import { setClock, now } from '../../js/core/clock.js';
 import { addDays, addMinutes, stampDay, weekdayOf } from '../../js/core/dates.js';
-import { buildSeed, SEED_CUSTOMERS, SAMPLE_CUSTOMER, SIM_POOL } from '../../js/core/seed.js';
+import { buildSeed, SEED_CUSTOMERS, SAMPLE_CUSTOMER, SAMPLE_ENQUIRY_ANSWERS, SIM_POOL } from '../../js/core/seed.js';
 import { bookingWindowIds, getDayLoad, nextFreeSlot, nextFreeSlots, occupiedBy } from '../../js/core/availability.js';
 import {
   selectNeedsYou, selectOwed, selectOwedTotal, selectInsights, selectCustomers, selectUnseenBookings
@@ -23,15 +23,15 @@ function seedState(date = FIXTURE, settings = makeDefaultSettings(), existing) {
   const seed = buildSeed(now(), settings, existing);
   const top = seed.messages.reduce((m, x) => Math.max(m, x.seq), 0);
   const seededFor = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  return { v: 1, seededFor, refSeq: seed.refSeq, settings, bookings: seed.bookings, blocks: seed.blocks, messages: seed.messages, meta: { rev: 1, msgSeq: top, messagesSeenSeq: top, simCursor: 0 } };
+  return { v: SCHEMA_VERSION, seededFor, refSeq: seed.refSeq, settings, bookings: seed.bookings, blocks: seed.blocks, messages: seed.messages, meta: { rev: 1, msgSeq: top, messagesSeenSeq: top, simCursor: 0 } };
 }
 
 const byId = (state, id) => state.bookings.find((b) => b.id === id);
 
-test('the fixture diary: 15 bookings, refs VM-1028 to VM-1042, one Van MOT group, refSeq 1043', () => {
+test('the fixture diary: 15 bookings, refs EL-1028 to EL-1042, one Van MOT group, refSeq 1043', () => {
   const state = seedState();
   assert.equal(state.bookings.length, 15);
-  assert.deepEqual(state.bookings.map((b) => b.ref), Array.from({ length: 15 }, (_, i) => `VM-${1028 + i}`));
+  assert.deepEqual(state.bookings.map((b) => b.ref), Array.from({ length: 15 }, (_, i) => `EL-${1028 + i}`));
   assert.deepEqual(state.bookings.map((b) => b.id), Array.from({ length: 15 }, (_, i) => `bk_seed_${String(i + 1).padStart(2, '0')}`));
   assert.ok(state.bookings.every((b) => b.seed === true));
   assert.equal(state.refSeq, 1043);
@@ -47,35 +47,37 @@ test('each seeded booking lands where 3.4 says (day, window, status, money)', ()
     const b = byId(state, `bk_seed_${String(n).padStart(2, '0')}`);
     return [b.start, b.durationMin, b.status, b.customer.name, b.serviceId, b.quotedPrice, b.finalPrice, b.paid, b.paidMethod];
   };
-  assert.deepEqual(row(1), ['2026-10-03T08:00', 120, 'done', 'Priya Nair', 'fault', 75, 75, true, 'card']);
-  assert.deepEqual(row(2), ['2026-10-07T13:00', 240, 'done', 'Marcus Tate', 'eicr', 150, 150, true, 'bank']);
-  assert.deepEqual(row(3), ['2026-10-10T08:00', 240, 'done', 'Alison Reeve', 'consumer', 540, 540, true, 'card']);
-  assert.deepEqual(row(4), ['2026-10-16T10:00', 120, 'done', 'Ruth Calder', 'sockets', 85, 170, false, null]);
-  assert.deepEqual(row(5), ['2026-10-23T08:00', 120, 'done', 'Tom Hargreaves', 'sockets', 85, 85, true, 'cash']);
-  assert.deepEqual(row(6), ['2026-10-23T10:00', 120, 'done', 'Eileen Doyle', 'fault', 75, 75, false, null]);
-  assert.deepEqual(row(7), ['2026-10-23T20:30', 0, 'new', 'Ngozi Okafor', 'emergency', 95, null, false, null]);
-  assert.deepEqual(row(8), ['2026-10-24T10:00', 120, 'confirmed', 'Hannah Whitfield', 'fault', 75, null, false, null]);
-  assert.deepEqual(row(9), ['2026-10-26T13:00', 240, 'confirmed', 'Marcus Tate', 'eicr', 195, null, false, null]);
-  assert.deepEqual(row(10), ['2026-10-27T08:00', 120, 'confirmed', 'Alison Reeve', 'fault', 75, null, false, null]);
-  assert.deepEqual(row(11), ['2026-10-27T10:00', 120, 'new', 'Sam Wray', 'sockets', 85, null, false, null]);
-  assert.deepEqual(row(12), ['2026-10-27T13:00', 120, 'confirmed', 'Ruth Calder', 'fault', 75, null, false, null]);
-  assert.deepEqual(row(13), ['2026-10-27T15:00', 120, 'confirmed', 'Tom Hargreaves', 'sockets', 85, null, false, null]);
-  assert.deepEqual(row(14), ['2026-10-29T08:00', 120, 'confirmed', 'Kwame Mensah', 'sockets', 85, null, false, null]);
-  assert.deepEqual(row(15), ['2026-10-30T10:00', 120, 'cancelled', 'Lena Kowalski', 'fault', 75, null, false, null]);
+  assert.deepEqual(row(1), ['2026-10-03T08:00', 120, 'done', 'Aoife Magee', 'fault', 75, 75, true, 'card']);
+  assert.deepEqual(row(2), ['2026-10-07T13:00', 240, 'done', 'Padraig Quinn', 'eicr', 150, 150, true, 'bank']);
+  assert.deepEqual(row(3), ['2026-10-10T08:00', 240, 'done', 'Niamh Gallagher', 'ev', 899, 899, true, 'card']);
+  assert.deepEqual(row(4), ['2026-10-16T10:00', 120, 'done', 'Roisin Maguire', 'sockets', 85, 170, false, null]);
+  assert.deepEqual(row(5), ['2026-10-23T08:00', 120, 'done', 'Declan Rafferty', 'sockets', 85, 85, true, 'cash']);
+  assert.deepEqual(row(6), ['2026-10-23T10:00', 120, 'done', 'Orla Hegarty', 'fault', 75, 75, false, null]);
+  assert.deepEqual(row(7), ['2026-10-29T10:00', 120, 'new', 'Sinead Doherty', 'ev_quote', 0, null, false, null]);
+  assert.deepEqual(row(8), ['2026-10-24T10:00', 120, 'confirmed', 'Eoin McCartney', 'ev_quote', 0, null, false, null]);
+  assert.deepEqual(row(9), ['2026-10-26T13:00', 240, 'confirmed', 'Padraig Quinn', 'ev', 899, null, false, null]);
+  assert.deepEqual(row(10), ['2026-10-27T08:00', 120, 'confirmed', 'Niamh Gallagher', 'fault', 75, null, false, null]);
+  assert.deepEqual(row(11), ['2026-10-27T10:00', 120, 'new', 'Conor Brennan', 'ev_quote', 0, null, false, null]);
+  assert.deepEqual(row(12), ['2026-10-27T13:00', 120, 'confirmed', 'Roisin Maguire', 'ev_quote', 0, null, false, null]);
+  assert.deepEqual(row(13), ['2026-10-27T15:00', 120, 'confirmed', 'Declan Rafferty', 'sockets', 85, null, false, null]);
+  assert.deepEqual(row(14), ['2026-10-29T08:00', 120, 'confirmed', 'Ciaran Boyle', 'ev_quote', 0, null, false, null]);
+  assert.deepEqual(row(15), ['2026-10-30T10:00', 120, 'cancelled', 'Bronagh Hughes', 'ev_quote', 0, null, false, null]);
   const s15 = byId(state, 'bk_seed_15');
   assert.equal(s15.cancelledBy, 'customer');
   assert.equal(s15.cancelReason, 'Customer asked');
   const s02 = byId(state, 'bk_seed_02');
   assert.equal(s02.variantId, 'flat');
   assert.equal(s02.variantLabel, 'Flat');
-  assert.deepEqual(s02.address, { line1: '8 Quarry Lane', postcode: 'MB5 2LN' });
+  assert.deepEqual(s02.address, { line1: '8 Millrace Row', postcode: 'BT28 2LN' });
   const s09 = byId(state, 'bk_seed_09');
-  assert.equal(s09.variantLabel, 'House, 2–3 bed');
-  assert.deepEqual(s09.address, { line1: '31 Hollin Road', postcode: 'MB6 7DZ' });
+  assert.equal(s09.variantLabel, '');
+  assert.deepEqual(s09.address, { line1: '31 Rockmount Road', postcode: 'BT20 4DZ' });
   const s07 = byId(state, 'bk_seed_07');
-  assert.equal(s07.urgent, true);
-  assert.deepEqual(s07.emergencyReasons, ['no_power']);
-  assert.equal(s07.notes, 'No power in kitchen');
+  assert.equal(s07.urgent, false, 'the old seeded emergency is an ordinary pending enquiry now');
+  assert.deepEqual(s07.emergencyReasons, []);
+  assert.equal(s07.answers.timing, 'asap');
+  assert.equal(s07.tentative, true, 'the free survey is pencilled in until he confirms it');
+  assert.deepEqual(s07.address, { line1: '', postcode: 'BT42 6JN' }, 'the funnel only collects the postcode');
   assert.equal(s07.createdAt, '2026-10-23T20:18', 'created 12 minutes before seeding');
 });
 
@@ -108,18 +110,18 @@ test('createdAt rules: two days before for past and today jobs, the earlier of n
 test('fixture totals at 2026-10-23T20:30', () => {
   const state = seedState();
   assert.equal(state.bookings.length, 15);
-  assert.deepEqual(selectNeedsYou(state).map((b) => b.id), ['bk_seed_07', 'bk_seed_11']);
+  assert.deepEqual(selectNeedsYou(state).map((b) => b.id), ['bk_seed_11', 'bk_seed_07'], 'two enquiries need you, oldest first');
   assert.equal(selectNeedsYou(state).length, 2);
   assert.deepEqual(selectOwed(state).map((b) => b.id), ['bk_seed_04', 'bk_seed_06']);
   assert.equal(selectOwedTotal(state), 245);
   const insights = selectInsights(state, '2026-10-23T20:30');
-  assert.equal(insights.collectedMonth, 850);
+  assert.equal(insights.collectedMonth, 1209);
   assert.equal(insights.collectedMonthCount, 4);
   assert.equal(insights.owedTotal, 245);
   assert.equal(insights.owedCount, 2);
-  assert.equal(insights.bookedNext14, 675);
-  assert.equal(insights.bookedNext14Count, 7);
-  assert.equal(insights.avgJob, 183);
+  assert.equal(insights.bookedNext14, 1059);
+  assert.equal(insights.bookedNext14Count, 8, 'the seven jobs plus the pencilled-in enquiry, which is free');
+  assert.equal(insights.avgJob, 242);
   assert.equal(selectCustomers(state).length, 11);
 });
 
@@ -169,26 +171,74 @@ test('no two non-cancelled bookings (or a block) share a window', () => {
   assertNoOverlaps(seedState());
 });
 
-test('Marcus has two EICRs at two addresses', () => {
+test('Padraig is the repeat landlord: an EICR and an EV install at two addresses', () => {
   const state = seedState();
-  const marcus = state.bookings.filter((b) => b.customer.name === 'Marcus Tate');
-  assert.equal(marcus.length, 2);
-  assert.ok(marcus.every((b) => b.serviceId === 'eicr'));
-  assert.equal(new Set(marcus.map((b) => b.address.line1)).size, 2);
+  const padraig = state.bookings.filter((b) => b.customer.name === 'Padraig Quinn');
+  assert.equal(padraig.length, 2);
+  assert.deepEqual(padraig.map((b) => b.serviceId), ['eicr', 'ev']);
+  assert.equal(new Set(padraig.map((b) => b.address.line1)).size, 2);
 });
 
-test('the emergency alert is msg_seed_07_alert and seed message ids follow msg_seed_<NN>_<role>', () => {
+test('the diary is EV-led: free quote visits and EV installs are most of it, the other services fill in around them', () => {
+  const state = seedState();
+  const count = (id) => state.bookings.filter((b) => b.serviceId === id).length;
+  assert.equal(count('ev_quote'), 6);
+  assert.equal(count('ev'), 2);
+  assert.ok(count('ev_quote') + count('ev') > state.bookings.length / 2, 'most bookings are EV');
+  assert.ok(state.bookings.filter((b) => b.serviceId === 'ev_quote').every((b) => b.quotedPrice === 0));
+  assert.ok(state.bookings.every((b) => b.ref.startsWith('EL-')));
+  assert.ok(state.bookings.every((b) => b.urgent === false), 'no emergency is seeded: the emergency path is off by default');
+});
+
+test('every EV booking carries the funnel answers (valid values, the postcode matching the address); others carry none', () => {
+  const state = seedState();
+  for (const b of state.bookings) {
+    if (b.serviceId !== 'ev_quote' && b.serviceId !== 'ev') {
+      assert.equal(b.answers, undefined, `${b.id} is a phone job`);
+      continue;
+    }
+    assert.ok(b.answers, `${b.id} has answers`);
+    assert.equal(b.answers.postcode, b.address.postcode, `${b.id} postcode`);
+    for (const step of ENQUIRY_STEPS) assert.notEqual(answerLabel(step.key, b.answers[step.key]), '', `${b.id} ${step.key}`);
+    assert.deepEqual(normaliseAnswers(b.answers), b.answers, `${b.id}: already clean`);
+  }
+  assert.equal(byId(state, 'bk_seed_07').answers.parking, 'driveway');
+  assert.equal(byId(state, 'bk_seed_07').answers.vehicle, 'ordered');
+  assert.equal(byId(state, 'bk_seed_11').answers.permission, 'unsure');
+  assert.equal(byId(state, 'bk_seed_12').answers.permission, 'landlord');
+});
+
+test('pencilled-in enquiries: tentative only while pending, website enquiries have no street, confirmed surveys are the owner\'s doing', () => {
+  const state = seedState();
+  assert.deepEqual(state.bookings.filter((b) => b.tentative).map((b) => b.id), ['bk_seed_07', 'bk_seed_11']);
+  assert.ok(state.bookings.filter((b) => b.tentative).every((b) => b.status === 'new' && b.serviceId === 'ev_quote' && bookingWindowIds(b).length === 1));
+  for (const id of ['bk_seed_07', 'bk_seed_08', 'bk_seed_11', 'bk_seed_15']) assert.equal(byId(state, id).address.line1, '', `${id} gave only a postcode`);
+  assert.equal(byId(state, 'bk_seed_12').address.line1, '6 Ballydoon Mews', 'a WhatsApp enquiry gave an address');
+  const s08 = byId(state, 'bk_seed_08');
+  assert.deepEqual(s08.history.map((h) => [h.event, h.by]), [['created', 'customer'], ['confirmed', 'owner']], 'a survey is never auto-confirmed');
+  assert.equal(s08.tentative, undefined);
+  assert.equal(byId(state, 'bk_seed_10').history[1].by, 'system', 'other website jobs still confirm themselves');
+});
+
+test('the S07 enquiry alert is msg_seed_07_alert and seed message ids follow msg_seed_<NN>_<role>', () => {
   const state = seedState();
   const ids = state.messages.map((m) => m.id);
   assert.ok(ids.includes('msg_seed_07_alert'));
   assert.equal(new Set(ids).size, ids.length, 'ids are unique');
   for (const id of ids) assert.match(id, /^msg_seed_(0[1-9]|1[0-5])_(alert|conf|rem|done)$/);
   const alert = state.messages.find((m) => m.id === 'msg_seed_07_alert');
-  assert.equal(alert.kind, 'owner_emergency');
+  assert.equal(alert.kind, 'owner_new_booking');
   assert.equal(alert.to, 'owner');
   assert.equal(alert.bookingId, 'bk_seed_07');
   assert.equal(alert.at, '2026-10-23T20:18');
-  assert.equal(state.messages.find((m) => m.id === 'msg_seed_07_conf').kind, 'customer_emergency_received');
+  assert.ok(alert.body.startsWith('*New enquiry EL-1034*\nSinead Doherty · 07700 900344\n'));
+  assert.ok(alert.body.includes('\nBT42 6JN\nParking: private driveway. Car: ordered. Timing: as soon as possible. Permission: yes.\n'));
+  assert.ok(alert.body.includes('Survey pencilled in: Thu 29 Oct, arriving between 10am and 12 (provisional)'));
+  const conf = state.messages.find((m) => m.id === 'msg_seed_07_conf');
+  assert.equal(conf.kind, 'customer_received');
+  assert.ok(conf.body.includes('Your free survey visit is pencilled in for Thu 29 Oct, 10am–12. This is provisional'));
+  assert.ok(conf.body.includes('Daniel will be in touch within 24 hours'));
+  assert.ok(!state.messages.some((m) => m.kind === 'owner_emergency' || m.kind === 'customer_emergency_received'), 'no emergency messages are seeded');
 });
 
 test('seed messages: which bookings get which, all marked seed and simulated', () => {
@@ -209,7 +259,7 @@ test('seed messages: which bookings get which, all marked seed and simulated', (
   assert.equal(rem.sendAt, '2026-10-25T18:00', '18:00 the evening before Monday 26 Oct');
   assert.ok(state.messages.every((m) => m.seed === true && m.simulated === true && m.channel === 'whatsapp'));
   assert.ok(state.messages.every((m) => m.id.startsWith('msg_seed_')));
-  assert.match(state.messages.find((m) => m.id === 'msg_seed_11_alert').body, /Needs your OK: outside your usual area \(MB12\)\./);
+  assert.match(state.messages.find((m) => m.id === 'msg_seed_11_alert').body, /Outside Northern Ireland \(DG9\)\. Check you can travel before you confirm the survey\./);
 });
 
 test('seq numbers run 1..n in ascending `at` order and seed alerts are never unread', () => {
@@ -285,11 +335,13 @@ test('invariants hold at every weekday 09:00 and Sunday 12:00 in four different 
     const statuses = new Set(state.bookings.map((b) => b.status));
     for (const s of ['new', 'confirmed', 'done', 'cancelled']) assert.ok(statuses.has(s), `${label}: has ${s}`);
     assert.ok(!statuses.has('on_the_way'), `${label}: on_the_way is not seeded`);
-    assert.equal(state.bookings.filter((b) => b.urgent && b.status === 'new').length, 1, `${label}: one urgent new`);
+    assert.equal(state.bookings.filter((b) => b.urgent).length, 0, `${label}: no emergency is seeded`);
+    assert.deepEqual(state.bookings.filter((b) => b.status === 'new').map((b) => b.id), ['bk_seed_07', 'bk_seed_11'], `${label}: two enquiries need you`);
+    assert.ok(state.bookings.filter((b) => b.status === 'new').every((b) => b.tentative === true && b.answers && b.answers.timing), `${label}: pencilled in, with answers`);
     assert.ok(selectOwed(state).length >= 1, `${label}: an owed job`);
-    const marcus = state.bookings.filter((b) => b.customer.name === 'Marcus Tate' && b.serviceId === 'eicr' && b.status !== 'cancelled');
-    assert.equal(marcus.length, 2, `${label}: Marcus has two EICRs`);
-    assert.equal(new Set(marcus.map((b) => b.address.line1)).size, 2, `${label}: at two addresses`);
+    const padraig = state.bookings.filter((b) => b.customer.name === 'Padraig Quinn' && b.status !== 'cancelled');
+    assert.equal(padraig.length, 2, `${label}: Padraig has two jobs`);
+    assert.equal(new Set(padraig.map((b) => b.address.line1)).size, 2, `${label}: at two addresses`);
     assertNoOverlaps(state);
     // the first open day after today has window 0 free for customers
     let first = addDays(day, 1);
@@ -332,13 +384,18 @@ test('the seed survives the 25 Oct clock change (Saturday and Monday around it)'
 });
 
 test('seeded customers, sample customer and simulator pool follow the fictional-data rules', () => {
-  const keys = ['priya', 'marcus', 'alison', 'tom', 'eileen', 'ngozi', 'hannah', 'kwame', 'ruth', 'sam', 'lena'];
+  const keys = ['aoife', 'padraig', 'niamh', 'declan', 'orla', 'sinead', 'eoin', 'ciaran', 'roisin', 'conor', 'bronagh'];
   assert.deepEqual(Object.keys(SEED_CUSTOMERS), keys);
-  assert.equal(SEED_CUSTOMERS.priya.name, 'Priya Nair');
-  assert.equal(SEED_CUSTOMERS.marcus.addresses.length, 2);
-  assert.equal(SEED_CUSTOMERS.sam.addresses[0].postcode, 'MB12 6AB');
-  assert.equal(postcodeZone('MB12 6AB', makeDefaultSettings().business), 'edge');
-  assert.deepEqual(SAMPLE_CUSTOMER, { name: 'Priya Nair', phone: '07700 900231', email: '', line1: '14 Alder Row', postcode: 'MB3 4QP' });
+  assert.equal(SEED_CUSTOMERS.aoife.name, 'Aoife Magee');
+  assert.equal(SEED_CUSTOMERS.padraig.addresses.length, 2);
+  assert.equal(SEED_CUSTOMERS.conor.addresses[0].postcode, 'DG9 8AB');
+  assert.equal(postcodeZone('DG9 8AB', makeDefaultSettings().business), 'outside');
+  // every other seeded customer lives in Northern Ireland (a BT postcode inside the area)
+  for (const [key, c] of Object.entries(SEED_CUSTOMERS)) {
+    if (key === 'conor') continue;
+    for (const a of c.addresses) assert.equal(postcodeZone(a.postcode, makeDefaultSettings().business), 'covered', `${key} ${a.postcode}`);
+  }
+  assert.deepEqual(SAMPLE_CUSTOMER, { name: 'Aoife Magee', phone: '07700 900231', email: '', line1: '14 Larkfield Gardens', postcode: 'BT9 6QP' });
 
   const phones = [...Object.values(SEED_CUSTOMERS).map((c) => c.phone), ...SIM_POOL.map((p) => p.phone)];
   assert.equal(new Set(phones).size, phones.length, 'no phone is used twice');
@@ -349,13 +406,16 @@ test('seeded customers, sample customer and simulator pool follow the fictional-
     assert.ok(c.email === '' || c.email.endsWith('.example'));
   }
   assert.equal(SIM_POOL.length, 8);
+  assert.deepEqual(SAMPLE_ENQUIRY_ANSWERS, { parking: 'driveway', vehicle: 'ordered', timing: 'asap', permission: 'yes' });
   SIM_POOL.forEach((p, i) => {
+    assert.deepEqual(normaliseAnswers(p.answers), { ...p.answers }, `pool answers ${i} are valid`);
+    assert.equal(Object.keys(p.answers).length, 4, 'all four funnel answers');
     assert.equal(p.phone, `07700 90050${i}`);
     assert.equal(postcodeZone(p.postcode, makeDefaultSettings().business), 'covered', p.postcode);
     assert.equal(typeof p.notes, 'string');
     assert.ok(p.name.length > 3 && p.line1.length > 3);
   });
-  assert.ok(new Set(SIM_POOL.map((p) => p.postcode.split(' ')[0])).size >= 6, 'postcodes are spread over MB1 to MB10');
+  assert.ok(new Set(SIM_POOL.map((p) => p.postcode.split(' ')[0])).size >= 6, 'postcodes are spread over at least six BT districts');
 });
 
 test('sources used by the seed are all known', () => {
@@ -383,10 +443,13 @@ test('buildSeed honours custom settings (prices and a rebrand flow into the seed
   const settings = makeDefaultSettings();
   settings.business.ownerFirstName = 'Lee';
   settings.business.name = 'Ashby Sparks';
+  settings.services.find((s) => s.id === 'ev').price = 949;
   settings.services.find((s) => s.id === 'fault').price = 80;
   settings.remindersOn = false;
   const state = seedState(FIXTURE, settings);
-  assert.equal(byId(state, 'bk_seed_08').quotedPrice, 80);
+  assert.equal(byId(state, 'bk_seed_09').quotedPrice, 949, 'the EV install uses the edited service price');
+  assert.equal(byId(state, 'bk_seed_10').quotedPrice, 80);
+  assert.equal(byId(state, 'bk_seed_08').quotedPrice, 0, 'a free quote visit stays free');
   assert.ok(state.messages.find((m) => m.id === 'msg_seed_08_conf').body.includes("it's Lee from Ashby Sparks"));
   assert.ok(!state.messages.some((m) => m.kind === 'customer_reminder'), 'reminders off means no scheduled reminders');
 });

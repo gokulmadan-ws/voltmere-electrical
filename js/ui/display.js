@@ -1,5 +1,5 @@
 // js/ui/display.js: Icon, BrandMark, Chip, StatusPill, SampleTag, Card, Avatar, EmptyState, Stat, Banner, Skeleton, PageHeader, TextLink.
-// Owner: WP2
+// Owner: WP2 (BrandMark redrawn for 180 Electrical by role B2)
 import { h, html } from '../vendor/preact-htm.js';
 import { ICONS } from './icons.js';
 import { IconButton } from './button.js';
@@ -31,13 +31,13 @@ export function Icon({ name, size = 24, title, class: cls, ...rest }) {
   }, nodes.map(([tag, attrs], i) => h(tag, { ...attrs, key: i })));
 }
 
-/** The logo mark (amber rounded square, navy bolt) drawn inline; same artwork as img/logo-mark.svg. Colours come from tokens. */
+/** The 180 mark (#111111 rounded square, red #E11414 bolt, like his favicon) drawn inline; same artwork as img/logo-mark.svg. Colours come from tokens. */
 export function BrandMark({ size = 32, class: cls, ...rest }) {
   return h('svg', {
     class: cx('ui-brandmark', cls), width: size, height: size, viewBox: '0 0 64 64',
     'aria-hidden': 'true', focusable: 'false', ...rest
   },
-  h('rect', { class: 'ui-brandmark__bg', width: 64, height: 64, rx: 16 }),
+  h('rect', { class: 'ui-brandmark__bg', x: 0.5, y: 0.5, width: 63, height: 63, rx: 15.5 }),
   h('path', { class: 'ui-brandmark__bolt', d: 'M36.5 10 18 35.5h12.2L26.8 54 46 27.5H33.6z' }));
 }
 

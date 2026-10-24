@@ -6,7 +6,8 @@ import { setClock } from '../../js/core/clock.js';
 import { makeDefaultSettings } from '../../js/core/config.js';
 import {
   gbp, normalisePhone, isUkMobile, toWaDigits, normaliseDemoPhone, normalisePostcode, isValidPostcode, outwardCode,
-  postcodeZone, validateName, validatePhone, validatePostcode, validateLine1, initials, firstName, hashHue, makeId, plural
+  postcodeZone, validateName, validatePhone, validatePostcode, validateLine1, initials, firstName, hashHue, makeId, plural,
+  isBtPostcode, outsideAreaLabel, addressLine
 } from '../../js/core/format.js';
 
 test('gbp', () => {
@@ -61,10 +62,10 @@ test('normaliseDemoPhone', () => {
 });
 
 test('postcodes normalise to one space before the last three characters', () => {
-  assert.equal(normalisePostcode('mb3 4qp'), 'MB3 4QP');
-  assert.equal(normalisePostcode('MB34QP'), 'MB3 4QP');
-  assert.equal(normalisePostcode('  mb10   4xj '), 'MB10 4XJ');
-  assert.equal(normalisePostcode('mb125hd'), 'MB12 5HD');
+  assert.equal(normalisePostcode('bt9 6qp'), 'BT9 6QP');
+  assert.equal(normalisePostcode('BT96QP'), 'BT9 6QP');
+  assert.equal(normalisePostcode('  bt10   4xj '), 'BT10 4XJ');
+  assert.equal(normalisePostcode('bt485hd'), 'BT48 5HD');
   assert.equal(normalisePostcode('xx'), 'XX');
   assert.equal(normalisePostcode(' ab1 '), 'AB1');
   assert.equal(normalisePostcode(''), '');
@@ -72,37 +73,40 @@ test('postcodes normalise to one space before the last three characters', () => 
 });
 
 test('isValidPostcode is deliberately lenient', () => {
-  assert.equal(isValidPostcode('mb3 4qp'), true);
-  assert.equal(isValidPostcode('MB34QP'), true);
+  assert.equal(isValidPostcode('bt9 6qp'), true);
+  assert.equal(isValidPostcode('BT96QP'), true);
   assert.equal(isValidPostcode('AB1 2CD'), true);
   assert.equal(isValidPostcode('M1 1AE'), true);
   assert.equal(isValidPostcode('W1A 0AX'), true);
   assert.equal(isValidPostcode('xx'), false);
   assert.equal(isValidPostcode('12345'), false);
-  assert.equal(isValidPostcode('MB3'), false);
+  assert.equal(isValidPostcode('BT9'), false);
   assert.equal(isValidPostcode(''), false);
 });
 
 test('outwardCode', () => {
-  assert.equal(outwardCode('MB3 4QP'), 'MB3');
-  assert.equal(outwardCode('mb104xj'), 'MB10');
+  assert.equal(outwardCode('BT9 6QP'), 'BT9');
+  assert.equal(outwardCode('bt104xj'), 'BT10');
   assert.equal(outwardCode('xx'), '');
   assert.equal(outwardCode(''), '');
 });
 
 test('postcodeZone', () => {
   const business = makeDefaultSettings().business;
-  assert.equal(postcodeZone('MB3 4QP', business), 'covered');
-  assert.equal(postcodeZone('MB1 8PY', business), 'covered');
-  assert.equal(postcodeZone('MB10 4XJ', business), 'covered');
-  assert.equal(postcodeZone('MB12 6AB', business), 'edge');
-  assert.equal(postcodeZone('mb11 5hd', business), 'edge');
+  assert.equal(postcodeZone('BT9 6QP', business), 'covered');
+  assert.equal(postcodeZone('BT1 8PY', business), 'covered');
+  assert.equal(postcodeZone('BT48 4XJ', business), 'covered', 'Derry/Londonderry');
+  assert.equal(postcodeZone('bt94 5hd', business), 'covered', 'every BT district is in the area');
+  assert.equal(postcodeZone('BT74 6AB', business), 'covered');
+  assert.deepEqual(business.edgeOutward, [], 'there is no edge zone by default');
+  assert.equal(postcodeZone('BT9 6QP', { coveredOutward: ['BT1'], edgeOutward: ['BT9'] }), 'edge', 'an owner can still add an edge zone');
   assert.equal(postcodeZone('AB1 2CD', business), 'outside');
-  assert.equal(postcodeZone('MB14 1AA', business), 'outside');
+  assert.equal(postcodeZone('DG9 8AB', business), 'outside', 'Scotland is outside the area');
+  assert.equal(postcodeZone('CH1 1AA', business), 'outside');
   assert.equal(postcodeZone('xx', business), 'invalid');
   assert.equal(postcodeZone('', business), 'invalid');
-  assert.equal(postcodeZone('MB3 4QP', { coveredOutward: [], edgeOutward: [] }), 'outside');
-  assert.equal(postcodeZone('MB3 4QP', { coveredOutward: ['MB3'], edgeOutward: [] }), 'covered');
+  assert.equal(postcodeZone('BT9 6QP', { coveredOutward: [], edgeOutward: [] }), 'outside');
+  assert.equal(postcodeZone('BT9 6QP', { coveredOutward: ['BT9'], edgeOutward: [] }), 'covered');
 });
 
 test('validators return the exact messages of 13.2.3', () => {
@@ -110,7 +114,7 @@ test('validators return the exact messages of 13.2.3', () => {
   assert.equal(validateName('A'), 'Enter your name');
   assert.equal(validateName('  '), 'Enter your name');
   assert.equal(validateName('Al'), '');
-  assert.equal(validateName('Priya Nair'), '');
+  assert.equal(validateName('Aoife Magee'), '');
 
   assert.equal(validatePhone(''), 'Enter your mobile number');
   assert.equal(validatePhone('   '), 'Enter your mobile number');
@@ -120,17 +124,17 @@ test('validators return the exact messages of 13.2.3', () => {
   assert.equal(validatePhone('+447700900231'), '');
 
   assert.equal(validatePostcode(''), 'Enter your postcode');
-  assert.equal(validatePostcode('xx'), 'Enter a UK postcode, like MB3 4QP');
-  assert.equal(validatePostcode('MB3 4QP'), '');
+  assert.equal(validatePostcode('xx'), 'Enter a UK postcode, like BT9 6QP');
+  assert.equal(validatePostcode('BT9 6QP'), '');
   assert.equal(validatePostcode('AB1 2CD'), '');
 
   assert.equal(validateLine1(''), 'Enter your house number and street');
   assert.equal(validateLine1('   '), 'Enter your house number and street');
-  assert.equal(validateLine1('14 Alder Row'), '');
+  assert.equal(validateLine1('14 Larkfield Gardens'), '');
 });
 
 test('initials, firstName, hashHue', () => {
-  assert.equal(initials('Priya Nair'), 'PN');
+  assert.equal(initials('Aoife Magee'), 'AM');
   assert.equal(initials('priya nair'), 'PN');
   assert.equal(initials('Cher'), 'CH');
   assert.equal(initials('A'), 'A');
@@ -138,11 +142,11 @@ test('initials, firstName, hashHue', () => {
   assert.equal(initials(''), '?');
   assert.equal(initials('   '), '?');
   assert.equal(initials(undefined), '?');
-  assert.equal(firstName('Priya Nair'), 'Priya');
+  assert.equal(firstName('Aoife Magee'), 'Aoife');
   assert.equal(firstName('  Tom   Hargreaves '), 'Tom');
   assert.equal(firstName('Cher'), 'Cher');
   assert.equal(firstName(''), '');
-  for (const name of ['Priya Nair', 'Marcus Tate', 'Sam Wray', '', 'Zoë']) {
+  for (const name of ['Aoife Magee', 'Padraig Quinn', 'Conor Brennan', '', 'Zoë']) {
     const h = hashHue(name);
     assert.ok(Number.isInteger(h) && h >= 0 && h <= 5, name);
     assert.equal(hashHue(name), h, 'stable');
@@ -166,4 +170,34 @@ test('plural', () => {
   assert.equal(plural(0, 'job'), '0 jobs');
   assert.equal(plural(1, 'person', 'people'), '1 person');
   assert.equal(plural(3, 'person', 'people'), '3 people');
+});
+
+test('isBtPostcode: every valid BT postcode is Northern Ireland, nothing else is', () => {
+  for (const pc of ['BT1 1AA', 'BT9 6QP', 'bt96qp', 'BT48 4XJ', 'BT82 0AB', 'BT94 5HD', ' bt7 2xx ']) assert.equal(isBtPostcode(pc), true, pc);
+  for (const pc of ['DG9 8AB', 'AB1 2CD', 'CH1 1AA', 'BT95 1AA', 'BT0 1AA', 'BTX 1AA', 'B9 6QP', 'xx', '', undefined, null]) assert.equal(isBtPostcode(pc), false, String(pc));
+});
+
+test('BT zone logic: the default area covers all of BT1 to BT94, and outsideAreaLabel flags every valid non-BT postcode', () => {
+  const business = makeDefaultSettings().business;
+  for (let n = 1; n <= 94; n += 1) assert.equal(postcodeZone(`BT${n} 1AA`, business), 'covered', `BT${n}`);
+  assert.equal(postcodeZone('BT95 1AA', business), 'outside', 'there is no BT95');
+  assert.equal(outsideAreaLabel('DG9 8AB'), 'Outside Northern Ireland');
+  assert.equal(outsideAreaLabel('sw1a 1aa'), 'Outside Northern Ireland');
+  assert.equal(outsideAreaLabel('BT9 6QP'), '');
+  assert.equal(outsideAreaLabel('xx'), '', 'an invalid postcode is a validation problem, not an area one');
+  assert.equal(outsideAreaLabel(''), '');
+  // the funnel accepts a valid non-BT postcode (it is only flagged), and still rejects junk
+  assert.equal(validatePostcode('DG9 8AB'), '');
+  assert.equal(validatePostcode('SW1A 1AA'), '');
+  assert.equal(validatePostcode('banana'), 'Enter a UK postcode, like BT9 6QP');
+});
+
+test('addressLine: street and postcode, or just the postcode when only that was collected', () => {
+  assert.equal(addressLine({ line1: '14 Larkfield Gardens', postcode: 'BT9 6QP' }), '14 Larkfield Gardens, BT9 6QP');
+  assert.equal(addressLine({ line1: '', postcode: 'BT9 6QP' }), 'BT9 6QP');
+  assert.equal(addressLine({ line1: '  ', postcode: 'BT9 6QP' }), 'BT9 6QP');
+  assert.equal(addressLine({ postcode: 'BT9 6QP' }), 'BT9 6QP');
+  assert.equal(addressLine({ line1: '1 High St' }), '1 High St');
+  assert.equal(addressLine(null), '');
+  assert.equal(addressLine(undefined), '');
 });

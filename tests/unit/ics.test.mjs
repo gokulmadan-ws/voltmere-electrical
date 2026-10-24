@@ -9,9 +9,9 @@ const LONDON = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Europe/Lond
 
 function sampleBooking(over = {}) {
   return {
-    id: 'bk_k3j2h9x1', ref: 'VM-1043', createdAt: '2026-10-23T20:30', serviceId: 'eicr', serviceName: 'EICR safety report',
+    id: 'bk_k3j2h9x1', ref: 'EL-1043', createdAt: '2026-10-23T20:30', serviceId: 'eicr', serviceName: 'EICR safety report',
     variantId: 'house', variantLabel: 'House, 2–3 bed', start: '2026-10-26T08:00', durationMin: 240, status: 'confirmed',
-    urgent: false, customer: { name: 'Priya Nair', phone: '07700 900231', email: '' }, address: { line1: '14 Alder Row', postcode: 'MB3 4QP' },
+    urgent: false, customer: { name: 'Aoife Magee', phone: '07700 900231', email: '' }, address: { line1: '14 Larkfield Gardens', postcode: 'BT9 6QP' },
     notes: '', quotedPrice: 195, ...over
   };
 }
@@ -27,17 +27,17 @@ test('the file matches the 10.7 sample line for line', () => {
   assert.deepEqual(lines(ics), [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Voltmere Electrical//Prototype//EN',
+    'PRODID:-//180 Electrical//Prototype//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    'UID:bk_k3j2h9x1@voltmere.example',
+    'UID:bk_k3j2h9x1@180electrical.co.uk',
     `DTSTAMP:${stamp}`,
     'DTSTART:20261026T080000',
     'DTEND:20261026T120000',
-    'SUMMARY:Voltmere Electrical: EICR safety report',
-    'LOCATION:14 Alder Row\\, MB3 4QP',
-    'DESCRIPTION:Arriving between 8 and 10am.\\nRef VM-1043.\\nTo change or cancel call 07700 900412.',
+    'SUMMARY:180 Electrical: EICR safety report',
+    'LOCATION:14 Larkfield Gardens\\, BT9 6QP',
+    'DESCRIPTION:Arriving between 8 and 10am.\\nRef EL-1043.\\nTo change or cancel call 07885 496800.',
     'STATUS:CONFIRMED',
     'END:VEVENT',
     'END:VCALENDAR'
@@ -86,10 +86,10 @@ test('STATUS follows the booking status and the description follows the window',
 });
 
 test('text values escape comma, semicolon, backslash and newline', () => {
-  const booking = sampleBooking({ serviceName: 'Lights, sockets; and a \\ slash', address: { line1: 'Flat 2, 10 High St; rear', postcode: 'MB3 4QP' } });
+  const booking = sampleBooking({ serviceName: 'Lights, sockets; and a \\ slash', address: { line1: 'Flat 2, 10 High St; rear', postcode: 'BT9 6QP' } });
   const ics = buildIcs(booking, settings);
-  assert.ok(ics.includes('SUMMARY:Voltmere Electrical: Lights\\, sockets\\; and a \\\\ slash'));
-  assert.ok(ics.includes('LOCATION:Flat 2\\, 10 High St\\; rear\\, MB3 4QP'));
+  assert.ok(ics.includes('SUMMARY:180 Electrical: Lights\\, sockets\\; and a \\\\ slash'));
+  assert.ok(ics.includes('LOCATION:Flat 2\\, 10 High St\\; rear\\, BT9 6QP'));
   const custom = makeDefaultSettings();
   custom.business.name = 'Ashby, Sparks & Sons';
   custom.business.phone = '07700 900555';
@@ -98,13 +98,13 @@ test('text values escape comma, semicolon, backslash and newline', () => {
   assert.ok(text.includes('call 07700 900555.'));
   // a literal newline in a value becomes the two characters \n
   const withNewline = buildIcs(sampleBooking({ serviceName: 'Line one\nLine two' }), settings);
-  assert.ok(withNewline.includes('SUMMARY:Voltmere Electrical: Line one\\nLine two'));
+  assert.ok(withNewline.includes('SUMMARY:180 Electrical: Line one\\nLine two'));
   assert.ok(!withNewline.replace(/\r\n/g, '|').includes('\n'), 'no raw newline inside a value');
 });
 
 test('lines longer than 75 octets are folded with CRLF + space, never inside a character', () => {
   const long = `${'A very long street name with “curly” – dashes and £ signs, '.repeat(6)}`;
-  const booking = sampleBooking({ address: { line1: long, postcode: 'MB3 4QP' } });
+  const booking = sampleBooking({ address: { line1: long, postcode: 'BT9 6QP' } });
   const ics = buildIcs(booking, settings);
   const physical = ics.split('\r\n');
   assert.ok(physical.some((l) => l.startsWith(' ')), 'something was folded');
@@ -114,20 +114,20 @@ test('lines longer than 75 octets are folded with CRLF + space, never inside a c
   }
   // unfolding restores the exact original line
   const location = lines(ics).find((l) => l.startsWith('LOCATION:'));
-  assert.equal(location, `LOCATION:${`${long}, MB3 4QP`.replace(/,/g, '\\,')}`);
+  assert.equal(location, `LOCATION:${`${long}, BT9 6QP`.replace(/,/g, '\\,')}`);
   // multibyte characters survive a round trip through bytes
   const bytes = Buffer.from(ics, 'utf8');
   assert.equal(bytes.toString('utf8'), ics);
   // a line of exactly 75 octets is not folded
-  const exact = sampleBooking({ serviceName: 'x'.repeat(75 - 'SUMMARY:Voltmere Electrical: '.length) });
+  const exact = sampleBooking({ serviceName: 'x'.repeat(75 - 'SUMMARY:180 Electrical: '.length) });
   const exactIcs = buildIcs(exact, settings);
-  assert.ok(exactIcs.includes(`SUMMARY:Voltmere Electrical: ${'x'.repeat(75 - 'SUMMARY:Voltmere Electrical: '.length)}\r\n`));
-  const over = sampleBooking({ serviceName: 'x'.repeat(76 - 'SUMMARY:Voltmere Electrical: '.length) });
+  assert.ok(exactIcs.includes(`SUMMARY:180 Electrical: ${'x'.repeat(75 - 'SUMMARY:180 Electrical: '.length)}\r\n`));
+  const over = sampleBooking({ serviceName: 'x'.repeat(76 - 'SUMMARY:180 Electrical: '.length) });
   assert.ok(buildIcs(over, settings).includes('\r\n x\r\n'), 'the 76th octet moves to a continuation line');
 });
 
 test('UID is the booking id at the business email domain, else prototype.invalid', () => {
-  assert.match(buildIcs(sampleBooking(), settings), /\r\nUID:bk_k3j2h9x1@voltmere\.example\r\n/);
+  assert.match(buildIcs(sampleBooking(), settings), /\r\nUID:bk_k3j2h9x1@180electrical\.co\.uk\r\n/);
   const noEmail = makeDefaultSettings();
   noEmail.business.email = '';
   assert.match(buildIcs(sampleBooking(), noEmail), /\r\nUID:bk_k3j2h9x1@prototype\.invalid\r\n/);
@@ -137,19 +137,19 @@ test('UID is the booking id at the business email domain, else prototype.invalid
 });
 
 test('icsFilename is the short name, lower-cased, then the ref', () => {
-  assert.equal(icsFilename(sampleBooking(), settings), 'voltmere-VM-1043.ics');
+  assert.equal(icsFilename(sampleBooking(), settings), '180-EL-1043.ics');
   const custom = makeDefaultSettings();
   custom.business.shortName = 'Ashby Sparks!';
-  assert.equal(icsFilename(sampleBooking(), custom), 'ashby-sparks-VM-1043.ics');
+  assert.equal(icsFilename(sampleBooking(), custom), 'ashby-sparks-EL-1043.ics');
   custom.business.shortName = '!!!';
-  assert.equal(icsFilename(sampleBooking(), custom), 'booking-VM-1043.ics');
+  assert.equal(icsFilename(sampleBooking(), custom), 'booking-EL-1043.ics');
 });
 
 test('an urgent request with no duration still produces a valid one-hour event', () => {
-  const urgent = sampleBooking({ urgent: true, durationMin: 0, start: '2026-10-23T20:30', address: { line1: '', postcode: 'MB2 6JN' } });
+  const urgent = sampleBooking({ urgent: true, durationMin: 0, start: '2026-10-23T20:30', address: { line1: '', postcode: 'BT42 6JN' } });
   const ics = buildIcs(urgent, settings);
   assert.match(ics, /DTSTART:20261023T203000\r\nDTEND:20261023T213000\r\n/);
-  assert.ok(ics.includes('LOCATION:MB2 6JN\r\n'));
+  assert.ok(ics.includes('LOCATION:BT42 6JN\r\n'));
   assert.ok(ics.includes('DESCRIPTION:Arriving as soon as possible.'));
 });
 
@@ -178,8 +178,27 @@ test('downloadIcs is safe in Node (no document) and clicks a temporary link in a
     URL.revokeObjectURL = originalRevoke;
   }
   assert.equal(clicks.length, 1);
-  assert.equal(clicks[0].download, 'voltmere-VM-1043.ics');
+  assert.equal(clicks[0].download, '180-EL-1043.ics');
   assert.match(clicks[0].href, /^blob:/);
   assert.equal(appended.length, 0, 'the temporary link is removed again');
   assert.deepEqual(revoked, [clicks[0].href]);
 });
+
+test('an enquiry with only a postcode: the location is the postcode, and a pending booking is a TENTATIVE event', () => {
+  const enquiry = sampleBooking({
+    serviceId: 'ev_quote', serviceName: 'Home EV charger quote', variantId: null, variantLabel: '', durationMin: 120, status: 'new', tentative: true,
+    start: '2026-10-24T08:00', address: { line1: '', postcode: 'BT42 6JN' }, quotedPrice: 0
+  });
+  const ics = buildIcs(enquiry, settings);
+  assert.match(ics, /\r\nLOCATION:BT42 6JN\r\n/);
+  assert.match(ics, /\r\nSTATUS:TENTATIVE\r\n/);
+  assert.match(ics, /\r\nSUMMARY:180 Electrical: Home EV charger quote\r\n/);
+  assert.match(ics, /\r\nDTEND:20261024T100000\r\n/);
+  assert.ok(ics.includes('To change or cancel call 07885 496800.') || unfoldText(ics).includes('To change or cancel call 07885 496800.'));
+  const confirmed = buildIcs({ ...enquiry, status: 'confirmed', tentative: false }, settings);
+  assert.match(confirmed, /\r\nSTATUS:CONFIRMED\r\n/);
+});
+
+function unfoldText(text) {
+  return text.replace(/\r\n /g, '');
+}

@@ -1,17 +1,23 @@
 // js/core/messages.js: simulated WhatsApp templates, rendering, scheduled sends, bubble actions and links
 // Owner: WP1
 import {
-  DEFAULT_TEMPLATES, EMERGENCY_REASONS, KIND_LABELS, PLACEHOLDERS, PROMISES, SITE_BASE_URL, WINDOWS
+  DEFAULT_TEMPLATES, EMERGENCY_REASONS, KIND_LABELS, PLACEHOLDERS, PROMISES, SITE_BASE_URL, WINDOWS, answersLine
 } from './config.js';
 import { nowStamp } from './clock.js';
 import { addDays, addMinutes, fmtClock, fmtDayShort, makeStamp, stampDay } from './dates.js';
-import { bookingWindowIds, bookingWhen, nextFreeSlot } from './availability.js';
-import { firstName, gbp, outwardCode, postcodeZone, toWaDigits } from './format.js';
+import { bookingWindowIds, bookingWhen, isUnscheduled, nextFreeSlot } from './availability.js';
+import { addressLine, firstName, gbp, outwardCode, postcodeZone, toWaDigits } from './format.js';
 
 // The defaults live in config.js (one definition); messages.js re-exports them because 8.1 lists them here.
 export { DEFAULT_TEMPLATES, KIND_LABELS, PLACEHOLDERS };
 
-const CERT_SERVICES = ['eicr', 'consumer', 'ev'];
+// The paperwork sentence per service: a certificate for certificate jobs, a written quote after a quote visit.
+const PAPERWORK_LINES = {
+  eicr: 'Your certificate follows today.',
+  consumer: 'Your certificate follows today.',
+  ev: 'Your installation certificate follows today.',
+  ev_quote: 'Your written quote follows shortly.'
+};
 
 // ---------- rendering ----------
 
@@ -42,12 +48,16 @@ function etaTextFor(minutes) {
   return `${minutes} minutes`;
 }
 
+const TO_BE_ARRANGED = 'a time to be arranged';
+
 function whenFor(booking) {
-  return booking.urgent ? 'as soon as possible' : bookingWhen(booking);
+  if (booking.urgent) return 'as soon as possible';
+  return isUnscheduled(booking) ? TO_BE_ARRANGED : bookingWhen(booking);
 }
 
 function whenLongFor(booking) {
   if (booking.urgent) return 'as soon as possible';
+  if (isUnscheduled(booking)) return TO_BE_ARRANGED;
   const ids = bookingWindowIds(booking);
   const day = fmtDayShort(stampDay(booking.start));
   if (ids.length === 0) return day;
@@ -69,6 +79,32 @@ function nextFreeText(extra, booking, state) {
   return slot ? slot.human : '';
 }
 
+// The owner alert's status line: what he has to do about it.
+function statusLineFor(booking, zone, outward) {
+  if (booking.status !== 'new') return 'Confirmed automatically.';
+  const outside = zone === 'edge' || zone === 'outside';
+  if (booking.serviceId === 'ev_quote') {
+    if (outside) return `Outside Northern Ireland (${outward}). Check you can travel before you confirm the survey.`;
+    if (booking.tentative) return 'Needs you: review the enquiry, then confirm the pencilled-in survey.';
+    return 'Needs you: review the enquiry and arrange the survey.';
+  }
+  const reason = outside ? `outside your usual area (${outward})` : 'auto-confirm is off';
+  return `Needs your OK: ${reason}.`;
+}
+
+// The body of customer_received. For the free survey it says: pencilled in, provisional, and the 24 hour promise.
+function receivedLineFor(booking, biz, ctx) {
+  const hours = ctx.contactHours;
+  const travel = ctx.receivedReason ? ` ${ctx.receivedReason}` : '';
+  if (booking.serviceId === 'ev_quote') {
+    if (booking.tentative && !isUnscheduled(booking)) {
+      return `Your free survey visit is pencilled in for ${ctx.when}. This is provisional, so please do not plan around it yet. ${biz.ownerFirstName} will be in touch within ${hours} hours to confirm it.${travel}`;
+    }
+    return `${biz.ownerFirstName} will be in touch within ${hours} hours to arrange your free survey visit.${travel}`;
+  }
+  return `We have your request for ${ctx.serviceFull}, ${ctx.when}.${travel} ${biz.ownerFirstName} will confirm shortly.`;
+}
+
 /** Every placeholder of 10.2 as a string. `extra` = { oldWhen, newWhen, nextFree, reason, etaMinutes, at }. */
 export function buildContext(booking, state, extra = {}) {
   const settings = state.settings;
@@ -78,7 +114,10 @@ export function buildContext(booking, state, extra = {}) {
   const cust = booking.customer || { name: '', phone: '' };
   const line1 = addr.line1 || addr.postcode || '';
   const when = whenFor(booking);
-  const price = gbp(booking.quotedPrice);
+  const isEnquiry = booking.serviceId === 'ev_quote';
+  const isFree = !!service && service.priceType === 'free';
+  const quotedType = !!service && service.priceType === 'quoted';
+  const price = isFree && !booking.quotedPrice ? 'Free' : quotedType && !booking.quotedPrice ? 'Quoted for your home' : gbp(booking.quotedPrice);
   const finalPrice = gbp(booking.finalPrice === null || booking.finalPrice === undefined ? booking.quotedPrice : booking.finalPrice);
   const serviceFull = booking.variantLabel ? `${booking.serviceName} (${booking.variantLabel})` : booking.serviceName;
   const zone = postcodeZone(addr.postcode, biz);
@@ -86,16 +125,11 @@ export function buildContext(booking, state, extra = {}) {
   let priceLine = `From ${price}, pay after the job. I'll confirm before any extra work.`;
   if (service && service.priceType === 'free') priceLine = 'No charge for the visit.';
   else if (service && (service.priceType === 'fixed' || service.priceType === 'by_size')) priceLine = `Fixed price ${price}, pay after the job.`;
+  else if (quotedType) priceLine = 'The price is as per your agreed quote, payable after the install.';
 
   const etaMinutes = extra.etaMinutes !== undefined && extra.etaMinutes !== null ? extra.etaMinutes : booking.etaMinutes;
   let etaAt = booking.etaAt || null;
   if (extra.etaMinutes !== undefined && extra.etaMinutes !== null) etaAt = addMinutes(extra.at || nowStamp(), extra.etaMinutes);
-
-  let statusLine = 'Confirmed automatically.';
-  if (booking.status === 'new') {
-    const reason = zone === 'edge' || zone === 'outside' ? `outside your usual area (${outwardCode(addr.postcode)})` : 'auto-confirm is off';
-    statusLine = `Needs your OK: ${reason}.`;
-  }
 
   const reason = extra.reason !== undefined ? extra.reason : booking.cancelReason;
   const reasonLine = reason && reason !== 'declined' ? `Reason: ${String(reason).replace(/\.$/, '')}.` : '';
@@ -109,7 +143,18 @@ export function buildContext(booking, state, extra = {}) {
     return r ? r.label : id;
   });
 
-  return {
+  const whenLong = whenLongFor(booking);
+  let whenLine = whenLong;
+  if (isEnquiry && !booking.urgent) {
+    if (isUnscheduled(booking)) whenLine = 'Survey: time to be arranged';
+    else whenLine = booking.tentative ? `Survey pencilled in: ${whenLong} (provisional)` : `Survey: ${whenLong}`;
+  }
+
+  let serviceWhen = `${booking.serviceName} on ${when}`;
+  if (booking.urgent) serviceWhen = 'your emergency visit';
+  else if (isEnquiry) serviceWhen = isUnscheduled(booking) ? 'the free survey visit' : `the free survey visit on ${when}`;
+
+  const ctx = {
     ref: booking.ref,
     customerName: cust.name,
     customerFirst: firstName(cust.name),
@@ -124,15 +169,18 @@ export function buildContext(booking, state, extra = {}) {
     finalPrice,
     priceLine,
     when,
-    whenLong: whenLongFor(booking),
-    serviceWhen: booking.urgent ? 'your emergency visit' : `${booking.serviceName} on ${when}`,
+    whenLong,
+    whenLine,
+    serviceWhen,
     dateShort: fmtDayShort(stampDay(booking.start)),
     arrive: booking.urgent || bookingWindowIds(booking).length === 0 ? 'as soon as possible' : WINDOWS[bookingWindowIds(booking)[0]].arrive,
     line1,
     postcode: addr.postcode || '',
-    address: addr.line1 ? `${addr.line1}, ${addr.postcode}` : addr.postcode || '',
+    address: addressLine(addr),
     noteLine: booking.notes ? `Note: "${booking.notes}"` : '',
-    statusLine,
+    statusLine: statusLineFor(booking, zone, outwardCode(addr.postcode)),
+    alertTitle: isEnquiry ? 'New enquiry' : 'New booking',
+    answersLine: answersLine(booking.answers),
     emergencyList: reasons.join(', '),
     etaMinutes: etaMinutes === null || etaMinutes === undefined ? '' : String(etaMinutes),
     etaText: etaMinutes === null || etaMinutes === undefined ? '' : etaTextFor(etaMinutes),
@@ -140,11 +188,15 @@ export function buildContext(booking, state, extra = {}) {
     oldWhen: extra.oldWhen || '',
     newWhen: extra.newWhen || when,
     reasonLine,
-    receivedReason: zone === 'edge' || zone === 'outside' ? `I just need to check travel to ${addr.postcode}.` : '',
+    receivedReason: zone === 'edge' || zone === 'outside' ? `We just need to check travel to ${addr.postcode}.` : '',
+    receivedLine: '',
+    contactHours: String(PROMISES.contactWithinHours),
     nextFree,
     nextFreeLine,
-    finalLine: booking.paid ? `Paid with thanks, ${finalPrice}.` : `The total is ${finalPrice}, payable by card, bank transfer or cash.`,
-    certLine: CERT_SERVICES.includes(booking.serviceId) ? 'Your certificate follows today.' : '',
+    finalLine: booking.paid
+      ? `Paid with thanks, ${finalPrice}.`
+      : isFree && !booking.finalPrice ? 'No charge for the visit.' : `The total is ${finalPrice}, payable by card, bank transfer or cash.`,
+    certLine: PAPERWORK_LINES[booking.serviceId] || '',
     jobLink: `${SITE_BASE_URL}dashboard.html#/bookings/${booking.id}`,
     manageLink: `${SITE_BASE_URL}index.html#manage/${booking.ref}`,
     reviewLink: `${emailDomain(biz)}/review (sample link)`,
@@ -153,6 +205,8 @@ export function buildContext(booking, state, extra = {}) {
     emergencyCallAfterMinutes: String(PROMISES.emergencyCallAfterMinutes),
     powerCutNumber: PROMISES.powerCutNumber
   };
+  ctx.receivedLine = receivedLineFor(booking, biz, ctx);
+  return ctx;
 }
 
 /**
@@ -248,7 +302,7 @@ export function mailtoLink(email, subject = '', body = '') {
 }
 
 export function mapsLink(line1, postcode) {
-  // An urgent request may have no street: search the postcode alone rather than ', MB2 6JN'.
+  // An urgent request may have no street: search the postcode alone rather than ', BT9 6QP'.
   const query = [line1, postcode].filter(Boolean).join(', ');
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }

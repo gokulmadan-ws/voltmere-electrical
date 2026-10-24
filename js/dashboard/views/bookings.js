@@ -1,17 +1,18 @@
 // js/dashboard/views/bookings.js: Bookings inbox (search, filters, grouped list) and the master-detail layout from 1100px.
-// Owner: WP5
+// Owner: WP5, enquiry rows by E2
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import {
-  Button, EmptyState, Icon, Input, PageHeader, Segmented, StatusPill, TextLink, cx, useMediaQuery, useNow, useStore
+  Button, EmptyState, Icon, Input, PageHeader, Segmented, TextLink, cx, useMediaQuery, useNow, useStore
 } from '../../ui/index.js';
 import { markAllSeen } from '../../core/store.js';
 import { selectUpcoming, selectOwed, selectNeedsYou, customerKeyOf } from '../../core/selectors.js';
 import { bookingWindowIds, bookingWindowLabel } from '../../core/availability.js';
 import { fmtRelativeDay, stampDay, toStamp } from '../../core/dates.js';
 import { todayKey } from '../../core/clock.js';
-import { gbp, outwardCode } from '../../core/format.js';
+import { outwardCode } from '../../core/format.js';
 import { navigate, routeHref } from '../router.js';
 import { BookingDetail } from './booking-detail.js';
+import { AnswerChips, BookingPill, priceLabel } from '../shared/enquiry.js';
 
 export const title = 'Bookings';
 export const css = ['css/bookings.css'];
@@ -86,12 +87,12 @@ function groupBookings(list, soonestFirst, today) {
 function emptyFor(filter, query) {
   if (query) return { title: `No bookings match "${query}".` };
   switch (filter) {
-    case 'new': return { title: 'Nothing needs you. Nice.' };
-    case 'upcoming': return { title: 'No upcoming bookings.', body: html`<${TextLink} href=${routeHref('today')} inline>Share your booking link<//>.` };
+    case 'new': return { title: 'No enquiries waiting. Nice.' };
+    case 'upcoming': return { title: 'No upcoming visits or installs.', body: html`<${TextLink} href=${routeHref('today')} inline>Share your enquiry link<//>.` };
     case 'owed': return { title: 'Nothing to collect. Nice.' };
     case 'done': return { title: 'No finished jobs yet.' };
     case 'cancelled': return { title: 'No cancelled bookings. Nice.' };
-    default: return { title: 'No bookings yet.' };
+    default: return { title: 'No enquiries or bookings yet.' };
   }
 }
 
@@ -103,7 +104,6 @@ function Row({ b, selected, linkQuery }) {
   const half = ids.length === 2;
   const timeMain = urgent ? 'ASAP' : half ? bookingWindowLabel(b).replace(/^(Morning|Afternoon) · arrive /, '') : bookingWindowLabel(b);
   const timeSub = urgent ? '' : half ? (ids[0] === 0 ? 'Morning' : 'Afternoon') : '';
-  const price = b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice;
   const outward = outwardCode(b.address.postcode);
   const unseen = !b.seenByOwner;
   const service = b.variantLabel ? `${b.serviceName} (${b.variantLabel})` : b.serviceName;
@@ -119,9 +119,10 @@ function Row({ b, selected, linkQuery }) {
         <span class="bl-row__svc">${service}${outward ? ` · ${outward}` : ''}</span>
       </span>
       <span class="bl-row__side">
-        <span class="bl-row__price">${gbp(price)}</span>
-        <${StatusPill} status=${b.status} paid=${b.paid} urgent=${urgent} compact />
+        <span class="bl-row__price">${priceLabel(b)}</span>
+        <${BookingPill} booking=${b} compact />
       </span>
+      <${AnswerChips} booking=${b} class="bl-row__chips" />
     </a>
   </li>`;
 }

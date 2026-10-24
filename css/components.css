@@ -1,5 +1,9 @@
 /* css/components.css: the UI kit styles (ui-*) and the global state classes (is-*).
-   Owner: WP2. Class names follow contract 12.1 and 12.3; colours come from tokens.css only. */
+   Owner: WP2 (re-skinned for 180 Electrical by role B2). Class names follow contract 12.1 and 12.3; colours come from tokens.css only. */
+
+/* Red discipline: the solid brand-red fill (--cta, #E11414) means "primary action / selected" and nothing else. Danger, urgent and
+   emergency are bright orange-red with dark text, an outline and an icon; cancelled is plum with a dashed edge.
+   Shapes: pill buttons, chips and switches (999px), 18px cards, 12px inputs. */
 
 :root { --toast-bottom: 16px; }
 
@@ -7,7 +11,7 @@
 .is-disabled { cursor: not-allowed; }
 .is-loading { cursor: progress; }
 
-/* New arrival: a 1.2s amber flash that fades back to the element's own colours. */
+/* New arrival: a 1.2s brand-tint flash that fades back to the element's own colours. */
 @keyframes ui-highlight {
   from { background-color: var(--cta-soft); box-shadow: 0 0 0 3px var(--cta); }
 }
@@ -29,8 +33,8 @@
 .ui-icon { display: inline-block; flex: none; vertical-align: middle; }
 .ui-icon--missing { display: inline-block; }
 .ui-brandmark { display: block; flex: none; }
-.ui-brandmark__bg { fill: var(--cta); }
-.ui-brandmark__bolt { fill: var(--cta-ink); stroke: var(--cta-ink); stroke-width: 3; stroke-linejoin: round; }
+.ui-brandmark__bg { fill: var(--logo-bg); stroke: var(--logo-edge); stroke-width: 1; }
+.ui-brandmark__bolt { fill: var(--logo-red); stroke: var(--logo-red); stroke-width: 3; stroke-linejoin: round; }
 
 /* ================= Buttons ================= */
 .ui-btn {
@@ -40,10 +44,10 @@
   min-height: var(--h-btn); min-width: var(--tap);
   padding: 0 var(--space-5);
   border: 1.5px solid var(--field-border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-pill);
   background: var(--surface);
   color: var(--text);
-  font-family: var(--font-body); font-size: var(--fs-17); font-weight: var(--fw-bold); line-height: 1.2;
+  font-family: var(--font-body); font-size: var(--fs-17); font-weight: var(--fw-semibold); line-height: 1.2;
   text-align: center; text-decoration: none;
   cursor: pointer;
   -webkit-user-select: none; user-select: none;
@@ -57,33 +61,50 @@
 .ui-btn:active { transform: translateY(1px); background: var(--surface-2); }
 @media (hover: hover) { .ui-btn:hover { background: var(--surface-2); } }
 
-/* Primary: amber with a 3px darker bottom edge that compresses 2px when pressed (no hover-only affordance). */
+/* Primary: solid brand red pill with white text (4.87:1) and a soft red glow. Hover and pressed go to his darker red #B00E12;
+   the press is also a 1px sink, so there is no hover-only affordance. */
 .ui-btn--primary {
   --btn-edge: var(--cta-press);
-  background: var(--cta); color: var(--cta-ink); border-color: var(--btn-edge);
-  box-shadow: 0 3px 0 var(--btn-edge);
+  background: var(--cta); color: var(--cta-ink); border-color: var(--cta);
+  box-shadow: var(--shadow-brand);
 }
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .ui-btn--primary { --btn-edge: color-mix(in srgb, var(--cta-press) 68%, var(--cta-ink)); }
-}
-.ui-btn--primary:active { transform: translateY(2px); background: var(--cta); box-shadow: 0 1px 0 var(--btn-edge); }
-@media (hover: hover) { .ui-btn--primary:hover { background: var(--cta); filter: brightness(1.04); } }
+.ui-btn--primary:active { transform: translateY(1px); background: var(--cta-press); border-color: var(--cta-press); box-shadow: none; }
+@media (hover: hover) { .ui-btn--primary:hover { background: var(--cta-press); border-color: var(--cta-press); } }
 
-.ui-btn--ghost { background: transparent; border-color: transparent; color: var(--link); }
+.ui-btn--ghost { background: transparent; border-color: transparent; color: var(--link); border-radius: var(--r-pill); }
 .ui-btn--ghost:active { background: var(--surface-2); }
 
-.ui-btn--danger, .ui-btn--emergency {
-  --btn-edge: var(--danger-text);
-  background: var(--danger); color: var(--danger-ink); border-color: var(--btn-edge);
-  box-shadow: 0 3px 0 var(--btn-edge);
+/* Danger (destructive, "Cancel booking"): OUTLINED in bright orange-red on a warm tint, with a warning icon. Never a solid fill,
+   so it cannot be mistaken for the solid deep-red primary beside it. */
+.ui-btn--danger {
+  background: var(--danger-tint); color: var(--danger-text);
+  border: 2px solid var(--danger);
+  box-shadow: none;
 }
-.ui-btn--danger:active, .ui-btn--emergency:active { transform: translateY(2px); background: var(--danger); box-shadow: 0 1px 0 var(--btn-edge); }
-@media (hover: hover) { .ui-btn--danger:hover, .ui-btn--emergency:hover { background: var(--danger); filter: brightness(1.05); } }
-.ui-btn--emergency { font-weight: var(--fw-heavy); }
-
+.ui-btn--danger:active { transform: translateY(1px); background: var(--danger-tint); filter: brightness(0.94); }
+@media (hover: hover) { .ui-btn--danger:hover { background: var(--danger-tint); filter: brightness(0.94); } }
+/* Emergency: solid bright orange-red with near-black text, a dark inner line and an outer orange ring (a hazard-sign look). */
+.ui-btn--emergency {
+  background: var(--danger); color: var(--danger-ink);
+  border: 2px solid var(--danger-ink);
+  box-shadow: 0 0 0 3px var(--danger);
+  font-weight: var(--fw-bold);
+}
+.ui-btn--emergency:active { transform: translateY(1px); background: var(--danger); box-shadow: 0 0 0 3px var(--danger); }
+@media (hover: hover) { .ui-btn--emergency:hover { background: var(--danger); filter: brightness(1.08); } }
+/* Both carry a warning triangle unless the caller already put an icon (or the spinner) in the button. Alpha-only mask, so no colour is baked in. */
+.ui-btn--danger:not(:has(.ui-btn__icon, .ui-btn__spinner))::before,
+.ui-btn--emergency:not(:has(.ui-btn__icon, .ui-btn__spinner))::before {
+  content: ''; flex: none; width: 20px; height: 20px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 .ui-btn:disabled, .ui-btn.is-disabled {
   background: var(--surface-2); color: var(--text-3); border-color: var(--line);
   box-shadow: none; transform: none; filter: none;
+}
+.ui-btn--danger:disabled, .ui-btn--danger.is-disabled, .ui-btn--emergency:disabled, .ui-btn--emergency.is-disabled {
+  background: var(--surface-2); color: var(--text-3); border-color: var(--line); box-shadow: none;
 }
 .ui-btn--ghost:disabled, .ui-btn--ghost.is-disabled { background: transparent; border-color: transparent; }
 
@@ -135,7 +156,7 @@
 }
 .ui-chip--interactive:active { transform: translateY(1px); background: var(--surface-2); }
 .ui-chip--interactive.is-selected, .ui-chip.is-selected {
-  background: var(--cta); border-color: var(--cta-press); color: var(--cta-ink); font-weight: var(--fw-bold);
+  background: var(--cta); border-color: var(--cta); color: var(--cta-ink); font-weight: var(--fw-bold);
 }
 .ui-chip--accent { background: var(--cta-soft); border-color: var(--cta); color: var(--cta-text); }
 .ui-chip--danger { background: var(--danger-tint); border-color: var(--danger); color: var(--danger-text); }
@@ -154,8 +175,8 @@
 .ui-pill--confirmed { background: var(--status-confirmed-bg); color: var(--status-confirmed-fg); }
 .ui-pill--on-the-way { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
 .ui-pill--done, .ui-pill--owed { background: var(--status-done-bg); color: var(--status-done-fg); }
-.ui-pill--cancelled { background: var(--status-cancelled-bg); color: var(--status-cancelled-fg); }
-.ui-pill--urgent { background: var(--status-urgent-bg); color: var(--status-urgent-fg); letter-spacing: var(--tracking-caps); }
+.ui-pill--cancelled { background: var(--status-cancelled-bg); color: var(--status-cancelled-fg); border-color: currentColor; border-style: dashed; }
+.ui-pill--urgent { background: var(--status-urgent-bg); color: var(--status-urgent-fg); border-color: var(--status-urgent-fg); letter-spacing: var(--tracking-caps); }
 
 .ui-tag-sample {
   display: inline-block; vertical-align: middle;
@@ -168,10 +189,10 @@
 .ui-card {
   min-width: 0; padding: var(--space-4);
   border: 1.5px solid var(--line); border-radius: var(--r-lg);
-  background: var(--surface); color: var(--text); box-shadow: var(--shadow-1);
+  background: var(--card-bg); color: var(--text); box-shadow: var(--shadow-1);
 }
 .ui-card--flush { padding: 0; overflow: hidden; }
-.ui-card--accent { background: var(--cta-soft); border-color: var(--cta); }
+.ui-card--accent { background: var(--cta-soft); border-color: var(--cta); } /* his "selected" look: brand border on a 10% red tint */
 .ui-card--danger { background: var(--danger-tint); border-color: var(--danger); }
 .ui-card--sunk { background: var(--surface-2); box-shadow: none; }
 
@@ -198,7 +219,7 @@
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
   padding: var(--space-3) var(--space-4);
   border: 1.5px solid var(--line); border-radius: var(--r-lg);
-  background: var(--surface); color: var(--text); box-shadow: var(--shadow-1);
+  background: var(--card-bg); color: var(--text); box-shadow: var(--shadow-1);
   text-decoration: none;
 }
 .ui-stat--link { min-height: var(--tap); cursor: pointer; transition: transform var(--dur-fast) var(--ease-out); }
@@ -221,9 +242,9 @@
 .ui-banner__body { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .ui-banner__text { overflow-wrap: anywhere; }
 .ui-banner__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.ui-banner--warn { background: var(--cta-soft); border-color: var(--cta); }
-.ui-banner--warn .ui-banner__icon { color: var(--cta-text); }
-.ui-banner--danger { background: var(--danger-tint); border-color: var(--danger); }
+.ui-banner--warn { background: var(--status-on-the-way-bg); border-color: var(--dot-few); } /* warning is amber, never the brand red */
+.ui-banner--warn .ui-banner__icon { color: var(--status-on-the-way-fg); }
+.ui-banner--danger { background: var(--danger-tint); border-color: var(--danger); border-left-width: 5px; }
 .ui-banner--danger .ui-banner__icon { color: var(--danger-text); }
 .ui-banner--ok { background: var(--ok-tint); border-color: var(--ok); }
 .ui-banner--ok .ui-banner__icon { color: var(--ok-text); }
@@ -322,7 +343,7 @@
 /* Segmented control. */
 .ui-seg {
   position: relative; display: flex; gap: 4px; padding: 4px;
-  border: 1.5px solid var(--field-border); border-radius: var(--r-md);
+  border: 1.5px solid var(--field-border); border-radius: var(--r-pill);
   background: var(--surface-2);
   overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
 }
@@ -330,21 +351,21 @@
 .ui-seg__opt {
   flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: var(--tap); padding: 0 var(--space-3);
-  border: 1.5px solid transparent; border-radius: var(--r-sm);
+  border: 1.5px solid transparent; border-radius: var(--r-pill);
   background: transparent; color: var(--text-2);
   font-family: var(--font-body); font-size: var(--fs-15); font-weight: var(--fw-semibold); white-space: nowrap;
   cursor: pointer; -webkit-user-select: none; user-select: none;
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .ui-seg__opt:active { background: var(--line); }
-.ui-seg__opt.is-selected { background: var(--cta); border-color: var(--cta-press); color: var(--cta-ink); font-weight: var(--fw-bold); box-shadow: 0 2px 0 var(--cta-press); }
+.ui-seg__opt.is-selected { background: var(--cta); border-color: var(--cta); color: var(--cta-ink); font-weight: var(--fw-bold); }
 .ui-seg--sm .ui-seg__opt { padding: 0 var(--space-2); font-size: var(--fs-14); }
 
 /* Stepper. */
 .ui-stepper { display: flex; align-items: stretch; gap: var(--space-2); min-width: 0; }
 .ui-stepper__btn {
   flex: none; width: var(--h-btn); height: var(--h-btn);
-  border: 1.5px solid var(--field-border); border-radius: var(--r-md);
+  border: 1.5px solid var(--field-border); border-radius: var(--r-pill);
   background: var(--surface); color: var(--text);
   font-family: var(--font-display); font-size: 1.75rem; font-weight: var(--fw-bold); line-height: 1;
   cursor: pointer;
@@ -447,8 +468,8 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
   width: fit-content; max-width: min(100%, 480px); min-height: 48px;
   padding: 6px 6px 6px var(--space-4);
   border-radius: var(--r-md);
-  background: var(--panel); color: var(--panel-text);
-  box-shadow: var(--shadow-2);
+  background: var(--panel-2); color: var(--panel-text);
+  box-shadow: var(--shadow-2), 0 0 0 1px var(--line);
   font-size: var(--fs-15); font-weight: var(--fw-semibold); line-height: 1.35;
   pointer-events: none;
   animation: ui-toast-in var(--dur-base) var(--ease-out) both;
@@ -457,11 +478,11 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
 .ui-toast__action {
   flex: none; min-width: var(--tap); min-height: var(--tap); padding: 0 var(--space-3);
   border: 0; border-radius: var(--r-sm); background: transparent;
-  color: var(--cta); font-family: var(--font-body); font-size: var(--fs-15); font-weight: var(--fw-heavy);
+  color: var(--panel-accent); font-family: var(--font-body); font-size: var(--fs-15); font-weight: var(--fw-heavy);
   cursor: pointer; pointer-events: auto;
 }
 .ui-toast__action:focus-visible { outline-color: var(--focus-on-panel); }
-.ui-toast__action:active { background: var(--panel-2); }
+.ui-toast__action:active { background: var(--panel); }
 .ui-toast--danger { background: var(--danger); color: var(--danger-ink); }
 .ui-toast--danger .ui-toast__action { color: var(--danger-ink); text-decoration: underline; text-underline-offset: 3px; }
 .ui-toast--danger .ui-toast__action:focus-visible { outline-color: var(--danger-ink); }
@@ -469,11 +490,11 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
 /* ================= Simulated chat (WhatsApp look) ================= */
 .ui-phone {
   width: 100%; max-width: 340px; margin-inline: auto; overflow: hidden;
-  border: 6px solid var(--panel); border-radius: 30px;
+  border: 6px solid var(--panel-2); border-radius: 30px;
   background: var(--chat-bg); box-shadow: var(--shadow-2);
 }
 .ui-phone__bar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--panel); color: var(--panel-text); }
-.ui-phone__avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--panel-2); color: var(--cta); }
+.ui-phone__avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--panel-2); color: var(--panel-accent); }
 .ui-phone__who { min-width: 0; }
 .ui-phone__title { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.2; overflow-wrap: anywhere; }
 .ui-phone__sub { margin: 0; color: var(--panel-muted); font-size: var(--fs-12); line-height: 1.3; }
@@ -510,11 +531,14 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
   height: var(--h-strip);
   padding-left: max(var(--space-3), var(--safe-left)); padding-right: max(var(--space-3), var(--safe-right));
   border-bottom: 1px solid var(--line);
-  background: var(--cta-soft); color: var(--text);
+  background: var(--surface-2); color: var(--text);
   font-size: var(--fs-12); font-weight: var(--fw-medium); line-height: 1; white-space: nowrap;
 }
-.ui-notice__badge { flex: none; padding: 3px 7px; border-radius: 4px; background: var(--panel); color: var(--panel-text); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-caps); }
+.ui-notice__badge { flex: none; padding: 3px 7px; border-radius: 4px; background: var(--cta); color: var(--cta-ink); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-caps); }
 .ui-notice__text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 429px) {
+  .ui-notice__more { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+}
 /* The 28px strip keeps its height; the link's 44px box overflows 8px above and below (3.7). */
 .ui-notice__link {
   flex: none; display: inline-flex; align-items: center; min-height: 44px; margin-block: -8px; padding-inline: 8px;
@@ -525,10 +549,10 @@ html.is-scroll-locked .ui-toast-host { bottom: auto; top: calc(var(--safe-top) +
   display: flex; align-items: flex-start; gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border: 1.5px dashed var(--field-border); border-radius: var(--r-md);
-  background: var(--cta-soft); color: var(--text);
+  background: var(--surface-2); color: var(--text);
   font-size: var(--fs-15); line-height: 1.45;
 }
-.ui-notice__icon { margin-top: 1px; color: var(--cta-text); }
+.ui-notice__icon { margin-top: 1px; color: var(--link); }
 .ui-notice__body { min-width: 0; overflow-wrap: anywhere; }
 
 /* ================= Boot failure screen ================= */

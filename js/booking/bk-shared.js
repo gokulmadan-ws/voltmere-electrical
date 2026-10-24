@@ -1,5 +1,5 @@
 // js/booking/bk-shared.js: small pieces shared by the booking steps (title, help line, price text, slot-taken banner).
-// Owner: WP3 (extra file, not in the 6.2 table: shared helpers for js/booking/*; WP0 please adopt it)
+// Owner: WP3, refreshed by D2 (quote-led price text, call-only help line)
 import { html } from '../vendor/preact-htm.js';
 import { Banner, Button, Chip } from '../ui/index.js';
 import { waLink } from '../core/messages.js';
@@ -13,12 +13,26 @@ export function StepTitle({ children, sub }) {
   </div>`;
 }
 
-/** 'Fixed £195' (fixed and by_size), 'From £75', 'Free'. `service` may be null when the service was removed. */
+/** True for a quote-led service (no number is ever shown): the EV charger installation. */
+export function isQuoteLed(service) {
+  return !!service && (service.priceType === 'quote' || service.priceType === 'quoted');
+}
+
+/** 'Fixed £195' (fixed and by_size), 'From £75', 'Free', 'Quoted for your home'. `service` may be null when the service was removed. */
 export function priceText(service, price) {
-  if (!service) return gbp(price);
+  if (!service) return Number.isFinite(price) && price > 0 ? gbp(price) : 'Free';
   if (service.priceType === 'free') return 'Free';
+  if (isQuoteLed(service)) return service.priceLabel || 'Quoted for your home';
   if (service.priceType === 'from') return `From ${gbp(price)}`;
   return `Fixed ${gbp(price)}`;
+}
+
+/** Short price for a service row or chip: 'Free', 'Quoted for your home', 'From £75', or the fixed amount. */
+export function listPrice(service) {
+  if (service.priceType === 'free') return 'Free';
+  if (isQuoteLed(service)) return 'Quoted for your home';
+  if (service.priceType === 'fixed') return gbp(service.price);
+  return `From ${gbp(service.price)}`;
 }
 
 /** The two call / WhatsApp buttons used in empty states and the help line. */
@@ -30,11 +44,13 @@ export function ContactButtons({ brand, text, testids = {}, size = 'md' }) {
   </div>`;
 }
 
-/** Last item of every flow step's scrolling body: "Rather talk to someone?" (13.2.1). */
+/** Last item of a customer step's scrolling body: "Prefer to speak to us?" with one Call button (his site lists no WhatsApp). */
 export function HelpLine({ brand }) {
   return html`<div class="bk-help">
-    <p class="bk-help__text">Rather talk to someone?</p>
-    <${ContactButtons} brand=${brand} size="sm" testids=${{ call: 'booking-call', whatsapp: 'booking-whatsapp' }} />
+    <p class="bk-help__text">Prefer to speak to us?</p>
+    <div class="bk-contact">
+      <${Button} variant="secondary" size="sm" icon="phone" href=${brand.telHref} data-testid="booking-call">Call ${brand.phone}<//>
+    </div>
   </div>`;
 }
 

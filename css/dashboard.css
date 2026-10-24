@@ -1,5 +1,5 @@
 /* css/dashboard.css: dashboard shell (db-*): header, tab bar, sidebar, FAB, and the page helpers every view uses.
-   Owner: WP2. Views load their own css/<name>.css on top of this. */
+   Owner: WP2; re-skinned for 180 Electrical by role B2. Views load their own css/<name>.css on top of this. */
 
 /* Column width of the page content: full width on phones, centred 720px on tablets, 1080px beside the sidebar. */
 :root {
@@ -28,6 +28,9 @@
   padding-top: var(--safe-top);
   background: var(--bg); border-bottom: 1.5px solid var(--line);
 }
+@supports (backdrop-filter: blur(8px)) {
+  .db-header { background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+}
 .db-header__inner {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
   min-height: var(--h-header); max-width: var(--db-col); margin-inline: auto;
@@ -37,9 +40,15 @@
   display: inline-flex; align-items: center; gap: 10px; flex: 0 1 auto; min-width: 0; min-height: var(--tap);
   color: var(--text); text-decoration: none;
 }
+/* Brand lockup: the business name over a small "Owner dashboard" caption. */
+.db-brand__text { display: flex; flex-direction: column; min-width: 0; }
 .db-header__name {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.2;
+  font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.15;
+}
+.db-brand__sub {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; line-height: 1.25;
 }
 .db-header__actions { display: flex; align-items: center; flex: none; gap: 2px; }
 
@@ -80,21 +89,19 @@
 
 /* ================= Floating "New booking" button ================= */
 .db-fab {
-  --btn-edge: var(--cta-press);
+  --btn-edge: var(--cta);
   position: fixed; z-index: var(--z-fab);
   right: max(var(--gutter), var(--safe-right));
   bottom: calc(var(--h-tabbar) + var(--safe-bottom) + var(--space-4));
   display: flex; align-items: center; justify-content: center;
   width: var(--h-fab); height: var(--h-fab); border-radius: 50%;
   border: 1.5px solid var(--btn-edge); background: var(--cta); color: var(--cta-ink);
-  box-shadow: 0 3px 0 var(--btn-edge), var(--shadow-2);
+  box-shadow: var(--shadow-brand), var(--shadow-2);
   text-decoration: none;
-  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .db-fab { --btn-edge: color-mix(in srgb, var(--cta-press) 68%, var(--cta-ink)); }
-}
-.db-fab:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--btn-edge), var(--shadow-2); }
+.db-fab:active { transform: translateY(1px); background: var(--cta-press); border-color: var(--cta-press); }
+@media (hover: hover) { .db-fab:hover { background: var(--cta-press); border-color: var(--cta-press); } }
 @media (min-width: 768px) {
   /* aligned to the right edge of the centred column */
   .db-fab { right: max(var(--gutter), calc((100vw - var(--db-col)) / 2 + var(--gutter))); }
@@ -112,18 +119,19 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
   display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 var(--space-3);
   color: var(--text); text-decoration: none;
 }
-.db-sidebar__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); }
+.db-sidebar__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.15; }
 .db-nav { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .db-nav--low { margin-top: auto; }
 .db-nav__item {
   display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); padding: 0 var(--space-3);
-  border-radius: var(--r-md); color: var(--text-2); text-decoration: none;
+  border-radius: var(--r-pill); color: var(--text-2); text-decoration: none;
   font-size: var(--fs-16); font-weight: var(--fw-semibold);
 }
 .db-nav__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .db-nav__item:active { background: var(--surface-2); }
 @media (hover: hover) { .db-nav__item:hover { background: var(--surface-2); color: var(--text); } }
-.db-nav__item.is-active { background: var(--cta-soft); color: var(--text); font-weight: var(--fw-bold); box-shadow: inset 3px 0 0 var(--cta-text); }
+.db-nav__item.is-active { background: var(--cta-soft); color: var(--text); font-weight: var(--fw-bold); box-shadow: inset 0 0 0 1.5px var(--cta); }
+.db-nav__item.is-active .ui-icon { color: var(--cta-text); }
 .db-nav__badge {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--r-pill);
@@ -178,7 +186,7 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
 .db-list {
   margin: 0; padding: 0; list-style: none; overflow: hidden;
   border: 1.5px solid var(--line); border-radius: var(--r-lg);
-  background: var(--surface); box-shadow: var(--shadow-1);
+  background: var(--card-bg); box-shadow: var(--shadow-1);
 }
 .db-list__item {
   display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: 56px;

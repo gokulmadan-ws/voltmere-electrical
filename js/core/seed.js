@@ -1,6 +1,6 @@
-// js/core/seed.js: the relative demo diary (S01 to S15), seeded customers, sample customer and simulator pool
+// js/core/seed.js: the relative EV-led demo diary (S01 to S15), seeded customers, sample enquiry and simulator pool
 // Owner: WP1
-import { WINDOWS, makeDefaultSettings } from './config.js';
+import { WINDOWS, makeDefaultSettings, normaliseAnswers } from './config.js';
 import { addDays, addMinutes, makeStamp, stampDay, toStamp, weekdayOf } from './dates.js';
 import { bookingWindowIds } from './availability.js';
 import { buildMessage, reminderSendAt } from './messages.js';
@@ -10,58 +10,67 @@ import { quotedPriceFor } from './selectors.js';
 // ---------- fictional people (3.2: phones are Ofcom drama numbers 07700 900xxx) ----------
 
 export const SEED_CUSTOMERS = {
-  priya: { name: 'Priya Nair', phone: '07700 900231', email: '', addresses: [{ line1: '14 Alder Row', postcode: 'MB3 4QP' }] },
-  marcus: {
-    name: 'Marcus Tate', phone: '07700 900262', email: '',
-    addresses: [{ line1: '8 Quarry Lane', postcode: 'MB5 2LN' }, { line1: '31 Hollin Road', postcode: 'MB6 7DZ' }]
+  aoife: { name: 'Aoife Magee', phone: '07700 900231', email: '', addresses: [{ line1: '14 Larkfield Gardens', postcode: 'BT9 6QP' }] },
+  padraig: {
+    name: 'Padraig Quinn', phone: '07700 900262', email: '',
+    addresses: [{ line1: '8 Millrace Row', postcode: 'BT28 2LN' }, { line1: '31 Rockmount Road', postcode: 'BT20 4DZ' }]
   },
-  alison: { name: 'Alison Reeve', phone: '07700 900275', email: '', addresses: [{ line1: '22 Fennel Road', postcode: 'MB8 1HT' }] },
-  tom: { name: 'Tom Hargreaves', phone: '07700 900288', email: '', addresses: [{ line1: '3 Weavers Yard', postcode: 'MB2 9AQ' }] },
-  eileen: { name: 'Eileen Doyle', phone: '07700 900301', email: '', addresses: [{ line1: '17 Kiln Lane', postcode: 'MB4 3RF' }] },
-  ngozi: { name: 'Ngozi Okafor', phone: '07700 900344', email: '', addresses: [{ line1: '9 Orchard Close', postcode: 'MB2 6JN' }] },
-  hannah: { name: 'Hannah Whitfield', phone: '07700 900356', email: '', addresses: [{ line1: '2 Linnet Close', postcode: 'MB1 8PY' }] },
-  kwame: { name: 'Kwame Mensah', phone: '07700 900371', email: '', addresses: [{ line1: '12 Cobb Street', postcode: 'MB9 3UE' }] },
-  ruth: { name: 'Ruth Calder', phone: '07700 900388', email: '', addresses: [{ line1: '6 Harrow Mews', postcode: 'MB10 4XJ' }] },
-  // Edge zone (MB12): the booking needs Dan's OK.
-  sam: { name: 'Sam Wray', phone: '07700 900219', email: '', addresses: [{ line1: 'Mill Cottage, Ashgrove Lane', postcode: 'MB12 6AB' }] },
-  lena: { name: 'Lena Kowalski', phone: '07700 900399', email: '', addresses: [{ line1: '27 Alder Row', postcode: 'MB3 5TT' }] }
+  niamh: { name: 'Niamh Gallagher', phone: '07700 900275', email: '', addresses: [{ line1: '22 Fernhill Crescent', postcode: 'BT23 5HT' }] },
+  declan: { name: 'Declan Rafferty', phone: '07700 900288', email: '', addresses: [{ line1: '3 Linenhall Mews', postcode: 'BT35 9AQ' }] },
+  orla: { name: 'Orla Hegarty', phone: '07700 900301', email: '', addresses: [{ line1: '17 Kilmore Drive', postcode: 'BT48 3RF' }] },
+  sinead: { name: 'Sinead Doherty', phone: '07700 900344', email: '', addresses: [{ line1: '9 Cloughmore Close', postcode: 'BT42 6JN' }] },
+  eoin: { name: 'Eoin McCartney', phone: '07700 900356', email: '', addresses: [{ line1: '2 Bannview Park', postcode: 'BT41 8PY' }] },
+  ciaran: { name: 'Ciaran Boyle', phone: '07700 900371', email: '', addresses: [{ line1: '12 Tannery Lane', postcode: 'BT18 9UE' }] },
+  roisin: { name: 'Roisin Maguire', phone: '07700 900388', email: '', addresses: [{ line1: '6 Ballydoon Mews', postcode: 'BT14 7XJ' }] },
+  // Outside the area (not a BT postcode): the enquiry needs Daniel's OK before he confirms the survey.
+  conor: { name: 'Conor Brennan', phone: '07700 900219', email: '', addresses: [{ line1: 'Mill Cottage, Lochan Road', postcode: 'DG9 8AB' }] },
+  bronagh: { name: 'Bronagh Hughes', phone: '07700 900399', email: '', addresses: [{ line1: '27 Larkfield Gardens', postcode: 'BT9 6QT' }] }
 };
 
 /** What the `Demo: fill sample details` button types in. */
-export const SAMPLE_CUSTOMER = { name: 'Priya Nair', phone: '07700 900231', email: '', line1: '14 Alder Row', postcode: 'MB3 4QP' };
+export const SAMPLE_CUSTOMER = { name: 'Aoife Magee', phone: '07700 900231', email: '', line1: '14 Larkfield Gardens', postcode: 'BT9 6QP' };
 
-/** Eight invented website customers for simulateIncomingBooking (phones 07700 900500 to 900507). */
+/** The four funnel answers the demo fill picks (the postcode is SAMPLE_CUSTOMER.postcode). */
+export const SAMPLE_ENQUIRY_ANSWERS = { parking: 'driveway', vehicle: 'ordered', timing: 'asap', permission: 'yes' };
+
+/**
+ * Eight invented website customers for simulateIncomingBooking (phones 07700 900500 to 900507). Each makes a free-survey
+ * enquiry with these `answers` (postcode only goes in, like the funnel; `line1` is what they would give on the phone).
+ */
 export const SIM_POOL = [
-  { name: 'Gareth Pryce', phone: '07700 900500', line1: '5 Cooper Street', postcode: 'MB4 7LW', notes: 'Fuse box trips when the kettle is on.' },
-  { name: 'Fatima Rahman', phone: '07700 900501', line1: '41 Willow Bank', postcode: 'MB7 2HD', notes: '' },
-  { name: 'Callum Blair', phone: '07700 900502', line1: '16 Mason Road', postcode: 'MB1 4TT', notes: 'Dog is friendly, side gate is open.' },
-  { name: 'Joanna Pike', phone: '07700 900503', line1: '8 Tanners Lane', postcode: 'MB9 6QA', notes: 'Outside light has stopped working.' },
-  { name: 'Dev Patel', phone: '07700 900504', line1: '23 Beacon Rise', postcode: 'MB5 8FS', notes: '' },
-  { name: 'Maureen Holt', phone: '07700 900505', line1: '2 Chapel Yard', postcode: 'MB2 3ZP', notes: 'Please park on the drive.' },
-  { name: 'Owen Lister', phone: '07700 900506', line1: '70 Quarry Hill', postcode: 'MB8 5NG', notes: 'Sockets in the spare room are dead.' },
-  { name: 'Chloe Barrett', phone: '07700 900507', line1: '12 Ferry Lane', postcode: 'MB10 1RT', notes: '' }
+  { name: 'Cathal Devlin', phone: '07700 900500', line1: '5 Cooper Street', postcode: 'BT4 3LW', notes: 'Just bought an electric car. Driveway at the side of the house.', answers: { parking: 'driveway', vehicle: 'have', timing: 'asap', permission: 'yes' } },
+  { name: 'Maeve Corr', phone: '07700 900501', line1: '41 Willow Bank', postcode: 'BT27 5HD', notes: '', answers: { parking: 'garage', vehicle: 'ordered', timing: 'month', permission: 'yes' } },
+  { name: 'Callum Blair', phone: '07700 900502', line1: '16 Mason Road', postcode: 'BT19 1TT', notes: 'Dog is friendly, side gate is open.', answers: { parking: 'driveway', vehicle: 'choosing', timing: 'one_to_three', permission: 'yes' } },
+  { name: 'Joanne Moore', phone: '07700 900503', line1: '8 Tanners Lane', postcode: 'BT34 6QA', notes: 'Charger would go on the garage wall.', answers: { parking: 'garage', vehicle: 'have', timing: 'asap', permission: 'yes' } },
+  { name: 'Shane Kelly', phone: '07700 900504', line1: '23 Beacon Rise', postcode: 'BT47 8FS', notes: '', answers: { parking: 'allocated', vehicle: 'ordered', timing: 'month', permission: 'landlord' } },
+  { name: 'Maureen Hanna', phone: '07700 900505', line1: '2 Chapel Yard', postcode: 'BT43 3ZP', notes: 'Please park on the drive.', answers: { parking: 'driveway', vehicle: 'have', timing: 'one_to_three', permission: 'yes' } },
+  { name: 'Owen Mulholland', phone: '07700 900506', line1: '70 Quarry Hill', postcode: 'BT38 5NG', notes: 'Fuse box is in the hall cupboard.', answers: { parking: 'street', vehicle: 'choosing', timing: 'researching', permission: 'unsure' } },
+  { name: 'Chloe Patterson', phone: '07700 900507', line1: '12 Ferry Lane', postcode: 'BT23 1RT', notes: '', answers: { parking: 'other', vehicle: 'ordered', timing: 'asap', permission: 'yes' } }
 ];
 
 // ---------- the 15 seeded bookings (3.4) ----------
 
 // ref: 'T' today, 'P<k>' k-th previous open day, 'O<k>' k-th next open day. win = preferred start window.
 // status 'today' means: done once its window has ended, else confirmed.
+// The diary is EV-led: 8 of the 15 are free EV quote visits (ev_quote) or installs (ev), all with the funnel answers filled; the
+// other jobs are phone work for people who already know him. `noLine1`: a website enquiry only gave its postcode.
+// The two pending enquiries (S07 and S11) are the ones that "need you"; both have the survey pencilled in (tentative).
 const SPECS = [
-  { n: 1, day: 'P17', win: 0, blocks: 1, service: 'fault', cust: 'priya', status: 'done', final: 75, paid: 'card', source: 'website', notes: 'Fuse box keeps tripping in the evening.' },
-  { n: 2, day: 'P14', win: 2, blocks: 2, service: 'eicr', variant: 'flat', cust: 'marcus', addr: 0, status: 'done', final: 150, paid: 'bank', source: 'phone', notes: 'Landlord. Flat above the shop, new tenant moving in.' },
-  { n: 3, day: 'P11', win: 0, blocks: 2, service: 'consumer', cust: 'alison', status: 'done', final: 540, paid: 'card', source: 'website', notes: 'Old fuse box, no RCD.' },
-  { n: 4, day: 'P6', win: 1, blocks: 1, service: 'sockets', cust: 'ruth', status: 'done', final: 170, paid: null, source: 'whatsapp', notes: 'Two sockets in the kitchen and one outside.' },
-  { n: 5, day: 'T', win: 0, blocks: 1, service: 'sockets', cust: 'tom', status: 'today', final: 85, paid: 'cash', source: 'website', notes: 'Extra sockets in the back bedroom.' },
-  { n: 6, day: 'T', win: 1, blocks: 1, service: 'fault', cust: 'eileen', status: 'today', final: 75, paid: null, source: 'phone', notes: '' },
-  { n: 7, day: 'T', win: null, blocks: 0, service: 'emergency', cust: 'ngozi', status: 'new', urgent: true, source: 'website', notes: 'No power in kitchen' },
-  { n: 8, day: 'O1', win: 1, blocks: 1, service: 'fault', cust: 'hannah', status: 'confirmed', source: 'website', notes: 'Lights flicker when the oven is on.' },
-  { n: 9, day: 'O2', win: 2, blocks: 2, service: 'eicr', variant: 'house', cust: 'marcus', addr: 1, status: 'confirmed', source: 'phone', notes: 'Landlord. Tenant leaves at the end of the month.' },
-  { n: 10, day: 'O3', win: 0, blocks: 1, service: 'fault', cust: 'alison', status: 'confirmed', source: 'website', notes: 'Outside light has stopped working.' },
-  { n: 11, day: 'O3', win: 1, blocks: 1, service: 'sockets', cust: 'sam', status: 'new', source: 'website', notes: 'Barn conversion. Park by the gate.' },
-  { n: 12, day: 'O3', win: 2, blocks: 1, service: 'fault', cust: 'ruth', status: 'confirmed', source: 'whatsapp', notes: '' },
-  { n: 13, day: 'O3', win: 3, blocks: 1, service: 'sockets', cust: 'tom', status: 'confirmed', source: 'website', notes: 'Two double sockets in the lounge.' },
-  { n: 14, day: 'O5', win: 0, blocks: 1, service: 'sockets', cust: 'kwame', status: 'confirmed', source: 'referral', notes: 'Garage sockets.' },
-  { n: 15, day: 'O6', win: 1, blocks: 1, service: 'fault', cust: 'lena', status: 'cancelled', source: 'website', notes: '' }
+  { n: 1, day: 'P17', win: 0, blocks: 1, service: 'fault', cust: 'aoife', status: 'done', final: 75, paid: 'card', source: 'website', notes: 'Fuse box keeps tripping in the evening. Checking it before a charger goes in.' },
+  { n: 2, day: 'P14', win: 2, blocks: 2, service: 'eicr', variant: 'flat', cust: 'padraig', addr: 0, status: 'done', final: 150, paid: 'bank', source: 'phone', notes: 'Landlord. Flat above the shop, new tenant moving in.' },
+  { n: 3, day: 'P11', win: 0, blocks: 2, service: 'ev', cust: 'niamh', status: 'done', final: 899, paid: 'card', source: 'website', notes: 'Charger on the front wall, short cable run from the fuse box.', answers: { parking: 'driveway', vehicle: 'have', timing: 'asap', permission: 'yes' } },
+  { n: 4, day: 'P6', win: 1, blocks: 1, service: 'sockets', cust: 'roisin', status: 'done', final: 170, paid: null, source: 'whatsapp', notes: 'Two sockets in the kitchen and one outside.' },
+  { n: 5, day: 'T', win: 0, blocks: 1, service: 'sockets', cust: 'declan', status: 'today', final: 85, paid: 'cash', source: 'website', notes: 'Extra sockets in the back bedroom.' },
+  { n: 6, day: 'T', win: 1, blocks: 1, service: 'fault', cust: 'orla', status: 'today', final: 75, paid: null, source: 'phone', notes: 'Home charger keeps tripping the breaker.' },
+  { n: 7, day: 'O5', win: 1, blocks: 1, service: 'ev_quote', cust: 'sinead', status: 'new', source: 'website', noLine1: true, notes: 'Kia EV6 arriving in a couple of weeks. Thinking about a Zappi.', answers: { parking: 'driveway', vehicle: 'ordered', timing: 'asap', permission: 'yes', marketingOptIn: false } },
+  { n: 8, day: 'O1', win: 1, blocks: 1, service: 'ev_quote', cust: 'eoin', status: 'confirmed', source: 'website', noLine1: true, notes: 'New electric car arrives next month. Driveway at the side of the house.', answers: { parking: 'driveway', vehicle: 'ordered', timing: 'month', permission: 'yes', marketingOptIn: true } },
+  { n: 9, day: 'O2', win: 2, blocks: 2, service: 'ev', cust: 'padraig', addr: 1, status: 'confirmed', source: 'phone', notes: 'Landlord. Charger for his own house, after the flat safety report.', answers: { parking: 'garage', vehicle: 'have', timing: 'one_to_three', permission: 'yes' } },
+  { n: 10, day: 'O3', win: 0, blocks: 1, service: 'fault', cust: 'niamh', status: 'confirmed', source: 'website', notes: 'Outside light by the charger has stopped working.' },
+  { n: 11, day: 'O3', win: 1, blocks: 1, service: 'ev_quote', cust: 'conor', status: 'new', source: 'website', noLine1: true, notes: 'Asked if you travel over for a quote. Check before confirming.', answers: { parking: 'driveway', vehicle: 'choosing', timing: 'one_to_three', permission: 'unsure', marketingOptIn: false } },
+  { n: 12, day: 'O3', win: 2, blocks: 1, service: 'ev_quote', cust: 'roisin', status: 'confirmed', source: 'whatsapp', notes: 'Rents her flat. The landlord needs to agree first.', answers: { parking: 'allocated', vehicle: 'have', timing: 'month', permission: 'landlord' } },
+  { n: 13, day: 'O3', win: 3, blocks: 1, service: 'sockets', cust: 'declan', status: 'confirmed', source: 'website', notes: 'Two double sockets in the lounge.' },
+  { n: 14, day: 'O5', win: 0, blocks: 1, service: 'ev_quote', cust: 'ciaran', status: 'confirmed', source: 'referral', notes: 'Neighbour had a charger fitted. Garage is detached.', answers: { parking: 'garage', vehicle: 'choosing', timing: 'one_to_three', permission: 'yes' } },
+  { n: 15, day: 'O6', win: 1, blocks: 1, service: 'ev_quote', cust: 'bronagh', status: 'cancelled', source: 'website', noLine1: true, notes: '', answers: { parking: 'street', vehicle: 'choosing', timing: 'researching', permission: 'unsure', marketingOptIn: false } }
 ];
 
 const DEFAULT_HOURS = makeDefaultSettings().hours;
@@ -179,7 +188,8 @@ export function buildSeed(now, settings, existing = { bookings: [], blocks: [] }
     const paidAt = paid ? endStamp : null;
     const cancelled = status === 'cancelled';
 
-    const autoConfirmed = spec.source === 'website' && postcodeZone(address.postcode, business) === 'covered';
+    // The free survey is never auto-confirmed: the owner confirms it (and a pencilled-in one stays pending until he does).
+    const autoConfirmed = spec.source === 'website' && service.id !== 'ev_quote' && postcodeZone(address.postcode, business) === 'covered';
     const history = [{ at: createdAt, event: 'created', by: spec.source === 'website' ? 'customer' : 'owner', note: spec.source }];
     if (['confirmed', 'on_the_way', 'done'].includes(status)) {
       history.push({ at: addMinutes(createdAt, 1), event: 'confirmed', by: autoConfirmed ? 'system' : 'owner' });
@@ -191,9 +201,10 @@ export function buildSeed(now, settings, existing = { bookings: [], blocks: [] }
       history.push({ at: cancelledAt, event: 'cancelled', by: 'customer', note: 'Customer asked' });
     }
 
-    bookings.push({
+    const answers = spec.answers ? normaliseAnswers(spec.answers, address.postcode) : null;
+    const booking = {
       id: `bk_seed_${nn(spec.n)}`,
-      ref: `VM-${1027 + spec.n}`,
+      ref: `EL-${1027 + spec.n}`,
       createdAt,
       serviceId: service.id,
       serviceName: service.name,
@@ -207,7 +218,7 @@ export function buildSeed(now, settings, existing = { bookings: [], blocks: [] }
       etaMinutes: null,
       etaAt: null,
       customer: { name: person.name, phone: person.phone, email: person.email },
-      address: { line1: address.line1, postcode: address.postcode },
+      address: { line1: spec.noLine1 ? '' : address.line1, postcode: address.postcode },
       notes: spec.notes || '',
       internalNotes: '',
       source: spec.source,
@@ -222,7 +233,10 @@ export function buildSeed(now, settings, existing = { bookings: [], blocks: [] }
       cancelReason: cancelled ? 'Customer asked' : '',
       seed: true,
       history
-    });
+    };
+    if (answers) booking.answers = answers;
+    if (service.id === 'ev_quote' && status === 'new' && durationMin > 0) booking.tentative = true; // pencilled in, awaiting the owner
+    bookings.push(booking);
   }
 
   const partial = { settings, bookings, blocks };

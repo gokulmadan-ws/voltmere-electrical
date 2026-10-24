@@ -1,9 +1,9 @@
 // js/booking/service-step.js: Step 0 "What do you need?" (one tap per service, plus the emergency row).
-// Owner: WP3
+// Owner: WP3, copy refreshed by D2 (owner phone jobs; the website goes straight to the quote funnel)
 import { html } from '../vendor/preact-htm.js';
 import { Icon } from '../ui/index.js';
-import { selectServices, servicePriceLabel } from '../core/selectors.js';
-import { StepTitle, ContactButtons } from './bk-shared.js';
+import { selectServices } from '../core/selectors.js';
+import { StepTitle, ContactButtons, listPrice } from './bk-shared.js';
 
 export function ServiceStep({ ctx }) {
   const { state, brand, ownerMode, go } = ctx;
@@ -32,10 +32,10 @@ export function ServiceStep({ ctx }) {
           <span class="bk-service__name">${s.name}</span>
           <span class="bk-service__meta">${s.durationLabel}</span>
         </span>
-        <span class="bk-service__price">${servicePriceLabel(s)}</span>
+        <span class="bk-service__price">${listPrice(s)}</span>
         <${Icon} name="chevron-right" size=${20} class="bk-service__chev" />
       </button>`)}
     </div>
-    <p class="bk-helper">Not sure? Choose Fault finding. ${brand.ownerFirst} will work it out on the day.</p>
+    <p class="bk-helper">A call about a charger? Start with ${(services.find((s) => s.id === 'ev_quote') || { name: 'the quote visit' }).name}: a free survey and written quote. The installation itself is booked once the quote is agreed.</p>
   </div>`;
 }

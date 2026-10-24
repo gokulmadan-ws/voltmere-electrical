@@ -46,6 +46,14 @@ export function bookingWindowIds(booking) {
   return WINDOWS.filter((w) => w.startMin < endMin && w.endMin > startMin).map((w) => w.id);
 }
 
+/**
+ * True for an ordinary (not urgent) booking that holds no window yet: an enquiry made while the diary had no free survey slot.
+ * The owner schedules it with rescheduleBooking before he can confirm it. Such a booking occupies nothing.
+ */
+export function isUnscheduled(booking) {
+  return !!booking && !booking.urgent && !(booking.durationMin > 0);
+}
+
 /** start + durationMin; urgent: start. */
 export function bookingEndStamp(booking) {
   if (!booking || booking.urgent || !(booking.durationMin > 0)) return booking ? booking.start : '';
@@ -227,9 +235,10 @@ export function windowIdFromStart(stamp) {
   return w ? w.id : null;
 }
 
-/** '8–10am' | 'Morning · arrive 8–10am' | 'Afternoon · arrive 1–3pm' | 'ASAP' (urgent) */
+/** '8–10am' | 'Morning · arrive 8–10am' | 'Afternoon · arrive 1–3pm' | 'ASAP' (urgent) | 'To be arranged' (no window yet) */
 export function bookingWindowLabel(booking) {
   if (booking.urgent) return 'ASAP';
+  if (isUnscheduled(booking)) return 'To be arranged';
   const ids = bookingWindowIds(booking);
   if (ids.length === 0) return stampTime(booking.start);
   const first = WINDOWS[ids[0]];
@@ -237,9 +246,10 @@ export function bookingWindowLabel(booking) {
   return ids[0] === 0 ? `Morning · arrive ${first.label}` : `Afternoon · arrive ${first.label}`;
 }
 
-/** 'Sat 24 Oct, 8–10am' | 'Mon 26 Oct, morning, 8–10am' | 'ASAP' */
+/** 'Sat 24 Oct, 8–10am' | 'Mon 26 Oct, morning, 8–10am' | 'ASAP' | 'To be arranged' (no window yet) */
 export function bookingWhen(booking) {
   if (booking.urgent) return 'ASAP';
+  if (isUnscheduled(booking)) return 'To be arranged';
   const ids = bookingWindowIds(booking);
   const day = fmtDayShort(stampDay(booking.start));
   if (ids.length === 0) return `${day}, ${stampTime(booking.start)}`;

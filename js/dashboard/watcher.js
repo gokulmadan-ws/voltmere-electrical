@@ -1,5 +1,5 @@
 // js/dashboard/watcher.js: new-booking announcements (toasts) and the "(n)" document title prefix.
-// Owner: WP2
+// Owner: WP2 (wording for quote-led enquiries by role B2)
 import { useEffect, useRef } from '../vendor/preact-htm.js';
 import { getState } from '../core/store.js';
 import { selectUnseenBookings } from '../core/selectors.js';
@@ -27,10 +27,15 @@ const selectUnseenKey = (state) => selectUnseenBookings(state).map((b) => b.id).
 
 const viewBooking = (id) => () => navigate(routeHref('bookings', { id }));
 
+// A website enquiry for the free survey and quote (service "ev_quote") is an enquiry, not a booking.
+const isEnquiry = (b) => b && b.serviceId === 'ev_quote';
+
 function announceSummary(list) {
   const n = list.length;
+  const word = list.every(isEnquiry) ? 'enquir' : 'booking';
+  const noun = word === 'booking' ? (n === 1 ? 'booking' : 'bookings') : (n === 1 ? 'enquiry' : 'enquiries');
   toast({
-    message: n === 1 ? '1 new booking since you last looked' : `${n} new bookings since you last looked`,
+    message: `${n} new ${noun} since you last looked`,
     actionLabel: 'View',
     duration: 8000,
     onAction: n === 1 ? viewBooking(list[0].id) : () => navigate(routeHref('bookings', {}, { f: 'new' }))
@@ -41,6 +46,11 @@ function announceArrival(booking) {
   const name = firstName((booking.customer && booking.customer.name) || '') || 'a customer';
   if (booking.urgent) {
     toast({ message: `URGENT request: ${name}`, tone: 'danger', actionLabel: 'View', onAction: viewBooking(booking.id) });
+    return;
+  }
+  if (isEnquiry(booking)) {
+    const postcode = (booking.address && booking.address.postcode) || '';
+    toast({ message: postcode ? `New enquiry: ${name}, ${postcode}` : `New enquiry: ${name}`, actionLabel: 'View', onAction: viewBooking(booking.id) });
     return;
   }
   let when = '';

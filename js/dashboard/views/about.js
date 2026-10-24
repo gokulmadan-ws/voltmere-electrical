@@ -1,5 +1,5 @@
 // js/dashboard/views/about.js: "What's real in this prototype" (works for real, simulated, needed for a real build).
-// Owner: WP7
+// Owner: WP7, rewritten for 180 Electrical by E2
 import { html } from '../../vendor/preact-htm.js';
 import {
   Button, Card, Chip, Icon, PageHeader, PrototypeNotice, cx, pageHref, pageTarget, useBrand, useMediaQuery
@@ -8,60 +8,62 @@ import {
 export const title = "What's real";
 export const css = ['css/insights.css'];
 
-// Content of contract section 17. `owner` is the live owner first name so a rebrand never leaves "Dan" behind.
+// Content for the 180 Electrical pre-sales prototype. `owner` is the live owner first name so an edit in Settings never leaves a stale name.
 const realItems = () => [
-  'The availability engine and diary: arrival windows, half-day jobs, notice, how far ahead people can book, days off, blocked times and "full today"',
-  'Booking creation with double-booking protection, and a friendly recovery when someone else takes the slot first',
-  'Status changes, reschedule, cancel and Undo',
-  'Live sync between the customer site and this dashboard across two tabs of one browser',
-  'The owner\'s edits to hours, rules, prices and business name changing the customer site',
-  'Tap-to-call links',
-  'Real WhatsApp links with the exact message pre-filled (they open your own WhatsApp, and go to the demo number when one is set)',
-  'Real Google Maps search links, and email links',
-  'A genuine downloadable calendar file (.ics)',
-  'Light, dark and system themes'
+  'Your own quote funnel, word for word: the postcode, parking, vehicle, timing, permission and contact questions and their answer options come from your current website',
+  'Your public contact details and your two credentials (Level 3 Electrical Installation, 2391 Inspection and Testing) taken from your own website; edit them in Settings',
+  'Every enquiry becoming a job card in this dashboard that shows the answers to the five funnel questions',
+  'A free survey visit pencilled into the diary automatically, with the customer told it is provisional until you confirm',
+  'The availability engine and diary, shared with the website: arrival windows, notice, how far ahead people can book, days off, blocked times and "full today"',
+  'Booking creation with double-booking protection, then confirm, reschedule, cancel and Undo',
+  'The quote path: survey done, "Quote ready" message, then booking the install and marking it paid',
+  'Live sync between the website and this dashboard across two tabs of one browser',
+  'Your edits to hours, rules, services, credentials and charger brands changing the website',
+  'Tap-to-call links, and real WhatsApp links with the exact message pre-filled (they open your own WhatsApp, or the demo number when one is set)',
+  'Real Google Maps search links, email links and a genuine downloadable calendar file (.ics)',
+  'Light and dark themes (dark is the default, like your site)'
 ];
 
 const simulatedItems = (owner) => [
   'Every WhatsApp, SMS and email message. The outbox shows the exact text a real system would send, marked "Sent (simulated)" or "Scheduled (simulated)"',
   `The arrival of those messages on ${owner}'s phone`,
   'Reminders firing at a set time (they are worked out from the scheduled time, with no timers)',
-  'Payments: there are none ("pay after the job"), only a Paid flag',
-  'Reviews, star ratings and the 212 count',
-  'Scheme registration and insurance claims',
-  'The postcode coverage list',
-  'The seeded customers and bookings',
-  'The owner persona and the business itself',
-  'Emergency response promises',
+  'Quotes and payments: the quote is agreed outside the app, and only a Paid flag is kept (no card, no deposit)',
+  'All customers, enquiries, bookings and payments you see: invented names, made-up BT streets and Ofcom drama phone numbers',
+  `The owner persona: "${owner}" is taken from the email address on your site, so check it in Settings`,
+  'The coverage check: any BT postcode counts as in area, and another UK postcode is flagged "Outside Northern Ireland". There is no address lookup',
+  'The emergency path, which is switched off because your site only offers EV charger quotes',
   `The owner's ETA, which ${owner} chooses and is not live tracking`
 ];
 
-// Section 17.3: feature, in this prototype, in a real build, effort.
+// Feature, in this prototype, in a real build, effort.
 const BUILD_ROWS = [
-  ['WhatsApp alerts to the owner and customers', 'Simulated outbox plus real `wa.me` links',
-    "WhatsApp Business Platform (Cloud API): a dedicated business number, Meta business verification, pre-approved message templates (booking alert, confirmation, reminder, on my way, review) with quick-reply buttons, a webhook for button taps and replies. Meta bills per delivered template message (check Meta's current pricing; utility templates are free inside a customer-opened 24-hour window).", 'M-L'],
-  ['Bookings database and multi-device sync', '`localStorage`, one browser, two tabs',
-    'Hosted database and API with server-side slot locking, so two customers on two phones cannot take the same window', 'M'],
+  ['Your Perspective funnel into the dashboard', 'The six steps are rebuilt here and an enquiry is saved in this browser as a job card',
+    "Store each submission from your Perspective funnel by webhook (Perspective can post the answers to a URL on submit), map the postcode, parking, vehicle, timing, permission and contact fields into the same job card, then pencil in the survey visit and send the alerts. Or move the funnel onto your own page and skip the webhook.", 'S-M'],
+  ['WhatsApp alerts to you and to customers', 'Simulated outbox plus real `wa.me` links',
+    "WhatsApp Business Platform (Cloud API): a dedicated business number, Meta business verification, pre-approved message templates (new enquiry, survey pencilled in, confirmation, quote ready, reminder) with quick-reply buttons, and a webhook for button taps and replies. Meta bills per delivered template message (check Meta's current pricing; utility templates are free inside a customer-opened 24-hour window).", 'M-L'],
+  ['Database and multi-device sync', '`localStorage`, one browser, two tabs',
+    'Hosted database and API with server-side slot locking, so two customers on two phones cannot take the same survey window', 'M'],
   ['Owner login and security', 'None', 'Passkey or magic-link login, access control, backups, audit trail', 'M'],
   ['Reminders and scheduling', 'Timestamps, manual "Send now"', 'A scheduler or queue (cron, serverless timers) that fires reminders, retries failures', 'S-M'],
-  ['Payments and deposits', 'None ("pay after the job"), a Paid flag', 'Card payments and payment links (Stripe or Square), optional deposits for large jobs, receipts', 'M'],
+  ['Quotes, deposits and payments', 'None: the quote is agreed outside the app and a Paid flag is kept', 'A written quote builder (charger, cable route, extras) with PDF and acceptance, card payments or payment links (Stripe or Square), an optional deposit, receipts', 'M-L'],
   ['Calendar sync', '`.ics` download', 'Two-way Google, Apple or Outlook calendar sync', 'M'],
   ['Owner notifications', 'In-app toast, badge, tab title', 'The WhatsApp alert is the notification; optionally web push for the dashboard', 'S'],
-  ['Consent and data protection', 'A consent sentence', 'Consent records, privacy policy, retention, UK GDPR and PECR review of WhatsApp opt-in', 'S-M'],
-  ['Reviews', 'Sample reviews', "The owner's Google Business Profile review link and optional review monitoring", 'S'],
-  ['Certificates and invoices', 'None', 'Digital forms (EICR, EIC), PDF generation, e-signature, accounting export', 'L'],
-  ['Domain, hosting, SEO, analytics', 'GitHub Pages or Vercel sub-path, no analytics', "The owner's domain, SSL, per-service and per-town pages, privacy-respecting analytics", 'S-M'],
-  ['Real credentials', 'Sample labels everywhere', "The owner's scheme number, insurance details and genuine reviews", 'S'],
-  ['Postcode and travel', 'A local list of outward codes', 'Postcode lookup API, drive-time and travel charges', 'S-M'],
-  ['Photos of the fault', 'None', 'Upload storage and moderation', 'M']
+  ['Consent and data protection', 'The marketing opt-in is stored with the enquiry', 'Consent records, privacy policy, retention, UK GDPR and PECR review of WhatsApp and marketing opt-in', 'S-M'],
+  ['Photos of the consumer unit and charger spot', 'None: your funnel asks the customer to have photos ready', 'Photo upload on the funnel, storage and moderation, attached to the job card', 'M'],
+  ['Installation paperwork', 'None', 'Installation certificate forms, PDF generation, e-signature, invoice and accounting export', 'L'],
+  ['Reviews', 'None shown, because your website shows none', "Your Google Business Profile review link and a review request after each install", 'S'],
+  ['Credentials and trust details', 'Two credentials as text, copied from your website', "Only what you want shown: scheme registration, insurance and certificates, in your words", 'S'],
+  ['Domain, hosting, SEO, analytics', 'GitHub Pages or Vercel sub-path, no analytics', "Your domain, SSL, per-town pages, privacy-respecting analytics and ad conversion tracking for your paid social traffic", 'S-M'],
+  ['Postcode and travel', 'A BT prefix check', 'Postcode lookup API, drive-time and travel checks', 'S-M']
 ].map(([feature, prototype, real, effort]) => ({ feature, prototype, real, effort }));
 
 const NEED_FROM_YOU = [
-  'A WhatsApp number to use (a new number, or move yours)',
-  'Meta business verification',
+  'Access to your Perspective funnel settings, to send each submission to the dashboard',
+  'A WhatsApp number to use (a new number, or move yours) and Meta business verification',
   'Your domain',
-  'Your real prices and hours',
-  'Your registration and insurance details'
+  'Your real working hours and how many survey visits you can take a day',
+  'Your photos, logo and any registration or insurance details you want shown'
 ];
 
 /** Plain text with `code` spans from the contract table (the backticks mark file names and URLs). */
@@ -148,12 +150,12 @@ export default function AboutView() {
 
     <div class="db-stack">
       <${Card} tone="accent" class="ab-quote">
-        <p class="ab-quote__text">Everything you tapped is real UI and real logic running on this phone. The three things that are not real are exactly what you pay a platform for: a shared database, the WhatsApp connection, and a login.</p>
+        <p class="ab-quote__text">Everything you tap is real UI and real logic running in this browser, using your own funnel questions and contact details. What is not real is what a platform provides: the link to your Perspective funnel, a shared database, the WhatsApp connection and a login.</p>
       <//>
 
       <div class="ab-chips" role="group" aria-label="Jump to a part of this page">
         <${Chip} tone="ok" icon="check" onClick=${() => jumpTo('ab-real')}>Works for real in the browser<//>
-        <${Chip} tone="accent" icon="clock" onClick=${() => jumpTo('ab-simulated')}>Simulated here<//>
+        <${Chip} tone="accent" icon="clock" onClick=${() => jumpTo('ab-simulated')}>Sample or simulated here<//>
         <${Chip} icon="building-2" onClick=${() => jumpTo('ab-build')}>Needed for a real build<//>
       </div>
 
@@ -163,7 +165,7 @@ export default function AboutView() {
       </section>
 
       <section class="db-section ab-section" id="ab-simulated" aria-labelledby="ab-simulated-title">
-        <h2 class="db-section__title" id="ab-simulated-title">Simulated here, and always labelled</h2>
+        <h2 class="db-section__title" id="ab-simulated-title">Sample or simulated here, and always labelled</h2>
         <${Card}><${Checklist} items=${simulatedItems(brand.ownerFirst)} icon="clock" tone="sim" /><//>
       </section>
 

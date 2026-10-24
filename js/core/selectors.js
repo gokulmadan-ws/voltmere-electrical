@@ -1,11 +1,11 @@
 // js/core/selectors.js: pure derived data for the UI (needs-you, next-up, customers, insights)
 // Owner: WP1
-import { PROMISES } from './config.js';
+import { ENQUIRY_ANSWER_HEADINGS, ENQUIRY_ANSWER_KEYS, PROMISES, answerLabel } from './config.js';
 import {
   addDays, diffDays, fmtDayShort, minutesBetween, monthKeyOf, stampDay, weekStart, weekdayOf
 } from './dates.js';
 import { bookingEndStamp, describeHours } from './availability.js';
-import { gbp, toWaDigits } from './format.js';
+import { gbp, outsideAreaLabel, toWaDigits } from './format.js';
 import { messageIsScheduled, telLink } from './messages.js';
 
 // Selectors never mutate state (it is frozen); every sort below works on a copy.
@@ -39,6 +39,8 @@ export function selectBrand(state) {
     towns: b.towns,
     schemeLine: b.schemeLine,
     insuranceLine: b.insuranceLine,
+    credentials: Array.isArray(b.credentials) ? b.credentials : [],
+    brands: Array.isArray(b.brands) ? b.brands : [],
     hoursText: describeHours(s.hours),
     demoPhoneDigits: s.demoPhoneDigits || '',
     coveredOutward: b.coveredOutward,
@@ -56,20 +58,46 @@ export function selectService(state, id) {
   return state.settings.services.find((s) => s.id === id) || null;
 }
 
+/** The services the public website offers: active and showOnWebsite (by default only the free EV charger quote). */
+export function selectWebsiteServices(state) {
+  return state.settings.services.filter((s) => s.active && s.showOnWebsite === true);
+}
+
 /** The variant price when the variant exists, else the headline price. */
 export function quotedPriceFor(service, variantId) {
   const v = (service.variants || []).find((x) => x.id === variantId);
   return v ? v.price : service.price;
 }
 
-/** 'From £75' | 'From £150' | 'Free' | fixed '£120' */
+/** 'From £75' | 'From £150' | 'Free' | fixed '£120' | quote-led 'Quoted for your home' (no number) */
 export function servicePriceLabel(service) {
   if (service.priceType === 'free') return 'Free';
+  if (service.priceType === 'quoted') return 'Quoted for your home';
   if (service.priceType === 'fixed') return gbp(service.price);
   return `From ${gbp(service.price)}`;
 }
 
 // ---------- bookings ----------
+
+/**
+ * The enquiry answers of a booking as job-card rows, in funnel order: [{ key, heading, value, label }].
+ * `label` is his verbatim option text (the postcode itself for 'postcode'). Empty for a booking with no answers.
+ */
+export function enquiryAnswerRows(booking) {
+  const answers = booking && booking.answers;
+  if (!answers) return [];
+  const rows = [];
+  for (const key of ENQUIRY_ANSWER_KEYS) {
+    const label = answerLabel(key, answers[key]);
+    if (label) rows.push({ key, heading: ENQUIRY_ANSWER_HEADINGS[key], value: answers[key], label });
+  }
+  return rows;
+}
+
+/** 'Outside Northern Ireland' when the booking's postcode is a valid non-BT UK postcode, else ''. */
+export function bookingAreaFlag(booking) {
+  return booking && booking.address ? outsideAreaLabel(booking.address.postcode) : '';
+}
 
 export function selectBookingById(state, id) {
   return state.bookings.find((b) => b.id === id) || null;

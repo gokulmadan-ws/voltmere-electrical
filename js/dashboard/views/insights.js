@@ -1,5 +1,5 @@
 // js/dashboard/views/insights.js: Insights (collected, owed, nudge, mark paid, weekly bars, by service).
-// Owner: WP7
+// Owner: WP7, free surveys left out of the job counts and the average by E2
 import { html, useMemo } from '../../vendor/preact-htm.js';
 import {
   Button, Card, EmptyState, PageHeader, Stat, toast, useBrand, useNow, useStore
@@ -8,6 +8,7 @@ import { selectInsights, selectOwed } from '../../core/selectors.js';
 import { sendPaymentNudge } from '../../core/store.js';
 import { MONTH_LONG, diffDays, parseDayKey, stampDay, toStamp } from '../../core/dates.js';
 import { gbp, plural } from '../../core/format.js';
+import { isEnquiry } from '../shared/enquiry.js';
 import { waLink } from '../../core/messages.js';
 import { routeHref } from '../router.js';
 import { PaidButton } from '../shared/job-actions.js';
@@ -93,14 +94,23 @@ export default function InsightsView() {
   const owed = useMemo(() => selectOwed(state), [state]);
   const monthName = MONTH_LONG[parseDayKey(todayDay).getMonth()];
 
+  // A free survey visit is marked done and settled at £0. It is a visit, not a paid job, so it stays out of the
+  // "jobs" count under Collected and out of the average job.
+  const paidJobs = useMemo(() => {
+    const done = state.bookings.filter((b) => b.status === 'done' && !isEnquiry(b));
+    const collected = done.filter((b) => b.paid && b.paidAt && stampDay(b.paidAt).slice(0, 7) === todayDay.slice(0, 7));
+    const recent = done.filter((b) => { const n = diffDays(stampDay(b.start), todayDay); return n >= 0 && n <= 30; });
+    return { collectedCount: collected.length, avg: recent.length ? Math.round(recent.reduce((t, b) => t + priceOf(b), 0) / recent.length) : 0 };
+  }, [state, todayDay]);
+
   return html`<div class="db-page in-page">
     <${PageHeader} title="Insights" subtitle=${`${monthName} so far`} />
 
     <div class="in-stats">
-      <${Stat} label="Collected this month" value=${gbp(ins.collectedMonth)} hint=${plural(ins.collectedMonthCount, 'job')} tone="ok" data-testid="insights-collected" />
+      <${Stat} label="Collected this month" value=${gbp(ins.collectedMonth)} hint=${plural(paidJobs.collectedCount, 'job')} tone="ok" data-testid="insights-collected" />
       <${Stat} label="Owed to you" value=${gbp(ins.owedTotal)} hint=${plural(ins.owedCount, 'job')} tone=${ins.owedCount > 0 ? 'accent' : undefined} data-testid="insights-owed" />
       <${Stat} label="Booked next 14 days" value=${gbp(ins.bookedNext14)} hint=${plural(ins.bookedNext14Count, 'booking')} data-testid="insights-booked-next" />
-      <${Stat} label="Average job" value=${gbp(ins.avgJob)} hint="last 30 days" data-testid="insights-avg" />
+      <${Stat} label="Average job" value=${gbp(paidJobs.avg)} hint="last 30 days, paid jobs" data-testid="insights-avg" />
     </div>
 
     <div class="db-two-col in-cols">
