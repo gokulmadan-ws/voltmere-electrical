@@ -1,7 +1,7 @@
 // js/dashboard/router.js: hash router (parseHash, routeHref, navigate, useRoute, goBack, isImmersive).
-// Owner: WP2
+// Owner: B3 (was WP2)
 import { useEffect, useState } from '../vendor/preact-htm.js';
-import { ROUTES, DEFAULT_ROUTE } from './routes.js';
+import { ROUTES, DEFAULT_ROUTE, routeMeta } from './routes.js';
 
 const TODAY = ROUTES.find((r) => r.name === 'today');
 
@@ -104,12 +104,15 @@ export function goBack(fallbackHash = '#/today') {
   else navigate(fallbackHash, { replace: true });
 }
 
-/** Booking detail, customer detail and New booking hide the tab bar and show a back arrow. */
+/**
+ * Immersive routes hide the tab bar and the FAB and use a sticky bottom action bar (booking detail, customer detail, New booking,
+ * the quote builder and the connection wizards). The route table's `immersive` flag is true, or the name of a param that must be present.
+ */
 export function isImmersive(route) {
   if (!route) return false;
-  return (route.name === 'bookings' && !!route.params.id)
-    || (route.name === 'customers' && !!route.params.key)
-    || route.name === 'new';
+  const flag = routeMeta(route.name).immersive;
+  if (!flag) return false;
+  return flag === true ? true : !!(route.params && route.params[flag]);
 }
 
 /** The current route. Re-renders on hashchange, popstate and in-app replaces. Unknown hashes are replaced with #/today. */

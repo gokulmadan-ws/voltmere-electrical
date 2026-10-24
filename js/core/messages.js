@@ -1,5 +1,5 @@
-// js/core/messages.js: simulated WhatsApp templates, rendering, scheduled sends, bubble actions and links
-// Owner: WP1
+// js/core/messages.js: simulated WhatsApp and email templates, rendering, scheduled sends, bubble actions and links
+// Owner: WP1 (v1), A3 (v3 additions)
 import {
   DEFAULT_TEMPLATES, EMERGENCY_REASONS, KIND_LABELS, PLACEHOLDERS, PROMISES, SITE_BASE_URL, WINDOWS, answersLine
 } from './config.js';
@@ -7,9 +7,10 @@ import { nowStamp } from './clock.js';
 import { addDays, addMinutes, fmtClock, fmtDayShort, makeStamp, stampDay } from './dates.js';
 import { bookingWindowIds, bookingWhen, isUnscheduled, nextFreeSlot } from './availability.js';
 import { addressLine, firstName, gbp, outwardCode, postcodeZone, toWaDigits } from './format.js';
+import { latestQuoteFor, quoteTotal, quoteUrl } from './quotes.js';
 
 // The defaults live in config.js (one definition); messages.js re-exports them because 8.1 lists them here.
-export { DEFAULT_TEMPLATES, KIND_LABELS, PLACEHOLDERS };
+export { DEFAULT_TEMPLATES, KIND_LABELS, PLACEHOLDERS, quoteUrl };
 
 // The paperwork sentence per service: a certificate for certificate jobs, a written quote after a quote visit.
 const PAPERWORK_LINES = {
@@ -143,6 +144,13 @@ export function buildContext(booking, state, extra = {}) {
     return r ? r.label : id;
   });
 
+  // The quote this message is about: the one passed in, else the quote an install booking came from, else the enquiry's latest.
+  const quotes = state.quotes || {};
+  const quote = extra.quote || (booking.quoteId && quotes[booking.quoteId]) || latestQuoteFor(quotes, booking.id);
+  let installBooking = extra.installBooking || null;
+  if (!installBooking && booking.serviceId === 'ev' && booking.quoteId) installBooking = booking;
+  if (!installBooking && quote && quote.installBookingId) installBooking = (state.bookings || []).find((b) => b.id === quote.installBookingId) || null;
+
   const whenLong = whenLongFor(booking);
   let whenLine = whenLong;
   if (isEnquiry && !booking.urgent) {
@@ -190,7 +198,7 @@ export function buildContext(booking, state, extra = {}) {
     reasonLine,
     receivedReason: zone === 'edge' || zone === 'outside' ? `We just need to check travel to ${addr.postcode}.` : '',
     receivedLine: '',
-    contactHours: String(PROMISES.contactWithinHours),
+    contactHours: String(settings.sla && Number.isInteger(settings.sla.replyHours) ? settings.sla.replyHours : PROMISES.contactWithinHours),
     nextFree,
     nextFreeLine,
     finalLine: booking.paid
@@ -203,7 +211,12 @@ export function buildContext(booking, state, extra = {}) {
     awayMinutes: String(PROMISES.awayMinutes),
     emergencyReplyMinutes: String(PROMISES.emergencyReplyMinutes),
     emergencyCallAfterMinutes: String(PROMISES.emergencyCallAfterMinutes),
-    powerCutNumber: PROMISES.powerCutNumber
+    powerCutNumber: PROMISES.powerCutNumber,
+    quoteId: quote ? quote.id : '',
+    quoteLink: quote ? quoteUrl(quote.id) : '',
+    quoteTotal: quote ? gbp(quoteTotal(quote)) : '',
+    quoteValidUntil: quote && quote.validUntil ? fmtDayShort(quote.validUntil) : '',
+    installWhen: installBooking ? whenLongFor(installBooking) : ''
   };
   ctx.receivedLine = receivedLineFor(booking, biz, ctx);
   return ctx;
@@ -222,19 +235,53 @@ export function buildMessage(kind, booking, state, extra = {}) {
     return '';
   });
   const toOwner = kind.startsWith('owner_');
-  return {
+  const channel = extra.channel === 'email' ? 'email' : 'whatsapp';
+  const message = {
     at: extra.at || nowStamp(),
     sendAt: extra.sendAt === undefined ? null : extra.sendAt,
     bookingId: booking.id,
     to: toOwner ? 'owner' : 'customer',
     toName: toOwner ? biz.ownerFullName : booking.customer.name,
     toPhone: toOwner ? biz.phone : booking.customer.phone,
-    channel: 'whatsapp',
+    channel,
     kind,
     body,
     simulated: true,
     seed: false
   };
+  // Only an email message carries an address (a WhatsApp message keeps the v2 shape).
+  if (channel === 'email') message.toEmail = toOwner ? biz.email : (booking.customer.email || '');
+  return message;
+}
+
+/**
+ * PURE: a message that belongs to no booking (a connection test). Same shape as buildMessage with `bookingId: null`.
+ * `extra` = { at, channel: 'whatsapp'|'email', toEmail }.
+ */
+export function buildSystemMessage(kind, state, extra = {}) {
+  const biz = state.settings.business;
+  const template = (state.settings.templates && state.settings.templates[kind]) || DEFAULT_TEMPLATES[kind];
+  const ctx = { business: biz.name, businessShort: biz.shortName, ownerFirst: biz.ownerFirstName, ownerPhone: biz.phone };
+  const body = renderWith(template, ctx, (name) => {
+    console.warn(`Unknown message placeholder {${name}} in template ${kind}`);
+    return '';
+  });
+  const channel = extra.channel === 'email' ? 'email' : 'whatsapp';
+  const message = {
+    at: extra.at || nowStamp(),
+    sendAt: null,
+    bookingId: null,
+    to: 'owner',
+    toName: biz.ownerFullName,
+    toPhone: biz.phone,
+    channel,
+    kind,
+    body,
+    simulated: true,
+    seed: false
+  };
+  if (channel === 'email') message.toEmail = extra.toEmail || biz.email;
+  return message;
 }
 
 // ---------- scheduling ----------
@@ -268,11 +315,13 @@ export function bubbleActions(message, booking, nowStampStr) {
   const openJob = { id: 'open_job', label: 'Open job' };
   switch (message.kind) {
     case 'owner_new_booking':
+    case 'owner_quote_accepted':
       return booking.status === 'new' ? [{ id: 'confirm', label: 'Confirm' }, call, openJob] : [openJob, call];
     case 'owner_emergency':
       return booking.status === 'new' ? [{ id: 'accept_45', label: 'Accept (45 min)' }, call, openJob] : [openJob, call];
     case 'owner_customer_cancelled':
     case 'owner_customer_rescheduled':
+    case 'owner_quote_declined':
       return [openJob];
     default:
       return [];

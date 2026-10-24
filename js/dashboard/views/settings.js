@@ -1,16 +1,16 @@
-// js/dashboard/views/settings.js: Settings (business and brand, services and prices, hours and days off, rules and theme). Saves as you go.
-// Owner: WP8, website switches, credentials and brands by E2
+// js/dashboard/views/settings.js: Settings (business and brand, website photos, services, quote price list and terms, reply promise, hours, rules, theme). Saves as you go.
+// Owner: E3 (v1 by WP8, website switches, credentials and brands by E2)
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import {
-  BrandMark, Button, Card, Chip, Field, Icon, IconButton, Input, PageHeader, Select, Switch, ThemeToggle,
+  BrandMark, Button, Card, Chip, ConfirmDialog, Field, Icon, IconButton, Disclosure, Input, PageHeader, SampleTag, Select, Switch, Textarea, ThemeToggle,
   showUndoToast, toast, useStore
 } from '../../ui/index.js';
 import {
-  addDaysOff, removeDayOff, updateService, updateSettings
+  addDaysOff, getState, removeDayOff, updateService, updateSettings
 } from '../../core/store.js';
-import { normalisePhone, plural } from '../../core/format.js';
-import { selectServices, servicePriceLabel } from '../../core/selectors.js';
-import { WINDOWS } from '../../core/config.js';
+import { gbp, normalisePhone, plural } from '../../core/format.js';
+import { selectImageUrl, selectServices, servicePriceLabel } from '../../core/selectors.js';
+import { DEFAULT_IMAGES, IMAGE_KEYS, IMAGE_META, WINDOWS } from '../../core/config.js';
 import { DAY_LONG, addDays, fmtDayShort, isDayKey, weekStart } from '../../core/dates.js';
 import { todayKey } from '../../core/clock.js';
 
@@ -18,7 +18,8 @@ export const title = 'Settings';
 export const css = ['css/settings.css'];
 
 const FAIL_TEXT = 'That did not work: the diary changed. Please check and try again.';
-const failToast = () => toast({ message: FAIL_TEXT, tone: 'danger' });
+const FULL_TEXT = 'This device has no room left to save that. Free some space, or reset the demo in Demo tools.';
+const failToast = (res) => toast({ message: res && res.reason === 'storage_full' ? FULL_TEXT : FAIL_TEXT, tone: 'danger' });
 
 // Business lists (credentials, brands) are stored as arrays and edited as one comma-separated line.
 const listText = (list) => (Array.isArray(list) ? list.join(', ') : String(list || ''));
@@ -30,12 +31,16 @@ const selectBiz = (state) => {
   const b = state.settings.business;
   return {
     name: b.name, shortName: b.shortName, ownerFirst: b.ownerFirstName, tagline: b.tagline, phone: b.phone, email: b.email, area: b.areaName, areaText: b.areaText,
+    address: typeof b.address === 'string' ? b.address : '',
     credentials: listText(b.credentials), brands: listText(b.brands)
   };
 };
 const selectAllServices = (state) => selectServices(state, { activeOnly: false });
 const selectHours = (state) => state.settings.hours;
 const selectDaysOff = (state) => state.settings.daysOff;
+const selectItems = (state) => state.settings.quoteItems || [];
+const selectQuoteDefaults = (state) => ({ validDays: String(state.settings.quoteDefaults.validDays), notes: state.settings.quoteDefaults.notes });
+const selectReplyHours = (state) => (state.settings.sla ? state.settings.sla.replyHours : 24);
 const selectRules = (state) => ({
   lead: state.settings.leadMinutes, ahead: state.settings.maxDaysAhead,
   autoConfirm: state.settings.autoConfirm, emergencies: state.settings.takingEmergencies, reminders: state.settings.remindersOn
@@ -148,6 +153,8 @@ function BusinessSection({ onSaved }) {
         <${EditField} id="setting-email" label="Email" value=${biz.email} check=${emailCheck} commit=${saveBiz('email')} inputProps=${{ type: 'email', inputmode: 'email', autocomplete: 'email' }} />
         <${EditField} id="setting-area" label="Area" value=${biz.area} check=${requiredCheck} commit=${saveArea} />
       </div>
+      <${EditField} id="setting-address" label="Address (optional)" hint="Add your address to show it in your site footer"
+        value=${biz.address} commit=${saveBiz('address')} inputProps=${{ autocomplete: 'street-address', placeholder: 'Left empty: the footer says Serving Northern Ireland' }} />
       <div class="st-preview" role="group" aria-label="Preview of your brand on the website" data-testid="setting-preview">
         <${BrandMark} size=${44} />
         <div class="st-preview__text">
@@ -210,10 +217,16 @@ function ServiceRow({ service, onSaved }) {
 
 function ServicesSection({ onSaved }) {
   const services = useStore(selectAllServices);
+  const main = services.filter((s) => s.id === 'ev_quote' || s.id === 'ev');
+  const other = services.filter((s) => s.id !== 'ev_quote' && s.id !== 'ev');
   return html`<section class="db-section" aria-labelledby="st-svc-title">
     <h2 class="db-section__title" id="st-svc-title">Services and prices</h2>
     <p class="st-intro">Your website offers the free survey visit and a quote for each home. Switch a service on to show it there. Whole pounds only.</p>
-    <div class="st-services">${services.map((s) => html`<${ServiceRow} key=${s.id} service=${s} onSaved=${onSaved} />`)}</div>
+    <div class="st-services">${main.map((s) => html`<${ServiceRow} key=${s.id} service=${s} onSaved=${onSaved} />`)}</div>
+    ${other.length > 0 ? html`<div class="st-other"><${Disclosure} title="Other jobs" summary=${`${other.length} you can still book by phone`} testid="settings-other-services">
+      <p class="st-intro">Your website only sells EV charger quotes. These older job types stay here for work you take by phone, with their own prices.</p>
+      <div class="st-services">${other.map((s) => html`<${ServiceRow} key=${s.id} service=${s} onSaved=${onSaved} />`)}</div>
+    <//></div>` : null}
   </section>`;
 }
 
@@ -359,6 +372,200 @@ function RulesSection({ onSaved }) {
   </section>`;
 }
 
+// ---------- Website photos ----------
+
+const urlCheck = (text) => (!text || /^https:\/\/\S+$/.test(text) || /^[\w./-]+$/.test(text) ? '' : 'Use a web address that starts with https://');
+
+function ImageTile({ imgKey, onSaved }) {
+  const meta = IMAGE_META[imgKey];
+  const stored = useStore((state) => state.settings.business.images[imgKey]);
+  const src = useStore((state) => selectImageUrl(state, imgKey, { width: 240 }));
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [src]);
+  const isOriginal = stored === DEFAULT_IMAGES[imgKey];
+  const commit = (text) => {
+    const res = updateSettings({ business: { images: { [imgKey]: text } } });
+    if (res.ok) { onSaved(); return ''; }
+    return (res.errors && res.errors[`images.${imgKey}`]) || FAIL_TEXT;
+  };
+  return html`<${Card} as="div" class="st-img" role="group" aria-label=${meta.label} data-testid=${`image-tile-${imgKey}`}>
+    <div class=${`st-img__preview${imgKey === 'logo' ? ' is-logo' : ''}`} data-testid=${`setting-image-preview-${imgKey}`}>
+      ${failed
+        ? html`<span class="st-img__missing"><${Icon} name="image" size=${24} /><span>Not loading</span></span>`
+        : html`<img src=${src} alt=${`Preview: ${meta.alt}`} loading="lazy" decoding="async" referrerpolicy="no-referrer" onError=${() => setFailed(true)} />`}
+    </div>
+    <div class="st-img__fields">
+      <${EditField} id=${`setting-image-${imgKey}`} label=${meta.label} value=${stored} check=${urlCheck} commit=${commit}
+        hint=${isOriginal ? 'The photo from your current website' : 'Your own photo address'} inputProps=${{ type: 'url', inputmode: 'url', autocapitalize: 'none', autocomplete: 'off' }} />
+      ${isOriginal ? null : html`<${Button} size="sm" variant="ghost" icon="rotate-ccw" onClick=${() => commit('')} data-testid=${`setting-image-reset-${imgKey}`}>Back to the original<//>`}
+    </div>
+  <//>`;
+}
+
+function ImagesSection({ onSaved }) {
+  return html`<section class="db-section" id="st-images" aria-labelledby="st-img-title" data-testid="settings-images">
+    <h2 class="db-section__title" id="st-img-title">Website photos</h2>
+    <p class="st-intro">These are your own photos, linked from your current website. Paste a new web address to swap one, or clear it to go back. A real build stores your photos on its own hosting.</p>
+    <div class="st-imgs">${IMAGE_KEYS.map((k) => html`<${ImageTile} key=${k} imgKey=${k} onSaved=${onSaved} />`)}</div>
+  </section>`;
+}
+
+// ---------- Quote price list, terms and reply promise ----------
+
+const qtyCheck = (text) => (/^\d{1,3}$/.test(text) && Number(text) >= 1 ? '' : 'Enter a whole number from 1 to 999.');
+const requiredText = (text) => (text ? '' : "This can't be empty.");
+
+/** Replace one catalogue line (read fresh from the store, so a fast second edit never overwrites the first). */
+function patchItem(id, patch, onSaved) {
+  const items = getState().settings.quoteItems;
+  const res = updateSettings({ quoteItems: items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+  if (res.ok) { onSaved(); return ''; }
+  return typeof (res.errors && res.errors.quoteItems) === 'string' ? res.errors.quoteItems : FAIL_TEXT;
+}
+
+function QuoteItemRow({ item, open, onSaved, onRemove }) {
+  const per = item.unit === 'metre' ? 'per metre' : 'each';
+  return html`<details class="st-item" open=${open || undefined} data-testid=${`quote-item-${item.id}`}>
+    <summary class="st-item__sum">
+      <span class="st-item__text">
+        <span class="st-item__label">${item.label}</span>
+        <span class="st-item__sub u-tabular">${`${gbp(item.unitPrice)} ${per} · sample price${item.suggested ? ' · in new quotes' : ''}`}</span>
+      </span>
+      <${Icon} name="chevron-down" size=${20} class="st-item__chev" />
+    </summary>
+    <div class="st-item__body">
+      <${EditField} id=${`quote-item-label-${item.id}`} label="Name on the quote" value=${item.label} check=${requiredText}
+        commit=${(text) => patchItem(item.id, { label: text }, onSaved)} inputProps=${{ maxlength: 80 }} />
+      <${EditField} id=${`quote-item-detail-${item.id}`} label="Extra line (optional)" value=${item.detail || ''}
+        commit=${(text) => patchItem(item.id, { detail: text }, onSaved)} inputProps=${{ maxlength: 120 }} />
+      <div class="st-pair">
+        <${PriceField} id=${`quote-item-price-${item.id}`} label=${`Sample price (${per})`} ariaLabel=${`Price for ${item.label}`} value=${item.unitPrice}
+          commit=${(n) => patchItem(item.id, { unitPrice: n }, onSaved)} />
+        <${EditField} id=${`quote-item-qty-${item.id}`} label="Starts at (quantity)" value=${String(item.defaultQty)} check=${qtyCheck}
+          normalise=${(t) => String(parseInt(t, 10))} commit=${(text) => patchItem(item.id, { defaultQty: parseInt(text, 10) }, onSaved)}
+          inputProps=${{ inputmode: 'numeric', pattern: '[0-9]*' }} />
+      </div>
+      <${Field} label="Priced" id=${`quote-item-unit-${item.id}`}>
+        <${Select} id=${`quote-item-unit-${item.id}`} value=${item.unit} onChange=${(e) => { if (patchItem(item.id, { unit: e.target.value }, onSaved)) failToast(); }}
+          options=${[{ value: 'each', label: 'Each' }, { value: 'metre', label: 'Per metre' }]} />
+      <//>
+      <${Switch} id=${`quote-item-suggested-${item.id}`} checked=${!!item.suggested} label="Include in every new quote"
+        description="Switched off, it is still in the list when you build a quote."
+        onChange=${(c) => { if (patchItem(item.id, { suggested: c }, onSaved)) failToast(); }} data-testid=${`quote-item-suggested-${item.id}`} />
+      <${Button} variant="ghost" icon="trash-2" class="st-item__remove" onClick=${() => onRemove(item)} data-testid=${`quote-item-remove-${item.id}`}>Remove from the list<//>
+    </div>
+  </details>`;
+}
+
+function NotesField({ onSaved }) {
+  const q = useStore(selectQuoteDefaults);
+  const [text, setText] = useState(q.notes);
+  const [error, setError] = useState('');
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setText(q.notes); }, [q.notes]);
+  const save = () => {
+    focused.current = false;
+    if (text.trim() === q.notes) return;
+    const res = updateSettings({ quoteDefaults: { notes: text } });
+    if (res.ok) { setError(''); onSaved(); } else setError((res.errors && res.errors.notes) || FAIL_TEXT);
+  };
+  return html`<${Field} label="Terms on every quote" id="setting-quote-notes" error=${error}
+    hint="Sample wording. Replace it with your own terms: payment, validity, what is not included.">
+    <${Textarea} id="setting-quote-notes" rows=${5} maxlength="1500" value=${text} onInput=${(e) => setText(e.target.value)}
+      onFocus=${() => { focused.current = true; }} onBlur=${save} data-testid="setting-quote-notes" />
+  <//>`;
+}
+
+function QuotesSection({ onSaved }) {
+  const items = useStore(selectItems);
+  const defaults = useStore(selectQuoteDefaults);
+  const replyHours = useStore(selectReplyHours);
+  const [openId, setOpenId] = useState('');
+  const [removing, setRemoving] = useState(null);
+
+  const add = () => {
+    const before = getState().settings.quoteItems;
+    const res = updateSettings({ quoteItems: [...before, { label: 'New item', detail: '', unit: 'each', unitPrice: 0, defaultQty: 1, kind: 'extra', suggested: false }] });
+    if (!res.ok) { failToast(); return; }
+    onSaved();
+    const added = res.settings.quoteItems[res.settings.quoteItems.length - 1];
+    if (added) setOpenId(added.id);
+  };
+  const remove = () => {
+    const item = removing;
+    setRemoving(null);
+    if (!item) return;
+    const before = getState().settings.quoteItems;
+    const res = updateSettings({ quoteItems: before.filter((it) => it.id !== item.id) });
+    if (!res.ok) { failToast(); return; }
+    onSaved();
+    toast({ message: `${item.label} removed from your price list.`, actionLabel: 'Undo', onAction: () => { updateSettings({ quoteItems: before }); onSaved(); } });
+  };
+  const setSla = (e) => {
+    const res = updateSettings({ sla: { replyHours: Number(e.target.value) } });
+    if (res.ok) onSaved(); else failToast();
+  };
+  const hours = [2, 4, 8, 12, 24, 48, 72];
+  if (!hours.includes(replyHours)) hours.push(replyHours);
+  hours.sort((a, b) => a - b);
+
+  return html`<section class="db-section" id="st-quotes" aria-labelledby="st-quote-title" data-testid="settings-quotes">
+    <h2 class="db-section__title" id="st-quote-title">Quotes and replies</h2>
+    <${Card} class="db-stack">
+      <h3 class="st-card-title">Quote price list</h3>
+      <p class="st-note"><${SampleTag} /> These prices are examples, not yours. Replace them with your own before you send a real quote. The quote builder starts from this list.</p>
+      <div class="st-items" data-testid="quote-items">
+        ${items.length === 0 ? html`<p class="st-dayoff-empty st-items__empty">No items yet. Add your first one below and the quote builder will offer it.</p>` : null}
+        ${items.map((it) => html`<${QuoteItemRow} key=${it.id} item=${it} open=${openId === it.id} onSaved=${onSaved} onRemove=${setRemoving} />`)}
+      </div>
+      <${Button} icon="plus" onClick=${add} data-testid="quote-item-add">Add an item<//>
+    <//>
+
+    <${Card} class="db-stack st-quote-terms">
+      <h3 class="st-card-title">Quote terms</h3>
+      <${EditField} id="setting-quote-valid-days" label="Quotes are valid for (days)" value=${defaults.validDays}
+        check=${(t) => (/^\d{1,3}$/.test(t) && Number(t) >= 1 && Number(t) <= 365 ? '' : 'Enter a whole number of days from 1 to 365.')}
+        normalise=${(t) => String(parseInt(t, 10))} commit=${(t) => {
+          const res = updateSettings({ quoteDefaults: { validDays: parseInt(t, 10) } });
+          if (res.ok) { onSaved(); return ''; }
+          return (res.errors && res.errors.validDays) || FAIL_TEXT;
+        }} inputProps=${{ inputmode: 'numeric', pattern: '[0-9]*' }} />
+      <${NotesField} onSaved=${onSaved} />
+    <//>
+
+    <${Card} class="db-stack st-quote-terms">
+      <h3 class="st-card-title">Reply promise</h3>
+      <${Field} label="You reply to a new enquiry within" id="setting-sla-hours"
+        hint="Customers are told this in their messages, and Today counts down against it.">
+        <${Select} id="setting-sla-hours" value=${String(replyHours)} onChange=${setSla} data-testid="setting-sla-hours"
+          options=${hours.map((h) => ({ value: String(h), label: `${h} ${h === 1 ? 'hour' : 'hours'}` }))} />
+      <//>
+    <//>
+
+    <${ConfirmDialog} open=${!!removing} title="Remove this item?" confirmLabel="Remove" tone="danger"
+      body=${removing ? `${removing.label} leaves your price list. Quotes you have already written keep their own lines.` : ''}
+      onConfirm=${remove} onCancel=${() => setRemoving(null)} />
+  </section>`;
+}
+
+// ---------- jump links ----------
+
+const JUMPS = [
+  { id: 'st-biz-title', label: 'Business' },
+  { id: 'st-img-title', label: 'Photos' },
+  { id: 'st-svc-title', label: 'Services' },
+  { id: 'st-quote-title', label: 'Quotes' },
+  { id: 'st-avail-title', label: 'Hours' },
+  { id: 'st-rules-title', label: 'Rules' }
+];
+
+function jumpTo(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+}
+
 // ---------- the page ----------
 
 export default function SettingsView() {
@@ -376,8 +583,13 @@ export default function SettingsView() {
       <span class=${`st-saved${saved ? ' is-visible' : ''}`} role="status" data-testid="setting-saved">${saved ? html`<${Icon} name="check" size=${18} /><span>Saved</span>` : null}</span>
     </div>
     <${PageHeader} title="Settings" subtitle="Changes save as you go and show on your website straight away." />
+    <div class="st-jump" role="group" aria-label="Jump to a section" data-testid="settings-jump">
+      ${JUMPS.map((j) => html`<${Chip} key=${j.id} onClick=${() => jumpTo(j.id)}>${j.label}<//>`)}
+    </div>
     <${BusinessSection} onSaved=${flash} />
+    <${ImagesSection} onSaved=${flash} />
     <${ServicesSection} onSaved=${flash} />
+    <${QuotesSection} onSaved=${flash} />
     <${AvailabilitySection} onSaved=${flash} />
     <${RulesSection} onSaved=${flash} />
   </div>`;

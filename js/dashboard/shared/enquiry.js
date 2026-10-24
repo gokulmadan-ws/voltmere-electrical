@@ -1,16 +1,18 @@
 // js/dashboard/shared/enquiry.js: enquiry helpers shared by the owner views (answer chips, status wording, price text, quote progress).
-// Owner: E2
+// Owner: E3 (v1 by E2)
 import { html } from '../../vendor/preact-htm.js';
 import { Chip, Icon, StatusPill, cx, loadCss } from '../../ui/index.js';
 import { ENQUIRY_ANSWER_KEYS, answerLabel } from '../../core/config.js';
 import { gbp, isValidPostcode, normalisePostcode } from '../../core/format.js';
-import { customerKeyOf } from '../../core/selectors.js';
+import { quoteStatus, selectJourney } from '../../core/selectors.js';
 
 // The enquiry styles (en-*) live in bookings.css; every owner view that shows an enquiry imports this file.
 if (typeof document !== 'undefined') loadCss('css/bookings.css');
 
 /** The free survey visit booked from the website funnel. */
 export const isEnquiry = (b) => !!b && b.serviceId === 'ev_quote';
+/** An install made by a customer accepting a quote (it carries the quote id). */
+export const isQuotedInstall = (b) => !!b && b.serviceId === 'ev' && !!b.quoteId;
 /** A survey visit the engine pencilled in; the owner's Confirm (or a reschedule) clears it in core. */
 export const isPencilled = (b) => !!b && b.tentative === true && b.status !== 'cancelled' && b.status !== 'done';
 
@@ -65,12 +67,17 @@ export function answerSummaryText(b) {
  * "Pencilled in" pill; everything else is the kit's StatusPill unchanged (`rest` goes on the main pill).
  */
 export function BookingPill({ booking: b, compact, urgentTestid, ...rest }) {
-  if (!isEnquiry(b)) return html`<${StatusPill} status=${b.status} paid=${b.paid} urgent=${b.urgent} urgentTestid=${urgentTestid} compact=${compact} ...${rest} />`;
+  const quotedNew = isQuotedInstall(b) && b.status === 'new';
+  if (!isEnquiry(b) && !quotedNew) return html`<${StatusPill} status=${b.status} paid=${b.paid} urgent=${b.urgent} urgentTestid=${urgentTestid} compact=${compact} ...${rest} />`;
   if (b.status !== 'new') return html`<${StatusPill} status=${b.status} paid=${true} compact=${compact} ...${rest} />`;
   const pencil = isPencilled(b);
-  const main = html`<span class=${cx('ui-pill', 'ui-pill--new', compact && 'ui-pill--compact')} ...${rest}>
-    <${Icon} name="bell" size=${16} /><span class="ui-pill__label">New enquiry</span>
-  </span>`;
+  const main = quotedNew
+    ? html`<span class=${cx('ui-pill', 'ui-pill--confirmed', compact && 'ui-pill--compact')} ...${rest}>
+        <${Icon} name="badge-check" size=${16} /><span class="ui-pill__label">Quote accepted</span>
+      </span>`
+    : html`<span class=${cx('ui-pill', 'ui-pill--new', compact && 'ui-pill--compact')} ...${rest}>
+        <${Icon} name="bell" size=${16} /><span class="ui-pill__label">New enquiry</span>
+      </span>`;
   if (!pencil) return main;
   return html`<span class="ui-pill-group">${main}
     <span class=${cx('ui-pill', 'ui-pill--on-the-way', 'en-pencil', compact && 'ui-pill--compact')} data-testid="pencilled-pill">
@@ -87,15 +94,24 @@ export function priceLabel(b) {
   return gbp(amount);
 }
 
-/** Where a survey visit has got to: has the quote-ready message gone, and is there an install booked for the customer. */
+/**
+ * Where an enquiry has got to: its latest quote (effective status), whether it went out, and the install booking made from it.
+ * `quote` and `install` are frozen store records or null; `quoteSent` and `installBooked` keep their v2 meaning.
+ */
 export function quoteProgress(state, b) {
-  if (!isEnquiry(b)) return { quoteSent: false, installBooked: false };
-  const key = customerKeyOf(b.customer.phone);
+  const none = { quoteSent: false, installBooked: false, quote: null, quoteState: null, install: null };
+  if (!isEnquiry(b)) return none;
+  const journey = selectJourney(state, b.id);
+  const quote = journey ? journey.quote : null;
+  const install = journey ? journey.install : null;
+  const quoteState = quote ? quoteStatus(quote) : null;
+  const legacySent = state.messages.some((m) => m.bookingId === b.id && m.kind === 'customer_quote_ready');
   return {
-    quoteSent: state.messages.some((m) => m.bookingId === b.id && m.kind === 'customer_quote_ready'),
-    installBooked: state.bookings.some((x) => x.serviceId === 'ev' && x.status !== 'cancelled' && customerKeyOf(x.customer.phone) === key)
+    quoteSent: legacySent || (!!quote && quote.status !== 'draft'),
+    installBooked: !!install && install.status !== 'cancelled',
+    quote, quoteState, install
   };
 }
 
 /** The word for a pending item: "enquiry" for the website funnel, "request" for anything else. */
-export const pendingWord = (b) => (isEnquiry(b) ? 'enquiry' : 'request');
+export const pendingWord = (b) => (isEnquiry(b) ? 'enquiry' : isQuotedInstall(b) ? 'install' : 'request');

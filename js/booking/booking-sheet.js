@@ -1,6 +1,6 @@
 // js/booking/booking-sheet.js: BookingSheet, the booking frame: customer mode = the 6-step quote funnel (hash driven), owner mode = phone-job steps.
-// Owner: WP3, rebuilt for the quote funnel by D2
-import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+// Owner: WP3, rebuilt for the quote funnel by D2, step history, motion and announcements by D3
+import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Sheet, Icon, IconButton, useStore, useNow, loadCss, cx } from '../ui/index.js';
 import { getState } from '../core/store.js';
 import { selectBrand, selectService, selectCustomerByKey, selectBookingByRef } from '../core/selectors.js';
@@ -8,7 +8,10 @@ import { isSlotFree, nextFreeSlots } from '../core/availability.js';
 import { SOURCES, WINDOWS } from '../core/config.js';
 import { SAMPLE_CUSTOMER } from '../core/seed.js';
 import { isValidPostcode } from '../core/format.js';
-import { goBooking, closeBooking, useBookRoute } from './nav.js';
+import {
+  goBooking, closeBooking, useBookRoute, pushFunnelStep, replaceFunnelStep, backFunnelSteps, syncFunnelHistory, finishFunnel,
+  funnelHistoryStep, isUnwinding
+} from './nav.js';
 import { loadDraft, saveDraft } from './draft.js';
 import { HelpLine } from './bk-shared.js';
 import { ServiceStep } from './service-step.js';
@@ -97,20 +100,19 @@ function initialForm(ownerMode, intent, route, draft) {
   return f;
 }
 
-/** The funnel header: Back (steps 2 to 6), "Step N of 6", Close, and a slim progress bar. */
+/** The funnel header: Back (steps 2 to 6), "Step N of 6", Close, and a six-segment progress bar that fills as the steps go by. */
 function FunnelHeader({ step, onBack, onClose }) {
-  const pct = Math.round((step / FUNNEL_TOTAL) * 100);
   return html`<div class="bk-header bk-header--fn">
     <div class="bk-header__row bk-header__row--fn">
       ${step > 1
     ? html`<button type="button" class="bk-fn-back" onClick=${onBack} data-testid="booking-back"><${Icon} name="chevron-left" size=${20} /><span>Back</span></button>`
     : html`<span class="bk-header__spacer" aria-hidden="true"></span>`}
-      <p class="bk-header__step" data-testid="funnel-step-label">Step ${step} of ${FUNNEL_TOTAL}</p>
+      <p class="bk-header__step" data-testid="funnel-step-label">Step <span class="bk-header__num" key=${step}>${step}</span> of ${FUNNEL_TOTAL}</p>
       <${IconButton} icon="x" label="Close" size="lg" onClick=${onClose} data-testid="booking-close" />
     </div>
     <div class="bk-fn-progress" data-testid="booking-progress" role="progressbar" aria-label="Quote progress" aria-valuemin="1" aria-valuemax=${FUNNEL_TOTAL}
       aria-valuenow=${step} aria-valuetext=${`Step ${step} of ${FUNNEL_TOTAL}`}>
-      <span class="bk-fn-progress__bar" style=${{ width: `${pct}%` }}></span>
+      ${Array.from({ length: FUNNEL_TOTAL }, (_, i) => html`<span key=${i} class=${cx('bk-fn-progress__seg', i < step && 'is-done', i === step - 1 && 'is-current')}></span>`)}
     </div>
   </div>`;
 }
@@ -181,6 +183,7 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
   });
   const [answers, setAnswers] = useState(() => (draft0 && draft0.serviceId === FUNNEL_SERVICE_ID ? { ...draft0.answers } : {}));
   const [fstepRaw, setFstep] = useState(() => (draft0 && draft0.serviceId === FUNNEL_SERVICE_ID ? draft0.step : 1));
+  const [dir, setDir] = useState('none'); // which way the funnel just moved: 'fwd' | 'back' | 'none' (first paint, restore)
   const [banner, setBanner] = useState(null);
   const [shown, setShown] = useState(() => new Set());
   const [submitting, setSubmitting] = useState(false);
@@ -191,10 +194,42 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
 
   // The funnel never lets the customer past a step whose answer is missing (a stale draft, a hand-edited URL).
   const fstep = Math.max(1, Math.min(fstepRaw, funnelAllowedStep(form.postcode, answers)));
-  const fn = {
-    step: fstep, setStep: (n) => { setBanner(null); setFstep(n); }, answers,
-    setAnswer: (key, value) => setAnswers((prev) => ({ ...prev, [key]: value }))
+  const fstepRef = useRef(fstep);
+  fstepRef.current = fstep;
+  const inFunnel = funnel && !ownerMode;
+  const inFunnelRef = useRef(inFunnel);
+  inFunnelRef.current = inFunnel;
+
+  // Every funnel step is a history entry (nav.js), so the phone's Back goes one step back. Forward pushes, Back walks the
+  // history (the popstate listener below applies the step); with no earlier entry (a restored draft) it moves in place.
+  const setStep = (n) => {
+    setBanner(null);
+    if (n === fstep) return;
+    if (!inFunnel) { setFstep(n); return; }
+    if (n > fstep) { setDir('fwd'); pushFunnelStep(n); setFstep(n); return; }
+    setDir('back');
+    if (!backFunnelSteps(fstep - n)) { replaceFunnelStep(n); setFstep(n); }
   };
+  const fn = { step: fstep, setStep, dir, answers, setAnswer: (key, value) => setAnswers((prev) => ({ ...prev, [key]: value })) };
+
+  // Keep the history in step with what is on screen whenever the funnel (re)opens: a refresh, a deep link with a saved draft, a restart.
+  useLayoutEffect(() => {
+    if (inFunnelRef.current) syncFunnelHistory(fstepRef.current);
+  }, [inFunnel]);
+  // The browser's Back and Forward buttons (and swipe gestures) move between funnel steps; the entry's step number is the truth.
+  // A layout effect, so the listener is on before the first paint: a very quick Back after a refresh must not be missed.
+  useLayoutEffect(() => {
+    const onPop = () => {
+      if (!inFunnelRef.current || isUnwinding()) return;
+      const s = funnelHistoryStep();
+      if (!s || s === fstepRef.current) return;
+      setDir(s > fstepRef.current ? 'fwd' : 'back');
+      setBanner(null);
+      setFstep(s);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const go = (opts = {}) => {
     // A new service resets the size (variants belong to a service). The picked day and window stay: they are re-checked
@@ -235,11 +270,17 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
   };
 
   const onSuccess = (booking) => {
-    setFormState({ ...EMPTY_FORM, source: form.source });
-    setPickState(EMPTY_PICK);
-    setAnswers({});
-    setFstep(1);
-    if (ownerMode) { if (onBooked) onBooked(booking); } else go({ bookedRef: booking.ref });
+    const reset = () => {
+      setFormState({ ...EMPTY_FORM, source: form.source });
+      setPickState(EMPTY_PICK);
+      setAnswers({});
+      setFstep(1);
+      setDir('none');
+    };
+    if (ownerMode) { reset(); if (onBooked) onBooked(booking); return; }
+    // The funnel's step entries collapse first, so the phone's Back from the confirmation leaves the sheet instead of reopening step 5.
+    if (funnel) finishFunnel({ bookedRef: booking.ref }, reset);
+    else { reset(); go({ bookedRef: booking.ref }); }
   };
 
   const ctx = {
@@ -331,7 +372,10 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
     : html`<div class="bk-ribbon"><span class="bk-ribbon__tag">Prototype</span>${fillBtn || html`<span class="bk-ribbon__text">Sample data, nothing is really sent</span>`}</div>`;
   const showHelp = step === 'funnel' ? fstep === 1 : (!ownerMode && step !== 'confirmation' && step !== 'manage');
 
+  // Screen readers hear "Step 3 of 6" on every step change (focus moves to the new heading as well).
+  const announce = step === 'funnel' && svc && svc.active ? `Step ${fstep} of ${FUNNEL_TOTAL}` : '';
   const content = html`<div class=${cx('bk', page ? 'bk--page' : 'bk--sheet')} data-step=${step}>
+    <div class="u-sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="funnel-announce">${announce}</div>
     ${ribbon}
     ${body}
     ${showHelp ? html`<${HelpLine} brand=${brand} />` : null}

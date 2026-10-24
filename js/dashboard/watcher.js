@@ -1,5 +1,5 @@
 // js/dashboard/watcher.js: new-booking announcements (toasts) and the "(n)" document title prefix.
-// Owner: WP2 (wording for quote-led enquiries by role B2)
+// Owner: B3 (was WP2; wording for quote-led enquiries by role B2; richer non-blocking toast by B3)
 import { useEffect, useRef } from '../vendor/preact-htm.js';
 import { getState } from '../core/store.js';
 import { selectUnseenBookings } from '../core/selectors.js';
@@ -30,12 +30,34 @@ const viewBooking = (id) => () => navigate(routeHref('bookings', { id }));
 // A website enquiry for the free survey and quote (service "ev_quote") is an enquiry, not a booking.
 const isEnquiry = (b) => b && b.serviceId === 'ev_quote';
 
+// Where the lead came from (booking.utm, set by the landing page from the ad link; ids and labels as in the core's LEAD_SOURCES).
+// Unknown or "other" sources are not guessed at: the toast just leaves the source out.
+const SOURCE_LABEL = { facebook: 'Facebook', instagram: 'Instagram', google: 'Google', referral: 'Word of mouth', phone: 'Phone' };
+const sourceOf = (b) => {
+  const utm = b && b.utm;
+  if (!utm || typeof utm.source !== 'string') return '';
+  if (utm.medium === 'webhook') return 'Website form (test)';
+  return SOURCE_LABEL[utm.source.toLowerCase()] || '';
+};
+
+/** The reply promise from Settings (24 hours by default), when the core has one. */
+function replyPromise() {
+  try {
+    const sla = getState().settings.sla;
+    const hours = sla && Number(sla.replyHours);
+    return hours > 0 ? `Reply within ${hours} hours` : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 function announceSummary(list) {
   const n = list.length;
   const word = list.every(isEnquiry) ? 'enquir' : 'booking';
   const noun = word === 'booking' ? (n === 1 ? 'booking' : 'bookings') : (n === 1 ? 'enquiry' : 'enquiries');
   toast({
     message: `${n} new ${noun} since you last looked`,
+    icon: 'inbox',
     actionLabel: 'View',
     duration: 8000,
     onAction: n === 1 ? viewBooking(list[0].id) : () => navigate(routeHref('bookings', {}, { f: 'new' }))
@@ -45,17 +67,22 @@ function announceSummary(list) {
 function announceArrival(booking) {
   const name = firstName((booking.customer && booking.customer.name) || '') || 'a customer';
   if (booking.urgent) {
-    toast({ message: `URGENT request: ${name}`, tone: 'danger', actionLabel: 'View', onAction: viewBooking(booking.id) });
+    toast({ message: `URGENT request: ${name}`, icon: 'siren', tone: 'danger', actionLabel: 'View', onAction: viewBooking(booking.id) });
     return;
   }
   if (isEnquiry(booking)) {
     const postcode = (booking.address && booking.address.postcode) || '';
-    toast({ message: postcode ? `New enquiry: ${name}, ${postcode}` : `New enquiry: ${name}`, actionLabel: 'View', onAction: viewBooking(booking.id) });
+    const detail = [sourceOf(booking), replyPromise()].filter(Boolean).join(' · ');
+    toast({
+      message: postcode ? `New enquiry: ${name}, ${postcode}` : `New enquiry: ${name}`,
+      detail: detail || undefined, icon: 'bell-ring', duration: 9000,
+      actionLabel: 'View', onAction: viewBooking(booking.id)
+    });
     return;
   }
   let when = '';
   try { when = bookingWhen(booking); } catch (e) { /* keep the toast even if the time cannot be described */ }
-  toast({ message: when ? `New booking: ${name}, ${when}` : `New booking: ${name}`, actionLabel: 'View', onAction: viewBooking(booking.id) });
+  toast({ message: when ? `New booking: ${name}, ${when}` : `New booking: ${name}`, icon: 'calendar-check', actionLabel: 'View', onAction: viewBooking(booking.id) });
 }
 
 /**

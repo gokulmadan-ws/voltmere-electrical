@@ -1,5 +1,5 @@
 /* css/base.css: reset, typography, utilities (u-*), focus ring, safe areas, reduced motion.
-   Owner: WP2; re-skinned for 180 Electrical by role B2 (Inter body, Manrope tight heavy headlines) */
+   Owner: B3 (was WP2); re-skinned for 180 Electrical by role B2 (Inter body, Manrope tight heavy headlines); selection, caret and focus tokens by B3 */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -7,6 +7,8 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  accent-color: var(--cta);          /* native checkboxes, radios, ranges and date pickers pick up the brand */
+  scrollbar-color: var(--field-border) transparent;
   /* Only .is-scroll-locked may set overflow on html (a sheet is open). Never overflow-x: hidden. */
 }
 html.is-scroll-locked { overflow: hidden; }
@@ -74,10 +76,14 @@ a, button, [role="button"], [role="switch"], [role="radio"], input, select, text
 /* Every scrolling panel keeps its scroll to itself. */
 .u-scroll-contain { overscroll-behavior: contain; }
 
+/* ---- Selection and caret: brand red tint, readable in both themes ---- */
+::selection { background: var(--selection-bg); color: var(--selection-fg); }
+input, textarea { caret-color: var(--cta-text); }
+
 /* ---- Focus ring: 3px, 2px offset, on every interactive element, never removed ---- */
 :focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
+  outline: var(--focus-width, 3px) solid var(--focus);
+  outline-offset: var(--focus-offset, 2px);
 }
 /* On the black panels the light-mode blue ring is too weak, so use the white ring there (4.3). */
 .u-on-panel :focus-visible,
@@ -125,4 +131,9 @@ h1[tabindex="-1"]:focus, h1[tabindex="-1"]:focus-visible,
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
   .ui-btn, .ui-chip, .ui-card, .ui-input, .ui-select, .ui-textarea, .ui-pill { border: 1.5px solid ButtonText; }
+  /* V3 kit: containers keep their edges; fills and indicators use the system highlight so progress is still visible */
+  .ui-conn, .ui-sim, .ui-disclosure, .ui-table, .ui-kv, .ui-money, .ui-copy__input, .ui-code { border: 1.5px solid ButtonText; }
+  .ui-meter__fill, .ui-wizard__fill, .ui-tabs__indicator, .db-tabbar__indicator::before { background: Highlight; forced-color-adjust: none; }
+  .ui-ring__fill { stroke: Highlight; } .ui-ring__track { stroke: GrayText; }
+  .ui-dot { forced-color-adjust: none; }
 }

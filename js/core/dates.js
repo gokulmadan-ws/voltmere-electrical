@@ -101,6 +101,24 @@ export function addMinutes(stamp, n) {
   return toStamp(d);
 }
 
+/** Stamp with seconds ('YYYY-MM-DDTHH:mm:ss') -> Date (local). A plain Stamp is read as :00. */
+export function parseStampSec(stamp) {
+  const s = String(stamp);
+  const [y, mo, d] = s.slice(0, 10).split('-').map(Number);
+  const [h, mi, sec] = s.slice(11, 19).split(':').map(Number);
+  return new Date(y, mo - 1, d, h || 0, mi || 0, sec || 0, 0);
+}
+
+/** Date -> 'YYYY-MM-DDTHH:mm:ss' (local). */
+export function toStampSec(date) {
+  return `${toStamp(date)}:${pad2(date.getSeconds())}`;
+}
+
+/** Integer real seconds from seconds-stamp a to seconds-stamp b (negative when b is earlier). */
+export function secondsBetween(a, b) {
+  return Math.round((parseStampSec(b).getTime() - parseStampSec(a).getTime()) / 1000);
+}
+
 /** Integer real minutes from stamp a to stamp b (negative when b is earlier). */
 export function minutesBetween(a, b) {
   return Math.round((parseStamp(b).getTime() - parseStamp(a).getTime()) / 60000);

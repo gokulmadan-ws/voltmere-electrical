@@ -1,5 +1,5 @@
 // js/dashboard/views/customers.js: Customers list and detail, derived from bookings by phone number (never stored).
-// Owner: WP7, enquiry wording by E2
+// Owner: E3 (v1 by WP7, enquiry wording by E2)
 import { html, useMemo, useState } from '../../vendor/preact-htm.js';
 import {
   Avatar, Button, Card, Chip, EmptyState, Icon, Input, PageHeader, Segmented, Stat,
@@ -21,7 +21,8 @@ export const css = ['css/insights.css'];
 const selectState = (state) => state;
 
 const VIEW_OPTIONS = [
-  { value: 'bookings', label: 'Bookings', testid: 'bookings-view-bookings' },
+  { value: 'list', label: 'List', testid: 'bookings-view-bookings' },
+  { value: 'pipeline', label: 'Pipeline', testid: 'bookings-view-pipeline' },
   { value: 'customers', label: 'Customers', testid: 'bookings-view-customers' }
 ];
 
@@ -47,7 +48,7 @@ function lastLabel(c) {
 function ViewToggle() {
   return html`<${Segmented}
     options=${VIEW_OPTIONS} value="customers" ariaLabel="Show bookings or customers"
-    onChange=${(v) => { if (v === 'bookings') navigate(routeHref('bookings')); }}
+    onChange=${(v) => { if (v === 'list') navigate(routeHref('bookings')); else if (v === 'pipeline') navigate(routeHref('pipeline')); }}
     data-testid="bookings-view-toggle" />`;
 }
 

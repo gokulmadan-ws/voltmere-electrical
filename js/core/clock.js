@@ -61,6 +61,12 @@ export function nowStamp() {
   return stampOf(now());
 }
 
+/** Seconds-precision stamp ('YYYY-MM-DDTHH:mm:ss') of now(). Only the simulated connection delays use it (never stored as epoch ms). */
+export function nowStampSec() {
+  const d = now();
+  return `${stampOf(d)}:${pad2(d.getSeconds())}`;
+}
+
 /** DayKey ('YYYY-MM-DD') of now(). */
 export function todayKey() {
   return nowStamp().slice(0, 10);

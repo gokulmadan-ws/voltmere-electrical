@@ -1,19 +1,26 @@
 // js/core/store.js: the persisted store (localStorage with memory fallback), every mutation, cross-tab sync and undo
-// Owner: WP1
+// Owner: WP1 (v1), A3 (v3 additions: quotes, connections, marketing, photos, storage guard)
 import {
-  EMERGENCY_REASONS, HALF_DAY_STARTS, KIND_LABELS, PAID_METHODS, PROMISES, SCHEMA_VERSION, SOURCES, STORAGE_KEYS, WINDOWS,
-  makeDefaultBusiness, makeDefaultSettings, normaliseAnswers
+  AD_CHANNELS, DEFAULT_IMAGES, EMERGENCY_REASONS, HALF_DAY_STARTS, IMAGE_KEYS, KIND_LABELS, PAID_METHODS, PROMISES, QUOTE_VIA, SCHEMA_VERSION,
+  SOURCES, STORAGE_KEYS, WHATSAPP_DEMO_CODE, WHATSAPP_TEMPLATE_KINDS, WINDOWS,
+  chargerItemId, makeChargerItem, makeDefaultBusiness, makeDefaultConnections, makeDefaultQuoteItems, makeDefaultSettings, normaliseAnswers
 } from './config.js';
-import { now, nowStamp, todayKey } from './clock.js';
+import { now, nowStamp, nowStampSec, todayKey } from './clock.js';
 import { addDays, addMinutes, isDayKey, makeStamp, stampDay } from './dates.js';
 import { bookingWindowIds, bookingWhen, isSlotFree, isUnscheduled, nextFreeSlot, nextFreeSlots, occupiedBy } from './availability.js';
 import {
   makeId, normaliseDemoPhone, normalisePhone, normalisePostcode, postcodeZone,
   validateLine1, validateName, validatePhone, validatePostcode
 } from './format.js';
-import { buildMessage, messageIsScheduled, reminderSendAt } from './messages.js';
+import { buildMessage, buildSystemMessage, messageIsScheduled, reminderSendAt } from './messages.js';
 import { buildSeed, SIM_POOL } from './seed.js';
 import { isWithinChangeCutoff, quotedPriceFor } from './selectors.js';
+import { defaultQuoteLines, latestQuoteFor, normaliseQuoteItems, normaliseQuoteLines, quoteStatus, quoteTotal, quoteUrl } from './quotes.js';
+import {
+  GCAL_GROUP_ID, domainRecords, isValidEmail, normaliseWhatsAppNumber, settleConnectionsIn, simulatedBusyBlocks, validateConnectionPatch, validateHostname
+} from './connections.js';
+import { PHOTO_LIMITS, normalisePhotos, validatePhoto } from './photos.js';
+import { normaliseUtm } from './utm.js';
 
 // ---------- module state ----------
 
@@ -25,8 +32,10 @@ let listenersInstalled = false;
 const subscribers = new Set();
 const tokens = new Map(); // undo tokens live in memory only (max 20)
 const MAX_TOKENS = 20;
-// A missing migration discards the (demo) data and reseeds. v1 -> v2 is the move to the 180 Electrical model (see migrateV1).
-const MIGRATIONS = { 1: (old) => migrateV1(old) };
+// A missing migration discards the (demo) data and reseeds. v1 -> v2 is the move to the 180 Electrical model (see migrateV1);
+// v2 -> v3 adds quotes, the pipeline settings and the simulated connections (see migrateV2).
+const MIGRATIONS = { 1: (old) => migrateV1(old), 2: (old) => migrateV2(old) };
+const settleTimers = new Set(); // real-time timers that finish a simulated delay (cleared by initStore({ force }))
 
 const fail = (reason, extra = {}) => ({ ok: false, reason, ...extra });
 
@@ -88,7 +97,11 @@ function looksValid(st) {
     && Array.isArray(st.settings.services) && Array.isArray(st.settings.hours)
     && Array.isArray(st.settings.daysOff) && Array.isArray(st.settings.fullDays)
     && !!st.meta && typeof st.meta === 'object' && Number.isFinite(st.meta.rev) && Number.isFinite(st.meta.msgSeq)
-    && Number.isFinite(st.refSeq) && typeof st.seededFor === 'string';
+    && Number.isFinite(st.refSeq) && typeof st.seededFor === 'string'
+    && !!st.quotes && typeof st.quotes === 'object' && !Array.isArray(st.quotes)
+    && !!st.settings.sla && !!st.settings.marketing && Array.isArray(st.settings.marketing.adSpend)
+    && Array.isArray(st.settings.quoteItems) && !!st.settings.quoteDefaults
+    && !!st.settings.connections && !!st.settings.connections.whatsapp && !!st.settings.connections.domain;
 }
 
 // An older "v1" state (the generic electrician, or the first 180 rebrand) gains the new fields and services. Demo records
@@ -137,6 +150,34 @@ function migrateV1(old) {
   return next;
 }
 
+// A v2 state gains the v3 fields with defaults. The old demo records (seed: true) are dropped and seededFor is cleared so the next
+// load seeds the v3 demo around whatever the owner or a customer made. Everything the person set is kept.
+function migrateV2(old) {
+  const next = clone(old);
+  const base = makeDefaultSettings();
+  const settings = next.settings && typeof next.settings === 'object' ? next.settings : {};
+  const biz = settings.business && typeof settings.business === 'object' ? settings.business : {};
+  settings.business = {
+    ...base.business,
+    ...biz,
+    address: typeof biz.address === 'string' ? biz.address : '',
+    images: { ...base.business.images, ...(biz.images && typeof biz.images === 'object' ? biz.images : {}) }
+  };
+  settings.sla = settings.sla && Number.isInteger(settings.sla.replyHours) ? settings.sla : base.sla;
+  settings.marketing = { adSpend: [] };
+  settings.quoteDefaults = base.quoteDefaults;
+  settings.quoteItems = makeDefaultQuoteItems(Array.isArray(settings.business.brands) ? settings.business.brands : base.business.brands);
+  settings.connections = makeDefaultConnections();
+  next.settings = settings;
+  next.quotes = {};
+  next.bookings = (Array.isArray(next.bookings) ? next.bookings : []).filter((b) => b && !b.seed);
+  next.blocks = (Array.isArray(next.blocks) ? next.blocks : []).filter((b) => b && !b.seed);
+  next.messages = (Array.isArray(next.messages) ? next.messages : []).filter((m) => m && !m.seed).map((m) => ({ ...m, channel: m.channel === 'email' ? 'email' : 'whatsapp' }));
+  next.seededFor = '';
+  next.v = 3;
+  return next;
+}
+
 /** Parse + migrate + validate. Returns a State or null (garbage, newer schema, missing migration). */
 function parseState(raw) {
   let parsed;
@@ -154,16 +195,26 @@ function parseState(raw) {
   return looksValid(parsed) ? parsed : null;
 }
 
-function persist(st) {
+function isQuotaError(e) {
+  return !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014 || /quota/i.test(String(e.message || '')));
+}
+
+/**
+ * Write the whole state. Returns 'full' (and writes nothing) when the browser refuses because of its quota, so a failed write can
+ * never leave the saved state half-written; a storage that is blocked outright drops to memory mode as before.
+ */
+function writeState(st) {
   const json = JSON.stringify(st);
   if (mode === 'local' && storage) {
     try {
       storage.setItem(STORAGE_KEYS.state, json);
     } catch (e) {
-      mode = 'memory'; // quota or a blocked write: carry on in memory for the rest of the page's life
+      if (isQuotaError(e) || canWrite(storage)) return 'full'; // too big for the quota (a small write still works)
+      mode = 'memory'; // a blocked write: carry on in memory for the rest of the page's life
     }
   }
   lastRaw = json;
+  return 'ok';
 }
 
 // ---------- seeding and rollover ----------
@@ -177,6 +228,7 @@ function freshState(theme) {
   if (theme) settings.theme = theme;
   const seed = buildSeed(now(), settings);
   const top = maxSeq(seed.messages);
+  settings.marketing.adSpend = seed.adSpend;
   return {
     v: SCHEMA_VERSION,
     seededFor: todayKey(),
@@ -185,8 +237,30 @@ function freshState(theme) {
     bookings: seed.bookings,
     blocks: seed.blocks,
     messages: seed.messages,
+    quotes: seed.quotes,
     meta: { rev: 1, msgSeq: top, messagesSeenSeq: top, simCursor: 0 }
   };
+}
+
+// Demo ad spend (seed: true) is swapped for a fresh set; entries a person made win over a seed entry for the same month and channel.
+function mergeAdSpend(keep, seeded) {
+  const taken = new Set(keep.map((e) => `${e.month}|${e.channel}`));
+  return [...keep, ...seeded.filter((e) => !taken.has(`${e.month}|${e.channel}`))].sort(adSpendOrder);
+}
+
+function adSpendOrder(a, b) {
+  return a.month < b.month ? -1 : a.month > b.month ? 1 : AD_CHANNELS.indexOf(a.channel) - AD_CHANNELS.indexOf(b.channel);
+}
+
+// Replace the simulated Google Calendar busy blocks: removed when the calendar is not connected (or one-way), re-imported when it is.
+// Returns the ids of the blocks added and removed (so an undo can bring them back).
+function syncCalendarBlocks(draft) {
+  const removed = draft.blocks.filter((b) => b.groupId === GCAL_GROUP_ID).map((b) => b.id);
+  if (removed.length) draft.blocks = draft.blocks.filter((b) => b.groupId !== GCAL_GROUP_ID);
+  const cal = draft.settings.connections.calendar;
+  const added = cal.status === 'connected' && cal.twoWay ? simulatedBusyBlocks(draft, todayKey()) : [];
+  if (added.length) draft.blocks.push(...added);
+  return { added: added.map((b) => b.id), removed };
 }
 
 /** 8.7.3: swap the seed records for a fresh seed relative to today, keeping everything the owner or a customer made. */
@@ -196,18 +270,23 @@ function rollover(st) {
   next.settings.daysOff = next.settings.daysOff.filter((d) => d.date >= today);
   next.settings.fullDays = next.settings.fullDays.filter((d) => d >= today);
   const keepBookings = next.bookings.filter((b) => !b.seed);
-  const keepBlocks = next.blocks.filter((b) => !b.seed);
+  const keepBlocks = next.blocks.filter((b) => !b.seed && b.groupId !== GCAL_GROUP_ID);
   const keepMessages = next.messages.filter((m) => !m.seed);
+  const keepQuotes = Object.fromEntries(Object.entries(next.quotes).filter(([, q]) => !q.seed));
+  const keepSpend = next.settings.marketing.adSpend.filter((e) => !e.seed);
   const seed = buildSeed(now(), next.settings, { bookings: keepBookings, blocks: keepBlocks });
   const base = next.meta.msgSeq;
   const seedMessages = seed.messages.map((m) => ({ ...m, seq: m.seq + base }));
   next.bookings = [...seed.bookings, ...keepBookings];
   next.blocks = [...seed.blocks, ...keepBlocks];
   next.messages = [...seedMessages, ...keepMessages].sort((a, b) => a.seq - b.seq);
+  next.quotes = { ...Object.fromEntries(Object.entries(seed.quotes).filter(([id]) => !keepQuotes[id])), ...keepQuotes };
+  next.settings.marketing.adSpend = mergeAdSpend(keepSpend, seed.adSpend);
   next.refSeq = Math.max(next.refSeq, seed.refSeq);
   next.seededFor = today;
   next.meta.msgSeq = base + seed.messages.length;
   next.meta.rev += 1;
+  syncCalendarBlocks(next);
   return next;
 }
 
@@ -243,6 +322,8 @@ function installListeners() {
 export function initStore(opts = {}) {
   if (state && !opts.force) return state;
   tokens.clear();
+  for (const t of settleTimers) clearTimeout(t);
+  settleTimers.clear();
   const candidate = opts.storage || defaultStorage();
   storage = candidate && canWrite(candidate) ? candidate : null;
   mode = storage ? 'local' : 'memory';
@@ -273,7 +354,7 @@ export function initStore(opts = {}) {
     dirty = true;
   }
   state = deepFreeze(next);
-  if (dirty) persist(state);
+  if (dirty) writeState(state);
   installListeners();
   return state;
 }
@@ -330,7 +411,9 @@ const noop = (result) => ({ ...result, __noop: true });
 
 /**
  * The read-modify-write. fn(draft, prev) works on a deep copy and returns a result; on `ok: false` nothing is
- * written. A result may carry `touched` (ids to snapshot for undo), which becomes `undoToken`.
+ * written. A result may carry `touched` (ids to snapshot for undo), which becomes `undoToken`, and `afterCommit` (a function run
+ * once the change is saved). When the browser refuses the write because of its quota the result is `{ ok: false, reason: 'storage_full' }`
+ * and nothing changes.
  */
 function mutate(fn) {
   initStore();
@@ -339,14 +422,15 @@ function mutate(fn) {
   const draft = clone(prev);
   const result = fn(draft, prev);
   if (!result || result.ok === false) return result;
-  const { __noop: skipWrite, touched, ...rest } = result;
+  const { __noop: skipWrite, touched, afterCommit, ...rest } = result;
   if (skipWrite) return rest;
   draft.meta.rev += 1;
+  if (writeState(draft) === 'full') return fail('storage_full');
   const token = touched ? makeToken(prev, draft, touched) : null;
-  persist(draft);
   state = deepFreeze(draft);
   if (touched) rest.undoToken = token;
   notify(prev);
+  if (afterCommit) afterCommit();
   return rest;
 }
 
@@ -357,14 +441,40 @@ function snapshotOf(prevList, nextList, id) {
   return { id, before: findById(prevList, id), after: findById(nextList, id), index: prevList.findIndex((r) => r.id === id) };
 }
 
+// Settings are addressed by a dotted path ('marketing', 'connections.whatsapp'); quotes live in an object keyed by id.
+function getPath(root, path) {
+  let node = root;
+  for (const part of path.split('.')) {
+    if (node === null || node === undefined) return null;
+    node = node[part];
+  }
+  return node === undefined ? null : node;
+}
+
+function setPath(root, path, value) {
+  const parts = path.split('.');
+  const last = parts.pop();
+  let node = root;
+  for (const part of parts) node = node[part];
+  node[last] = value;
+}
+
 function makeToken(prev, next, touched) {
-  const entry = { bookings: [], messages: [], blocks: [], daysOff: [], fullDays: [] };
+  const entry = { bookings: [], messages: [], blocks: [], daysOff: [], fullDays: [], quotes: [], settings: [] };
   for (const id of touched.bookings || []) entry.bookings.push(snapshotOf(prev.bookings, next.bookings, id));
   for (const id of touched.messages || []) entry.messages.push(snapshotOf(prev.messages, next.messages, id));
   for (const id of touched.blocks || []) entry.blocks.push(snapshotOf(prev.blocks, next.blocks, id));
   for (const id of touched.daysOff || []) entry.daysOff.push(snapshotOf(prev.settings.daysOff, next.settings.daysOff, id));
   for (const date of touched.fullDays || []) {
     entry.fullDays.push({ date, before: prev.settings.fullDays.includes(date), after: next.settings.fullDays.includes(date) });
+  }
+  for (const id of touched.quotes || []) {
+    entry.quotes.push({ id, before: prev.quotes[id] ? clone(prev.quotes[id]) : null, after: next.quotes[id] ? clone(next.quotes[id]) : null });
+  }
+  for (const path of touched.settings || []) {
+    const before = getPath(prev.settings, path);
+    const after = getPath(next.settings, path);
+    entry.settings.push({ path, before: before === null ? null : clone(before), after: after === null ? null : clone(after) });
   }
   const token = makeId('undo');
   tokens.set(token, entry);
@@ -520,6 +630,15 @@ function createBookingIn(draft, input) {
     history: []
   };
   if (answers) booking.answers = answers;
+  const utm = normaliseUtm(d.utm);
+  if (utm) booking.utm = utm; // where the enquiry came from (the funnel passes getUtm())
+  let photosDropped = 0;
+  if (d.photos !== undefined) {
+    // Lenient on purpose: an enquiry is never refused because of a photo.
+    const kept = normalisePhotos(d.photos);
+    if (kept.photos.length) booking.photos = kept.photos;
+    photosDropped = kept.dropped;
+  }
   if (autoPencil && !unscheduled && status === 'new') booking.tentative = true; // provisional until the owner confirms or moves it
   addHistory(booking, 'created', asOwner ? 'owner' : 'customer', source);
   if (status === 'confirmed') addHistory(booking, 'confirmed', asOwner ? 'owner' : 'system');
@@ -541,7 +660,7 @@ function createBookingIn(draft, input) {
     }
   }
   if (!asOwner) messages.push(addMessage(draft, urgent ? 'owner_emergency' : 'owner_new_booking', booking));
-  return { ok: true, booking, messages };
+  return { ok: true, booking, messages, ...(d.photos !== undefined ? { photosDropped } : {}) };
 }
 
 /**
@@ -552,7 +671,13 @@ export function createBooking(draftInput, opts = {}) {
   const input = opts && opts.pencil && draftInput && typeof draftInput === 'object' && draftInput.pencil === undefined
     ? { ...draftInput, pencil: true }
     : draftInput;
-  return mutate((draft) => createBookingIn(draft, input));
+  const result = mutate((draft) => createBookingIn(draft, input));
+  // Photos are the heavy part of a booking: if the browser's quota refuses the write, keep the enquiry and drop the photos.
+  if (result && result.ok === false && result.reason === 'storage_full' && input && Array.isArray(input.photos) && input.photos.length) {
+    const retry = mutate((draft) => createBookingIn(draft, { ...input, photos: [] }));
+    return retry && retry.ok ? { ...retry, photosDropped: input.photos.length } : retry;
+  }
+  return result;
 }
 
 // ---------- status changes (7.5) ----------
@@ -790,7 +915,7 @@ export function markAllSeen() {
 
 // ---------- messages ----------
 
-const QUICK_KINDS = ['customer_running_late', 'customer_need_access', 'customer_quote_ready'];
+const QUICK_KINDS = ['customer_running_late', 'customer_need_access', 'customer_quote_ready', 'customer_photos_request'];
 
 function logOwnerMessage(id, kind, guard) {
   return mutate((draft) => {
@@ -942,6 +1067,20 @@ const LEAD_CHOICES = [60, 90, 120, 180, 240];
 const AHEAD_CHOICES = [7, 14, 21, 28];
 const REQUIRED_BUSINESS = ['name', 'shortName', 'ownerFirstName'];
 const TEXT_BUSINESS = ['descriptor', 'ownerFullName', 'tagline', 'email', 'areaName', 'areaText', 'schemeLine', 'insuranceLine'];
+const IMAGE_OK = /^(https:\/\/\S+|(?![a-z][a-z0-9+.-]*:)\S+)$/i; // https URLs and relative paths only
+
+// Keep the charger lines of the quote catalogue in step with business.brands: a line per brand, none for a brand that is gone.
+function syncChargerItems(settings) {
+  const brands = settings.business.brands;
+  const kept = settings.quoteItems.filter((i) => i.kind !== 'charger' || brands.includes(i.brand));
+  const chargers = [];
+  for (const brand of brands) {
+    if (chargers.some((c) => c.brand === brand)) continue;
+    chargers.push(kept.find((i) => i.kind === 'charger' && i.brand === brand) || makeChargerItem(brand));
+  }
+  const taken = new Set(kept.filter((i) => i.kind !== 'charger').map((i) => i.id));
+  settings.quoteItems = [...chargers.filter((c) => !taken.has(c.id)), ...kept.filter((i) => i.kind !== 'charger')];
+}
 
 export function updateSettings(patch = {}) {
   return mutate((draft) => {
@@ -949,6 +1088,7 @@ export function updateSettings(patch = {}) {
     const next = {};
     const biz = patch.business;
     const nextBiz = {};
+    const nextImages = {};
     if (biz && typeof biz === 'object') {
       for (const key of REQUIRED_BUSINESS) {
         if (!(key in biz)) continue;
@@ -967,6 +1107,44 @@ export function updateSettings(patch = {}) {
       for (const key of ['towns', 'coveredOutward', 'edgeOutward', 'credentials', 'brands']) {
         if (Array.isArray(biz[key])) nextBiz[key] = biz[key].map((t) => String(t).trim()).filter(Boolean);
       }
+      if ('address' in biz) {
+        const address = String(biz.address === null || biz.address === undefined ? '' : biz.address).trim();
+        if (address.length > 200) errors.address = 'Keep the address under 200 characters.';
+        else nextBiz.address = address;
+      }
+      if (biz.images && typeof biz.images === 'object') {
+        for (const key of IMAGE_KEYS) {
+          if (!(key in biz.images)) continue;
+          const raw = String(biz.images[key] === null || biz.images[key] === undefined ? '' : biz.images[key]).trim();
+          if (!raw) nextImages[key] = DEFAULT_IMAGES[key];
+          else if (raw.length > 600 || raw.startsWith('//') || !IMAGE_OK.test(raw)) errors[`images.${key}`] = 'Use a web address starting with https:// or a file path.';
+          else nextImages[key] = raw;
+        }
+      }
+    }
+    if (patch.sla && typeof patch.sla === 'object' && 'replyHours' in patch.sla) {
+      const h = patch.sla.replyHours;
+      if (Number.isInteger(h) && h >= 1 && h <= 168) next.sla = { replyHours: h };
+      else errors.replyHours = 'Choose a whole number of hours from 1 to 168.';
+    }
+    if (patch.quoteDefaults && typeof patch.quoteDefaults === 'object') {
+      const q = patch.quoteDefaults;
+      const merged = { ...draft.settings.quoteDefaults };
+      if ('validDays' in q) {
+        if (Number.isInteger(q.validDays) && q.validDays >= 1 && q.validDays <= 365) merged.validDays = q.validDays;
+        else errors.validDays = 'Choose a whole number of days from 1 to 365.';
+      }
+      if ('notes' in q) {
+        const notes = String(q.notes === null || q.notes === undefined ? '' : q.notes).trim();
+        if (notes.length > 1500) errors.notes = 'Keep the terms under 1500 characters.';
+        else merged.notes = notes;
+      }
+      next.quoteDefaults = merged;
+    }
+    if ('quoteItems' in patch) {
+      const checked = normaliseQuoteItems(patch.quoteItems);
+      if (checked.error) errors.quoteItems = checked.error;
+      else next.quoteItems = checked.items;
     }
     if ('hours' in patch) {
       const h = patch.hours;
@@ -995,7 +1173,9 @@ export function updateSettings(patch = {}) {
       nextBiz.ownerFullName = rest ? `${nextBiz.ownerFirstName} ${rest}` : nextBiz.ownerFirstName;
     }
     Object.assign(s.business, nextBiz);
+    if (Object.keys(nextImages).length) s.business.images = { ...s.business.images, ...nextImages };
     Object.assign(s, next);
+    if (nextBiz.brands) syncChargerItems(s);
     return { ok: true, settings: s };
   });
 }
@@ -1062,10 +1242,12 @@ export function setDemoPhone(input) {
 export function resetDemo({ keepSettings = true } = {}) {
   return mutate((draft) => {
     let settings;
+    let keepSpend = [];
     if (keepSettings) {
       settings = draft.settings;
       settings.daysOff = [];
       settings.fullDays = [];
+      keepSpend = settings.marketing.adSpend.filter((e) => !e.seed);
     } else {
       settings = makeDefaultSettings();
       settings.theme = draft.settings.theme;
@@ -1073,19 +1255,31 @@ export function resetDemo({ keepSettings = true } = {}) {
     }
     const seed = buildSeed(now(), settings);
     const top = maxSeq(seed.messages);
+    settings.marketing.adSpend = mergeAdSpend(keepSpend, seed.adSpend);
     draft.settings = settings;
     draft.bookings = seed.bookings;
     draft.blocks = seed.blocks;
     draft.messages = seed.messages;
+    draft.quotes = seed.quotes;
     draft.refSeq = seed.refSeq;
     draft.seededFor = todayKey();
     draft.meta.msgSeq = top;
     draft.meta.messagesSeenSeq = top;
     draft.meta.simCursor = 0;
+    syncCalendarBlocks(draft);
     tokens.clear();
     return { ok: true };
   });
 }
+
+// The simulator rotates the lead source too, so a demo run shows up in Lead sources.
+const SIM_UTM = [
+  { source: 'facebook', medium: 'paid_social', campaign: 'ev_charger_leads' },
+  { source: 'facebook', medium: 'paid_social', campaign: 'home_charging_video' },
+  { source: 'instagram', medium: 'paid_social', campaign: 'charger_reels' },
+  { source: 'google', medium: 'organic', campaign: '' },
+  { source: 'facebook', medium: 'paid_social', campaign: 'ev_charger_leads' }
+];
 
 export function simulateIncomingBooking({ kind = 'standard' } = {}) {
   return mutate((draft) => {
@@ -1103,13 +1297,532 @@ export function simulateIncomingBooking({ kind = 'standard' } = {}) {
       // A website enquiry like the funnel makes: the postcode and the four answers, and the next free survey window pencilled in.
       // A postcode outside Northern Ireland (not BT) is the "check before you confirm" case.
       input = {
-        ...base, serviceId: 'ev_quote', pencil: true, answers: person.answers,
+        ...base, serviceId: 'ev_quote', pencil: true, answers: person.answers, utm: SIM_UTM[draft.meta.simCursor % SIM_UTM.length],
         address: { line1: '', postcode: kind === 'approval' ? 'DG9 8PQ' : person.postcode }
       };
     }
     const result = createBookingIn(draft, input);
     if (result.ok) draft.meta.simCursor += 1;
     return result;
+  });
+}
+
+// ---------- quotes (v3) ----------
+
+const quoteOf = (draft, id) => (draft.quotes && draft.quotes[id]) || null;
+
+// A person's first change to a demo quote makes it theirs: a day rollover keeps it.
+const adopt = (quote) => {
+  quote.seed = false;
+};
+
+function nextRefAndId(draft) {
+  let refNumber = draft.refSeq;
+  while (draft.bookings.some((b) => b.ref === `EL-${refNumber}`)) refNumber += 1;
+  draft.refSeq = refNumber + 1;
+  let id = makeId('bk');
+  while (draft.bookings.some((b) => b.id === id)) id = makeId('bk');
+  return { ref: `EL-${refNumber}`, id };
+}
+
+/** Quote ids come from the enquiry ref: Q-EL-1043, then Q-EL-1043-2 for a second version. */
+function nextQuoteId(draft, booking) {
+  const base = `Q-${booking.ref}`;
+  if (!draft.quotes[base]) return base;
+  for (let n = 2; n < 100; n += 1) if (!draft.quotes[`${base}-${n}`]) return `${base}-${n}`;
+  return `${base}-${makeId('v').slice(2)}`;
+}
+
+function cleanNotes(value) {
+  return String(value === null || value === undefined ? '' : value).trim();
+}
+
+export function createQuote(input = {}) {
+  return mutate((draft) => {
+    const d = input && typeof input === 'object' ? input : {};
+    const booking = liveBooking(draft, d.bookingId);
+    if (!booking) return fail('not_found');
+    if (booking.serviceId !== 'ev_quote') return fail('invalid', { errors: { bookingId: 'A quote belongs to a home charger enquiry.' } });
+    if (booking.status === 'cancelled') return fail('bad_transition');
+    const settings = draft.settings;
+    const defaults = settings.quoteDefaults;
+    const errors = {};
+    const brand = d.brand === undefined || d.brand === null ? settings.business.brands[0] || '' : String(d.brand).trim().slice(0, 40);
+    let lines = [];
+    if (d.lines === undefined) {
+      lines = defaultQuoteLines(settings, { brand });
+    } else {
+      const checked = normaliseQuoteLines(d.lines);
+      if (checked.error) errors.lines = checked.error;
+      else lines = checked.lines;
+    }
+    const notes = d.notes === undefined ? defaults.notes : cleanNotes(d.notes);
+    if (notes.length > 1500) errors.notes = 'Keep the notes under 1500 characters.';
+    const validUntil = d.validUntil === undefined ? addDays(todayKey(), defaults.validDays) : d.validUntil;
+    if (!isDayKey(validUntil)) errors.validUntil = 'Choose the last day the quote is valid.';
+    const customerName = d.customerName === undefined ? booking.customer.name : String(d.customerName === null ? '' : d.customerName).trim().slice(0, 60);
+    if (!customerName) errors.customerName = 'Enter the customer name.';
+    if (!errors.lines && lines.reduce((t, l) => t + l.qty * l.unitPrice, 0) < 0) errors.lines = 'The total cannot be below zero.';
+    if (Object.keys(errors).length) return fail('invalid', { errors });
+    const quote = {
+      id: nextQuoteId(draft, booking), bookingId: booking.id, customerName, createdAt: nowStamp(), status: 'draft', brand, lines, notes, validUntil,
+      sentAt: null, sentVia: null, viewedAt: null, acceptedAt: null, declinedAt: null, declineReason: '', installBookingId: null, seed: false
+    };
+    draft.quotes[quote.id] = quote;
+    return { ok: true, quote, touched: { quotes: [quote.id] } };
+  });
+}
+
+export function updateQuote(id, patch = {}) {
+  return mutate((draft, prev) => {
+    const quote = quoteOf(draft, id);
+    if (!quote) return fail('not_found');
+    if (quote.status !== 'draft' && quote.status !== 'sent') return fail('bad_transition');
+    const p = patch && typeof patch === 'object' ? patch : {};
+    const errors = {};
+    const changes = {};
+    if ('brand' in p) changes.brand = String(p.brand === null || p.brand === undefined ? '' : p.brand).trim().slice(0, 40);
+    if ('lines' in p) {
+      const checked = normaliseQuoteLines(p.lines);
+      if (checked.error) errors.lines = checked.error;
+      else changes.lines = checked.lines;
+    }
+    if ('notes' in p) {
+      const notes = cleanNotes(p.notes);
+      if (notes.length > 1500) errors.notes = 'Keep the notes under 1500 characters.';
+      else changes.notes = notes;
+    }
+    if ('validUntil' in p) {
+      if (isDayKey(p.validUntil)) changes.validUntil = p.validUntil;
+      else errors.validUntil = 'Choose the last day the quote is valid.';
+    }
+    if ('customerName' in p) {
+      const name = String(p.customerName === null || p.customerName === undefined ? '' : p.customerName).trim().slice(0, 60);
+      if (name) changes.customerName = name;
+      else errors.customerName = 'Enter the customer name.';
+    }
+    const lines = changes.lines || quote.lines;
+    if (!errors.lines && lines.reduce((t, l) => t + l.qty * l.unitPrice, 0) < 0) errors.lines = 'The total cannot be below zero.';
+    if (Object.keys(errors).length) return fail('invalid', { errors });
+    if (Object.keys(changes).every((k) => deepEqual(quote[k], changes[k]))) return noop({ ok: true, quote: prev.quotes[id] });
+    Object.assign(quote, changes);
+    adopt(quote);
+    return { ok: true, quote };
+  });
+}
+
+export function deleteQuote(id) {
+  return mutate((draft) => {
+    const quote = quoteOf(draft, id);
+    if (!quote) return fail('not_found');
+    if (quote.status !== 'draft') return fail('bad_transition');
+    delete draft.quotes[id];
+    return { ok: true, touched: { quotes: [id] } };
+  });
+}
+
+export function sendQuote(id, { via } = {}) {
+  return mutate((draft) => {
+    const quote = quoteOf(draft, id);
+    if (!quote) return fail('not_found');
+    if (!QUOTE_VIA.includes(via)) return fail('invalid', { errors: { via: 'Choose WhatsApp, email or a link.' } });
+    if (!['draft', 'sent', 'viewed'].includes(quote.status)) return fail('bad_transition');
+    const booking = liveBooking(draft, quote.bookingId);
+    if (!booking) return fail('not_found');
+    if (booking.status === 'cancelled') return fail('bad_transition');
+    if (!quote.lines.length || quoteTotal(quote) <= 0) return fail('invalid', { errors: { lines: 'Add at least one line with a price.' } });
+    if (via === 'email' && !String(booking.customer.email || '').trim()) return fail('no_email', { errors: { email: 'There is no email address for this customer.' } });
+    const stamp = nowStamp();
+    if (quote.validUntil < stampDay(stamp)) quote.validUntil = addDays(stampDay(stamp), draft.settings.quoteDefaults.validDays);
+    quote.sentAt = stamp;
+    quote.sentVia = via;
+    if (quote.status === 'draft') quote.status = 'sent';
+    adopt(quote);
+    const message = addMessage(draft, 'customer_quote_sent', booking, { quote, channel: via === 'email' ? 'email' : 'whatsapp' });
+    addHistory(booking, 'message', 'owner', KIND_LABELS.customer_quote_sent);
+    return { ok: true, quote, message, link: quoteUrl(quote.id), touched: { quotes: [id], messages: [message.id], bookings: [booking.id] } };
+  });
+}
+
+export function recordQuoteViewed(id) {
+  return mutate((draft, prev) => {
+    const quote = quoteOf(draft, id);
+    if (!quote) return fail('not_found');
+    if (quote.status !== 'sent' || quoteStatus(quote, nowStamp()) !== 'sent') return noop({ ok: true, quote: prev.quotes[id], changed: false });
+    quote.status = 'viewed';
+    quote.viewedAt = nowStamp();
+    adopt(quote);
+    return { ok: true, quote, changed: true };
+  });
+}
+
+export function acceptQuote(id, { date, windowId } = {}) {
+  return mutate((draft) => {
+    const quote = quoteOf(draft, id);
+    if (!quote) return fail('not_found');
+    if (quote.status === 'accepted') return fail('already_accepted', { installBookingId: quote.installBookingId });
+    if (quote.status !== 'sent' && quote.status !== 'viewed') return fail('bad_transition');
+    const stamp = nowStamp();
+    if (quoteStatus(quote, stamp) === 'expired') return fail('expired');
+    const errors = {};
+    if (!isDayKey(date)) errors.date = 'Choose a day';
+    if (!Number.isInteger(windowId) || windowId < 0 || windowId > 3) errors.windowId = 'Choose a time';
+    else if (!HALF_DAY_STARTS.includes(windowId)) errors.windowId = 'Choose morning or afternoon';
+    if (Object.keys(errors).length) return fail('invalid', { errors });
+    const enquiry = liveBooking(draft, quote.bookingId);
+    if (!enquiry) return fail('not_found');
+    const service = draft.settings.services.find((x) => x.id === 'ev');
+    if (!service || !service.active) return fail('service_unavailable');
+    // The customer picked this day from the live diary, so it is re-checked here in customer mode, inside the same write.
+    if (!isSlotFree(draft, { date, windowId, blocks: 2, ownerMode: false })) {
+      return fail('slot_taken', { alternatives: nextFreeSlots(draft, 'ev', 3) });
+    }
+    const { ref, id: bookingId } = nextRefAndId(draft);
+    const install = {
+      id: bookingId,
+      ref,
+      createdAt: stamp,
+      serviceId: service.id,
+      serviceName: service.name,
+      variantId: null,
+      variantLabel: '',
+      start: makeStamp(date, WINDOWS[windowId].start),
+      durationMin: 240,
+      status: 'new',
+      urgent: false,
+      emergencyReasons: [],
+      etaMinutes: null,
+      etaAt: null,
+      customer: { ...enquiry.customer },
+      address: { ...enquiry.address },
+      notes: '',
+      internalNotes: '',
+      source: enquiry.source,
+      quotedPrice: quoteTotal(quote),
+      finalPrice: null,
+      paid: false,
+      paidMethod: null,
+      paidAt: null,
+      seenByOwner: false,
+      reviewRequested: false,
+      cancelledBy: null,
+      cancelReason: '',
+      seed: false,
+      history: [],
+      tentative: true, // pencilled in until the owner confirms the day
+      quoteId: quote.id
+    };
+    if (enquiry.answers) install.answers = { ...enquiry.answers }; // the job card keeps what the customer said about their home
+    addHistory(install, 'created', 'customer', enquiry.source);
+    draft.bookings.push(install);
+    quote.status = 'accepted';
+    quote.acceptedAt = stamp;
+    quote.installBookingId = install.id;
+    adopt(quote);
+    addHistory(enquiry, 'message', 'customer', 'Quote accepted');
+    // Insertion order as in createBooking: the owner alert last, so it sorts first on the Messages screen.
+    const customerMessage = addMessage(draft, 'customer_quote_accepted', install, { quote, installBooking: install });
+    const ownerMessage = addMessage(draft, 'owner_quote_accepted', install, { quote, installBooking: install });
+    return {
+      ok: true, quote, booking: install, messages: [customerMessage, ownerMessage],
+      touched: { quotes: [id], bookings: [install.id, enquiry.id], messages: [customerMessage.id, ownerMessage.id] }
+    };
+  });
+}
+
+export function declineQuote(id, { reason = '', by = 'customer' } = {}) {
+  return mutate((draft) => {
+    const quote = quoteOf(draft, id);
+    if (!quote) return fail('not_found');
+    if (by !== 'customer' && by !== 'owner') return fail('invalid', { errors: { by: 'Declined by the customer or the owner.' } });
+    if (quote.status !== 'sent' && quote.status !== 'viewed') return fail('bad_transition');
+    const enquiry = liveBooking(draft, quote.bookingId);
+    if (!enquiry) return fail('not_found');
+    const why = String(reason === null || reason === undefined ? '' : reason).trim().slice(0, 200);
+    quote.status = 'declined';
+    quote.declinedAt = nowStamp();
+    quote.declineReason = why;
+    adopt(quote);
+    addHistory(enquiry, 'message', by, 'Quote declined');
+    const message = addMessage(draft, 'owner_quote_declined', enquiry, { quote, reason: why });
+    return { ok: true, quote, message, touched: { quotes: [id], bookings: [enquiry.id], messages: [message.id] } };
+  });
+}
+
+// ---------- photos (v3) ----------
+
+export function addBookingPhotos(id, photos) {
+  return mutate((draft) => {
+    const b = liveBooking(draft, id);
+    if (!b) return fail('not_found');
+    const list = Array.isArray(photos) ? photos : [];
+    if (list.length === 0) return fail('invalid', { errors: { photos: 'Choose a photo.' } });
+    const held = Array.isArray(b.photos) ? b.photos : [];
+    if (held.length >= PHOTO_LIMITS.maxPhotos) return fail('too_many', { max: PHOTO_LIMITS.maxPhotos });
+    const kept = normalisePhotos(list, { existing: held.length });
+    if (kept.photos.length === 0) {
+      const first = list.map(validatePhoto).find(Boolean) || 'Choose a photo.';
+      return fail('invalid', { errors: { photos: first } });
+    }
+    const used = new Set(held.map((p) => p.id));
+    const added = kept.photos.map((p) => {
+      let photoId = used.has(p.id) ? makeId('ph') : p.id;
+      while (used.has(photoId)) photoId = makeId('ph');
+      used.add(photoId);
+      return { ...p, id: photoId };
+    });
+    b.photos = [...held, ...added];
+    return { ok: true, booking: b, added: added.length, dropped: list.length - added.length, touched: { bookings: [b.id] } };
+  });
+}
+
+export function removeBookingPhoto(id, photoId) {
+  return mutate((draft) => {
+    const b = liveBooking(draft, id);
+    if (!b) return fail('not_found');
+    if (!Array.isArray(b.photos) || !b.photos.some((p) => p.id === photoId)) return fail('not_found');
+    b.photos = b.photos.filter((p) => p.id !== photoId);
+    if (b.photos.length === 0) delete b.photos;
+    return { ok: true, booking: b, touched: { bookings: [b.id] } };
+  });
+}
+
+// ---------- marketing (v3) ----------
+
+const MONTH_KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+export function setAdSpend(month, channel, amount) {
+  return mutate((draft) => {
+    const errors = {};
+    if (typeof month !== 'string' || !MONTH_KEY.test(month)) errors.month = 'Choose a month';
+    if (!AD_CHANNELS.includes(channel)) errors.channel = 'Choose where the ads ran';
+    if (!Number.isInteger(amount) || amount < 0 || amount > 999999) errors.amount = 'Enter a whole number of pounds.';
+    if (Object.keys(errors).length) return fail('invalid', { errors });
+    const list = draft.settings.marketing.adSpend;
+    const existing = list.find((e) => e.month === month && e.channel === channel);
+    if (amount === 0) {
+      if (!existing) return noop({ ok: true, entry: null });
+      draft.settings.marketing.adSpend = list.filter((e) => e.id !== existing.id);
+      return { ok: true, entry: null, touched: { settings: ['marketing'] } };
+    }
+    let entry = existing;
+    if (entry) {
+      if (entry.amount === amount && !entry.seed) return noop({ ok: true, entry });
+      entry.amount = amount;
+      delete entry.seed; // a figure a person typed is theirs
+    } else {
+      entry = { id: makeId('ad'), month, channel, amount };
+      list.push(entry);
+    }
+    draft.settings.marketing.adSpend = [...draft.settings.marketing.adSpend].sort(adSpendOrder);
+    return { ok: true, entry, touched: { settings: ['marketing'] } };
+  });
+}
+
+export function removeAdSpend(id) {
+  return mutate((draft) => {
+    const list = draft.settings.marketing.adSpend;
+    if (!list.some((e) => e.id === id)) return fail('not_found');
+    draft.settings.marketing.adSpend = list.filter((e) => e.id !== id);
+    return { ok: true, touched: { settings: ['marketing'] } };
+  });
+}
+
+// ---------- connections (v3): ALL SIMULATED, saved on this device only ----------
+
+const CONNECTION_KEY_LIST = ['domain', 'webhook', 'tracking', 'whatsapp', 'calendar', 'email'];
+
+function armSettle(ms, force) {
+  if (typeof setTimeout !== 'function') return;
+  const timer = setTimeout(() => {
+    settleTimers.delete(timer);
+    try {
+      runSettle(force);
+    } catch (e) {
+      // a failed settle must never break the page
+    }
+  }, ms);
+  if (timer && typeof timer.unref === 'function') timer.unref();
+  settleTimers.add(timer);
+}
+
+function runSettle(force) {
+  return mutate((draft) => {
+    const before = draft.settings.connections;
+    const after = settleConnectionsIn(before, nowStampSec(), { force });
+    if (after === before) return noop({ ok: true, changed: false });
+    draft.settings.connections = after;
+    return { ok: true, changed: true };
+  });
+}
+
+/** Apply any simulated delay that is due (templates approved, a verifying domain gone live). Cheap and idempotent. */
+export function settleConnections() {
+  return runSettle([]);
+}
+
+function connectionResult(draft, key, extra = {}) {
+  return { ok: true, connection: draft.settings.connections[key], ...extra };
+}
+
+export function setConnection(key, patch = {}) {
+  return mutate((draft, prev) => {
+    if (!CONNECTION_KEY_LIST.includes(key)) return fail('invalid', { errors: { key: 'Unknown connection.' } });
+    const current = draft.settings.connections[key];
+    const { errors, changes } = validateConnectionPatch(key, patch, current);
+    if (Object.keys(errors).length) return fail('invalid', { errors });
+    if (Object.keys(changes).every((k) => deepEqual(current[k], changes[k]))) return noop({ ok: true, connection: prev.settings.connections[key] });
+    Object.assign(current, changes);
+    const touched = { settings: [`connections.${key}`] };
+    if (key === 'calendar' && 'twoWay' in changes && current.status === 'connected') {
+      const sync = syncCalendarBlocks(draft);
+      touched.blocks = [...sync.added, ...sync.removed];
+    }
+    return connectionResult(draft, key, { touched });
+  });
+}
+
+export function connectWhatsApp({ number, code } = {}) {
+  return mutate((draft) => {
+    const wa = draft.settings.connections.whatsapp;
+    const normalised = normaliseWhatsAppNumber(number === undefined ? wa.number : number);
+    if (!normalised) return fail('invalid', { errors: { number: 'Enter the WhatsApp number, like 07885 496800' } });
+    if (String(code === undefined || code === null ? '' : code).trim() !== WHATSAPP_DEMO_CODE) return fail('bad_code');
+    wa.status = 'connected';
+    wa.number = normalised;
+    wa.connectedAt = nowStamp();
+    return connectionResult(draft, 'whatsapp', { touched: { settings: ['connections.whatsapp'] } });
+  });
+}
+
+export function submitWhatsAppTemplates() {
+  return mutate((draft) => {
+    const wa = draft.settings.connections.whatsapp;
+    if (wa.status !== 'connected') return fail('not_connected');
+    for (const kind of WHATSAPP_TEMPLATE_KINDS) if (!wa.templates[kind] || wa.templates[kind] === 'none') wa.templates[kind] = 'pending';
+    wa.templatesSubmittedAt = nowStampSec();
+    return connectionResult(draft, 'whatsapp', { touched: { settings: ['connections.whatsapp'] }, afterCommit: () => armSettle(3000, ['templates']) });
+  });
+}
+
+export function connectGoogle(service, { account } = {}) {
+  return mutate((draft) => {
+    if (service !== 'calendar' && service !== 'email') return fail('invalid', { errors: { service: 'Choose calendar or email.' } });
+    const text = String(account === undefined || account === null ? '' : account).trim();
+    if (!isValidEmail(text)) return fail('invalid', { errors: { account: 'Enter the Google account, like daniel@gmail.com' } });
+    const c = draft.settings.connections[service];
+    c.status = 'connected';
+    c.account = text;
+    c.connectedAt = nowStamp();
+    const touched = { settings: [`connections.${service}`] };
+    if (service === 'calendar') {
+      const sync = syncCalendarBlocks(draft);
+      touched.blocks = [...sync.added, ...sync.removed];
+    }
+    return connectionResult(draft, service, { touched });
+  });
+}
+
+export function disconnect(key) {
+  return mutate((draft) => {
+    if (!CONNECTION_KEY_LIST.includes(key)) return fail('invalid', { errors: { key: 'Unknown connection.' } });
+    const c = draft.settings.connections;
+    const fresh = makeDefaultConnections();
+    const touched = { settings: [`connections.${key}`] };
+    if (key === 'domain') c.domain = fresh.domain;
+    else if (key === 'whatsapp') c.whatsapp = { ...c.whatsapp, status: 'disconnected', templates: fresh.whatsapp.templates, templatesSubmittedAt: null, connectedAt: null };
+    else if (key === 'calendar') c.calendar = { ...c.calendar, status: 'disconnected', account: '', connectedAt: null };
+    else if (key === 'email') c.email = { ...c.email, status: 'disconnected', account: '', connectedAt: null };
+    else if (key === 'webhook') c.webhook = { ...c.webhook, enabled: false };
+    else c.tracking = { ...c.tracking, metaPixelId: '', googleTagId: '' };
+    if (key === 'calendar') {
+      const sync = syncCalendarBlocks(draft);
+      touched.blocks = [...sync.added, ...sync.removed];
+    }
+    return connectionResult(draft, key, { touched });
+  });
+}
+
+export function startDomainSetup(domain) {
+  return mutate((draft) => {
+    const check = validateHostname(domain);
+    if (!check.ok) return fail('invalid', { errors: { domain: check.message } });
+    draft.settings.connections.domain = { status: 'pending', domain: check.host, checks: 0, verifiedAt: null, firstCheckAt: null };
+    return connectionResult(draft, 'domain', { records: domainRecords(check.host), touched: { settings: ['connections.domain'] } });
+  });
+}
+
+export function checkDomain() {
+  return mutate((draft) => {
+    const d = draft.settings.connections.domain;
+    if (d.status === 'none') return fail('bad_transition');
+    if (d.status === 'live') return noop({ ok: true, found: true, status: 'live', unchanged: true, sslIssued: true, connection: d });
+    const stampSec = nowStampSec();
+    d.checks += 1;
+    if (d.checks === 1 && !d.firstCheckAt) {
+      d.status = 'verifying';
+      d.firstCheckAt = stampSec;
+      return {
+        ok: true, found: false, status: 'verifying', sslIssued: false, connection: d,
+        message: 'We cannot see your records yet. DNS changes can take a while, so try again in a minute.',
+        afterCommit: () => armSettle(20000, ['domain'])
+      };
+    }
+    d.status = 'live';
+    d.verifiedAt = stampSec.slice(0, 16);
+    return {
+      ok: true, found: true, status: 'live', sslIssued: true, connection: d,
+      message: 'Your website address is connected and the security certificate is ready (simulated).'
+    };
+  });
+}
+
+export function rotateWebhookSecret() {
+  return mutate((draft) => {
+    let secret = 'whsec_';
+    for (let i = 0; i < 24; i += 1) secret += Math.floor(Math.random() * 36).toString(36);
+    draft.settings.connections.webhook.secret = secret;
+    return connectionResult(draft, 'webhook', { secret, touched: { settings: ['connections.webhook'] } });
+  });
+}
+
+function addSystemMessage(draft, kind, extra) {
+  const m = buildSystemMessage(kind, draft, { at: nowStamp(), ...extra });
+  const message = { id: makeId('msg'), ...m, seq: 0 };
+  draft.meta.msgSeq += 1;
+  message.seq = draft.meta.msgSeq;
+  draft.messages.push(message);
+  return message;
+}
+
+export function sendTestEvent(key) {
+  return mutate((draft) => {
+    const c = draft.settings.connections;
+    if (key === 'webhook') {
+      if (!c.webhook.enabled) return fail('disabled');
+      // The same code path as the website funnel: a customer enquiry with the next survey window pencilled in.
+      const person = SIM_POOL[draft.meta.simCursor % SIM_POOL.length];
+      const result = createBookingIn(draft, {
+        customer: { name: person.name, phone: person.phone, email: '' },
+        address: { line1: '', postcode: person.postcode },
+        notes: 'Sample enquiry from the webhook test (simulated).',
+        source: 'website',
+        serviceId: 'ev_quote',
+        pencil: true,
+        answers: person.answers,
+        utm: { source: 'other', medium: 'webhook', campaign: 'test_event' }
+      });
+      if (!result.ok) return result;
+      draft.meta.simCursor += 1;
+      c.webhook.lastEventAt = nowStamp();
+      return { ...result, connection: c.webhook };
+    }
+    if (key === 'whatsapp' || key === 'email') {
+      if (c[key].status !== 'connected') return fail('not_connected');
+      const message = addSystemMessage(draft, 'owner_test_event', { channel: key, toEmail: key === 'email' ? c.email.account : '' });
+      return { ok: true, message, touched: { messages: [message.id] } };
+    }
+    return fail('invalid', { errors: { key: 'Send a test event to the webhook, WhatsApp or email.' } });
   });
 }
 
@@ -1147,6 +1860,8 @@ export function undo(token) {
     for (const t of entry.blocks) if (!sameRecord(findById(draft.blocks, t.id), t.after)) return stale();
     for (const t of entry.daysOff) if (!sameRecord(findById(draft.settings.daysOff, t.id), t.after)) return stale();
     for (const t of entry.fullDays) if (draft.settings.fullDays.includes(t.date) !== t.after) return stale();
+    for (const t of entry.quotes) if (!sameRecord(draft.quotes[t.id] || null, t.after)) return stale();
+    for (const t of entry.settings) if (!sameRecord(getPath(draft.settings, t.path), t.after)) return stale();
 
     // Put nothing back on top of somebody else's work: windows a restored job re-occupies must still be free.
     for (const t of entry.bookings) {
@@ -1170,6 +1885,11 @@ export function undo(token) {
     restoreRecords(draft.messages, entry.messages);
     restoreRecords(draft.blocks, entry.blocks);
     restoreRecords(draft.settings.daysOff, entry.daysOff);
+    for (const t of entry.quotes) {
+      if (t.before === null) delete draft.quotes[t.id];
+      else draft.quotes[t.id] = clone(t.before);
+    }
+    for (const t of entry.settings) setPath(draft.settings, t.path, t.before === null ? null : clone(t.before));
     for (const t of entry.fullDays) {
       const has = draft.settings.fullDays.includes(t.date);
       if (t.before && !has) draft.settings.fullDays = [...draft.settings.fullDays, t.date].sort();

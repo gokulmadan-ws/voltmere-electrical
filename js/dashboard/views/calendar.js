@@ -1,5 +1,5 @@
 // js/dashboard/views/calendar.js: Calendar view (week strip, window rows, block / unblock / day off, add a booking from a free window; week grid from 768px).
-// Owner: WP6
+// Owner: E3 (v1 by WP6)
 import { html, h, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import {
   Banner, Button, Chip, ConfirmDialog, Field, Icon, IconButton, Input, PageHeader, Segmented, Sheet, StatusPill, Switch, TextLink,
@@ -120,7 +120,7 @@ function dayCells(state, date) {
     const slot = slots[w.id];
     if (slot.state === 'blocked') {
       const block = state.blocks.find((b) => b.date === date && b.windowId === w.id);
-      cells.push({ kind: 'blocked', windowId: w.id, ids: [w.id], block: block || { id: '', label: slot.blockLabel || 'Blocked', date, windowId: w.id, groupId: null } });
+      cells.push({ kind: 'blocked', windowId: w.id, ids: [w.id], block: block || { id: `none-${date}-${w.id}`, label: slot.blockLabel || 'Blocked', date, windowId: w.id, groupId: null } });
     } else if (slot.state === 'free') {
       cells.push({ kind: 'free', windowId: w.id, ids: [w.id] });
     } else {
@@ -187,8 +187,19 @@ function FreeButton({ date, cell, compact, onFree }) {
   </button>`;
 }
 
+/** A busy time imported from Google Calendar (SIMULATED). It is managed by the sync, so it links to the connection instead of unblocking. */
+function GoogleBusy({ cell }) {
+  const { block } = cell;
+  return html`<a class="cal-blocked cal-gcal" href=${routeHref('connections-calendar')} data-testid=${`calendar-gcal-${block.id}`}>
+    <${Icon} name="calendar-days" size=${18} />
+    <span class="cal-blocked__text"><strong>Google Calendar</strong> · busy</span>
+    <span class="u-sr-only">. Imported from Google Calendar (simulated). Managed in your calendar connection.</span>
+  </a>`;
+}
+
 function BlockedButton({ cell, onUnblock }) {
   const { block } = cell;
+  if (block.source === 'google_calendar') return html`<${GoogleBusy} cell=${cell} />`;
   return html`<button type="button" class="cal-blocked" data-testid=${`calendar-unblock-${block.id}`} onClick=${() => onUnblock(block)}>
     <${Icon} name="lock" size=${18} />
     <span class="cal-blocked__text">${`Blocked: ${block.label}`}</span>
@@ -445,6 +456,7 @@ export default function CalendarView({ route }) {
   const weekLabel = `${fmtDayShort(dates[0])} to ${fmtDayShort(dates[6])}`;
 
   const groupShown = unblock ? groupWindowCount(state, unblock) : 1;
+  const hasGcal = state.blocks.some((b) => b.source === 'google_calendar');
 
   // The default label is 'Day off': "Day off: Day off." would read badly, so only a custom label (Holiday) is spelled out.
   const customOff = off && off.label.trim() && off.label.trim().toLowerCase() !== 'day off';
@@ -517,8 +529,10 @@ export default function CalendarView({ route }) {
           <li><span class="cal-day__dot cal-day__dot--few" aria-hidden="true"></span>1 left</li>
           <li><span class="cal-day__dot cal-day__dot--full" aria-hidden="true"></span>Full or closed</li>
           <li><span class="cal-day__dot cal-day__dot--hatch" aria-hidden="true"></span>Blocked</li>
+          ${hasGcal ? html`<li data-testid="calendar-legend-gcal"><${Icon} name="calendar-days" size=${14} />Google Calendar (simulated)</li>` : null}
         </ul>
         <p class="cal-legend__note">Free here means your website can pencil a survey visit into it.</p>
+        ${hasGcal ? html`<p class="cal-legend__note" data-testid="calendar-gcal-note">Busy times marked Google Calendar are imported by your calendar connection (simulated here). Change them in Google Calendar, or <a class="ui-link ui-link--inline" href=${routeHref('connections-calendar')}>turn two-way sync off</a>.</p>` : null}
         <${TextLink} href=${pageHref('index.html', '#book')} target=${pageTarget('index.html')} data-testid="calendar-preview-site">Preview customer view<//>
       </section>
     </div>

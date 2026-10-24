@@ -1,36 +1,61 @@
-/* css/dashboard.css: dashboard shell (db-*): header, tab bar, sidebar, FAB, and the page helpers every view uses.
-   Owner: WP2; re-skinned for 180 Electrical by role B2. Views load their own css/<name>.css on top of this. */
+/* css/dashboard.css: dashboard shell (db-*): header, tab bar, sidebar, FAB, page transitions, and the page helpers every view uses.
+   Owner: B3 (was WP2; re-skinned for 180 Electrical by role B2; V3 shell polish by B3). Views load their own css/<name>.css on top of this. */
 
 /* Column width of the page content: full width on phones, centred 720px on tablets, 1080px beside the sidebar. */
 :root {
   --db-col: none;
-  --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 28px); /* clears the tab bar AND the FAB (12.3) */
+  --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 28px); /* default: clears the tab bar AND the FAB (12.3) */
 }
 @media (min-width: 768px) { :root { --db-col: 720px; } }
 @media (min-width: 1100px) { :root { --db-col: 1080px; --toast-bottom: 24px; } }
-/* An immersive screen has a sticky action bar at the bottom: keep toasts above it (below 1100 the default already clears it). */
-@media (min-width: 1100px) { body:has(#app .db-sticky-actions) { --toast-bottom: 96px; } }
+/* The shell tells CSS what sits at the bottom of the screen (data-db-nav on <html>, set by shell.js), so the new-enquiry toast always
+   floats just above it: above the tab bar (and the FAB where there is one), above a sticky action bar on immersive pages. */
+:root[data-db-nav="tabs"] { --toast-bottom: calc(var(--h-tabbar) + 14px); }
+:root[data-db-nav="fab"] { --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 28px); }
+:root[data-db-nav="immersive"] { --toast-bottom: 100px; }
+@media (min-width: 1100px) {
+  :root[data-db-nav="tabs"], :root[data-db-nav="fab"] { --toast-bottom: 24px; }
+  :root[data-db-nav="immersive"] { --toast-bottom: 100px; }
+  /* A sticky action bar on a normal page (not immersive): keep toasts above it. */
+  body:has(#app .db-sticky-actions) { --toast-bottom: 96px; }
+}
 
 /* ================= Shell ================= */
 /* Strip, header and content are siblings in one page-tall box so the sticky header keeps sticking (5.1 item 16). */
 .db-shell {
   /* space under a view so nothing hides behind the tab bar (+ the FAB where there is one) */
   --db-page-pb: calc(var(--h-tabbar) + var(--safe-bottom) + var(--space-5));
+  /* where a sticky footer (Wizard, db-sticky-actions) sits: just above the tab bar, or at the very bottom on immersive pages */
+  --db-stick-bottom: calc(var(--h-tabbar) + var(--safe-bottom));
+  --db-stick-pad: 0px;
   min-height: 100vh; min-height: 100dvh;
 }
 .db-shell--fab { --db-page-pb: calc(var(--h-tabbar) + var(--h-fab) + var(--safe-bottom) + var(--space-6)); }
-.db-shell--immersive { --db-page-pb: var(--space-5); }
+.db-shell--immersive { --db-page-pb: var(--space-5); --db-stick-bottom: 0px; --db-stick-pad: var(--safe-bottom); }
 .db-main { display: block; min-width: 0; }
+
+/* ================= Page transitions (the screen rises in; a detail page lifts in; reduced motion turns it all off in base.css) ================= */
+@keyframes db-rise { from { opacity: 0; transform: translateY(10px); } }
+/* Vertical moves only: a sideways slide would make the page briefly wider than the screen (and trip overflow checks). */
+@keyframes db-push { from { opacity: 0; transform: translateY(18px) scale(0.99); } }
+@keyframes db-back { from { opacity: 0; transform: translateY(-6px); } }
+.db-view { min-width: 0; }
+.db-view--rise { animation: db-rise var(--dur-page) var(--ease-emphasis) both; }
+.db-view--push { animation: db-push var(--dur-page) var(--ease-emphasis) both; }
+.db-view--back { animation: db-back var(--dur-page) var(--ease-emphasis) both; }
 
 /* ================= Header ================= */
 .db-header {
   position: sticky; top: 0; z-index: var(--z-sticky);
   padding-top: var(--safe-top);
-  background: var(--bg); border-bottom: 1.5px solid var(--line);
+  background: var(--bg); border-bottom: 1.5px solid transparent;
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 @supports (backdrop-filter: blur(8px)) {
-  .db-header { background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .db-header { background: color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(14px); backdrop-filter: saturate(1.4) blur(14px); }
 }
+/* Once the page has scrolled the header gets its hairline and a soft shadow. */
+.db-header.is-scrolled { border-bottom-color: var(--line); box-shadow: 0 10px 24px -18px var(--scrim); }
 .db-header__inner {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
   min-height: var(--h-header); max-width: var(--db-col); margin-inline: auto;
@@ -39,7 +64,9 @@
 .db-header__brand {
   display: inline-flex; align-items: center; gap: 10px; flex: 0 1 auto; min-width: 0; min-height: var(--tap);
   color: var(--text); text-decoration: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
+.db-header__brand:active { opacity: 0.7; }
 /* Brand lockup: the business name over a small "Owner dashboard" caption. */
 .db-brand__text { display: flex; flex-direction: column; min-width: 0; }
 .db-header__name {
@@ -51,6 +78,8 @@
   color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; line-height: 1.25;
 }
 .db-header__actions { display: flex; align-items: center; flex: none; gap: 2px; }
+/* On the narrowest phones the caption would end in an ellipsis: drop it, the name stays whole. */
+@media (max-width: 359px) { .db-header__brand .db-brand__sub { display: none; } }
 
 /* ================= Bottom tab bar (below 1100px) ================= */
 .db-tabbar {
@@ -58,26 +87,42 @@
   padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
   background: var(--surface); border-top: 1.5px solid var(--line); box-shadow: var(--shadow-bar);
 }
-.db-tabbar__list {
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
-  height: var(--h-tabbar); max-width: 560px; margin: 0 auto; padding: 0; list-style: none;
+@supports (backdrop-filter: blur(8px)) {
+  .db-tabbar { background: color-mix(in srgb, var(--surface) 90%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(16px); backdrop-filter: saturate(1.4) blur(16px); }
 }
+/* The track holds the list and the sliding pill; the pill moves by whole tab widths (--tab-i), so it needs no measuring. */
+.db-tabbar__track { position: relative; max-width: 560px; margin: 0 auto; height: var(--h-tabbar); }
+.db-tabbar__list {
+  position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  height: 100%; margin: 0; padding: 0; list-style: none;
+}
+.db-tabbar__indicator {
+  position: absolute; top: 8px; left: 0; width: 20%; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  transform: translateX(calc(var(--tab-i, 0) * 100%));
+  transition: transform var(--dur-sheet) var(--ease-spring), opacity var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+.db-tabbar__indicator::before { content: ''; width: 56px; height: 30px; border-radius: var(--r-pill); background: var(--cta); box-shadow: var(--shadow-brand); }
+.db-tabbar__indicator.is-hidden { opacity: 0; }
 .db-tabbar__item { display: block; min-width: 0; }
 .db-tab {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  height: 100%; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
+  height: 100%; min-width: 0; padding-top: 8px;
   color: var(--text-2); text-decoration: none;
   font-size: var(--fs-12); font-weight: var(--fw-semibold); line-height: 1.2;
 }
 .db-tab__pill {
-  position: relative; display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 1; display: flex; align-items: center; justify-content: center;
   width: 56px; height: 30px; border-radius: var(--r-pill);
-  transition: background-color var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  transition: color var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
-.db-tab:active .db-tab__pill { transform: scale(0.92); }
-.db-tab__label { max-width: 100%; white-space: nowrap; }
+.db-tab:active .db-tab__pill { transform: scale(0.9); }
+.db-tab__label { max-width: 100%; white-space: nowrap; transition: color var(--dur-base) var(--ease-out); }
 .db-tab.is-active { color: var(--text); font-weight: var(--fw-bold); }
-.db-tab.is-active .db-tab__pill { background: var(--cta); color: var(--cta-ink); }
+.db-tab.is-active .db-tab__pill { color: var(--cta-ink); }
+@keyframes db-tab-pop { 40% { transform: translateY(-2px) scale(1.12); } }
+.db-tab.is-active .ui-icon { animation: db-tab-pop var(--dur-sheet) var(--ease-spring) 60ms both; }
 .db-tab__badge {
   position: absolute; top: -5px; right: 2px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -98,9 +143,11 @@
   border: 1.5px solid var(--btn-edge); background: var(--cta); color: var(--cta-ink);
   box-shadow: var(--shadow-brand), var(--shadow-2);
   text-decoration: none;
+  animation: ui-pop-in var(--dur-sheet) var(--ease-spring) both;
   transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
-.db-fab:active { transform: translateY(1px); background: var(--cta-press); border-color: var(--cta-press); }
+@keyframes ui-pop-in { from { opacity: 0; transform: scale(0.6); } }
+.db-fab:active { transform: translateY(1px) scale(0.96); background: var(--cta-press); border-color: var(--cta-press); }
 @media (hover: hover) { .db-fab:hover { background: var(--cta-press); border-color: var(--cta-press); } }
 @media (min-width: 768px) {
   /* aligned to the right edge of the centred column */
@@ -114,18 +161,20 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
 
 /* ================= Sidebar (1100px and up) ================= */
 .db-sidebar { display: none; }
-.db-sidebar__nav { display: flex; flex-direction: column; gap: var(--space-4); height: 100%; padding: var(--space-4) var(--space-3); overflow-y: auto; overscroll-behavior: contain; }
+.db-sidebar__nav { display: flex; flex-direction: column; gap: var(--space-3); min-height: 100%; padding: var(--space-4) var(--space-3); overflow-y: auto; overscroll-behavior: contain; }
 .db-sidebar__brand {
   display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 var(--space-3);
   color: var(--text); text-decoration: none;
 }
 .db-sidebar__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.15; }
 .db-nav { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.db-nav--low { margin-top: auto; }
+.db-nav--low { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.db-nav__heading { margin: var(--space-2) var(--space-3) 0; max-width: none; color: var(--text-3); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .db-nav__item {
   display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); padding: 0 var(--space-3);
   border-radius: var(--r-pill); color: var(--text-2); text-decoration: none;
   font-size: var(--fs-16); font-weight: var(--fw-semibold);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .db-nav__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .db-nav__item:active { background: var(--surface-2); }
@@ -146,6 +195,7 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
     grid-template-rows: auto auto 1fr;
     /* the sidebar runs the full height (strip row included) so its bottom links are never cut off */
     grid-template-areas: "sidebar strip" "sidebar header" "sidebar main";
+    --db-stick-bottom: 0px; --db-stick-pad: 0px;
   }
   .db-shell > .ui-notice--strip { grid-area: strip; }
   .db-header { grid-area: header; }
@@ -160,6 +210,7 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
   .db-header__inner { justify-content: flex-end; }
   .db-tabbar, .db-fab { display: none; }
   .db-shell { --db-page-pb: var(--space-7); }
+  .db-view--push, .db-view--back { animation: none; }
 }
 
 /* ================= Page helpers (12.2): every view uses these instead of inventing layout ================= */
@@ -193,9 +244,11 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
   padding: var(--space-3) var(--space-4);
   color: inherit; text-decoration: none;
 }
-.db-list__item + .db-list__item { border-top: 1px solid var(--line); }
+/* Dividers between whatever the direct children are (li, a, button or div). */
+.db-list > * + * { border-top: 1px solid var(--line); }
 a.db-list__item, button.db-list__item { width: 100%; border: 0; border-radius: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 a.db-list__item:active, button.db-list__item:active { background: var(--surface-2); }
+@media (hover: hover) { a.db-list__item:hover, button.db-list__item:hover { background: var(--surface-2); } }
 
 /* Sticky action bar at the bottom of an immersive screen (booking detail). Full-bleed inside the page gutters. */
 .db-sticky-actions {
@@ -206,6 +259,27 @@ a.db-list__item:active, button.db-list__item:active { background: var(--surface-
   border-top: 1.5px solid var(--line); background: var(--surface); box-shadow: var(--shadow-bar);
 }
 .db-sticky-actions > * { min-width: 0; }
+
+/* A page that holds a Wizard fills the screen, so the Back/Next bar rests at the bottom even when the step is short (the thumb zone),
+   directly above the tab bar on a tab page and at the very bottom on an immersive page. When the step is long the bar sticks. */
+.db-main:has(.ui-wizard) {
+  display: flex; flex-direction: column;
+  min-height: calc(100vh - var(--h-strip) - var(--h-header) - var(--safe-top));
+  min-height: calc(100dvh - var(--h-strip) - var(--h-header) - var(--safe-top));
+}
+.db-main:has(.ui-wizard) > .db-view { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+.db-main:has(.ui-wizard) > .db-view > .db-page { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--db-stick-bottom); }
+.db-page .ui-wizard { flex: 1 1 auto; }
+.db-page .ui-wizard__footer { margin-top: auto; }
+
+/* A Wizard inside a page: its sticky footer runs edge to edge across the page gutters (it sits at var(--db-stick-bottom)). */
+.db-page .ui-wizard__footer {
+  margin-inline: calc(max(var(--gutter), var(--safe-left)) * -1) calc(max(var(--gutter), var(--safe-right)) * -1);
+  padding-inline: max(var(--gutter), var(--safe-left)) max(var(--gutter), var(--safe-right));
+}
+@media (min-width: 768px) {
+  .db-page .ui-wizard__footer { margin-inline: 0; padding-inline: 0; }
+}
 
 /* CONTRACT-GAP: 12.2 names db-master-detail and --has-detail but not the two panes; they are __list and __detail. */
 /* Master-detail: below 1100 only one pane shows; --has-detail flips which. From 1100: list 420px, detail beside it. */
@@ -227,3 +301,9 @@ a.db-list__item:active, button.db-list__item:active { background: var(--surface-
 }
 
 .db-error__text { margin: 0 0 var(--space-3); font-weight: var(--fw-semibold); }
+
+/* The loading state of a screen: a title, a subtitle and three card placeholders (shell.js ViewSkeleton). */
+.db-skel { display: flex; flex-direction: column; gap: var(--space-3); }
+.db-skel__title { width: 52%; }
+.db-skel__sub { width: 34%; }
+.db-skel__cards { margin-top: var(--space-3); }

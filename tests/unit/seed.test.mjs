@@ -1,5 +1,5 @@
-// tests/unit/seed.test.mjs: unit tests for js/core/seed.js (the relative seed diary, fixture totals and invariants)
-// Owner: WP1
+// tests/unit/seed.test.mjs: unit tests for js/core/seed.js (the relative seed diary, the v3 pipeline seed, fixture totals and invariants)
+// Owner: WP1 (v1), A3 (v3 updates)
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ENQUIRY_STEPS, SCHEMA_VERSION, SOURCE_LABELS, answerLabel, makeDefaultSettings, normaliseAnswers } from '../../js/core/config.js';
@@ -28,11 +28,13 @@ function seedState(date = FIXTURE, settings = makeDefaultSettings(), existing) {
 
 const byId = (state, id) => state.bookings.find((b) => b.id === id);
 
-test('the fixture diary: 15 bookings, refs EL-1028 to EL-1042, one Van MOT group, refSeq 1043', () => {
+test('the fixture diary: 42 bookings (the original 15 keep EL-1028 to EL-1042), one Van MOT group, refSeq 1043', () => {
   const state = seedState();
-  assert.equal(state.bookings.length, 15);
-  assert.deepEqual(state.bookings.map((b) => b.ref), Array.from({ length: 15 }, (_, i) => `EL-${1028 + i}`));
-  assert.deepEqual(state.bookings.map((b) => b.id), Array.from({ length: 15 }, (_, i) => `bk_seed_${String(i + 1).padStart(2, '0')}`));
+  assert.equal(state.bookings.length, 42);
+  assert.deepEqual(state.bookings.slice(0, 15).map((b) => b.ref), Array.from({ length: 15 }, (_, i) => `EL-${1028 + i}`));
+  assert.deepEqual(state.bookings.slice(15).map((b) => b.ref).sort(), Array.from({ length: 27 }, (_, i) => `EL-${1001 + i}`), 'the 27 further bookings take EL-1001 to EL-1027');
+  assert.equal(new Set(state.bookings.map((b) => b.ref)).size, 42, 'refs are unique');
+  assert.deepEqual(state.bookings.map((b) => b.id), Array.from({ length: 42 }, (_, i) => `bk_seed_${String(i + 1).padStart(2, '0')}`));
   assert.ok(state.bookings.every((b) => b.seed === true));
   assert.equal(state.refSeq, 1043);
   assert.equal(state.blocks.length, 4);
@@ -49,13 +51,13 @@ test('each seeded booking lands where 3.4 says (day, window, status, money)', ()
   };
   assert.deepEqual(row(1), ['2026-10-03T08:00', 120, 'done', 'Aoife Magee', 'fault', 75, 75, true, 'card']);
   assert.deepEqual(row(2), ['2026-10-07T13:00', 240, 'done', 'Padraig Quinn', 'eicr', 150, 150, true, 'bank']);
-  assert.deepEqual(row(3), ['2026-10-10T08:00', 240, 'done', 'Niamh Gallagher', 'ev', 899, 899, true, 'card']);
+  assert.deepEqual(row(3), ['2026-10-10T08:00', 240, 'done', 'Niamh Gallagher', 'ev', 1364, 1364, true, 'card'], 'an install carries the total of the quote that led to it');
   assert.deepEqual(row(4), ['2026-10-16T10:00', 120, 'done', 'Roisin Maguire', 'sockets', 85, 170, false, null]);
   assert.deepEqual(row(5), ['2026-10-23T08:00', 120, 'done', 'Declan Rafferty', 'sockets', 85, 85, true, 'cash']);
   assert.deepEqual(row(6), ['2026-10-23T10:00', 120, 'done', 'Orla Hegarty', 'fault', 75, 75, false, null]);
   assert.deepEqual(row(7), ['2026-10-29T10:00', 120, 'new', 'Sinead Doherty', 'ev_quote', 0, null, false, null]);
   assert.deepEqual(row(8), ['2026-10-24T10:00', 120, 'confirmed', 'Eoin McCartney', 'ev_quote', 0, null, false, null]);
-  assert.deepEqual(row(9), ['2026-10-26T13:00', 240, 'confirmed', 'Padraig Quinn', 'ev', 899, null, false, null]);
+  assert.deepEqual(row(9), ['2026-10-26T13:00', 240, 'confirmed', 'Padraig Quinn', 'ev', 1934, null, false, null]);
   assert.deepEqual(row(10), ['2026-10-27T08:00', 120, 'confirmed', 'Niamh Gallagher', 'fault', 75, null, false, null]);
   assert.deepEqual(row(11), ['2026-10-27T10:00', 120, 'new', 'Conor Brennan', 'ev_quote', 0, null, false, null]);
   assert.deepEqual(row(12), ['2026-10-27T13:00', 120, 'confirmed', 'Roisin Maguire', 'ev_quote', 0, null, false, null]);
@@ -81,14 +83,16 @@ test('each seeded booking lands where 3.4 says (day, window, status, money)', ()
   assert.equal(s07.createdAt, '2026-10-23T20:18', 'created 12 minutes before seeding');
 });
 
-test('flags: seenByOwner false only for S07 and S11, reviewRequested true for S01 to S04', () => {
+test('flags: seenByOwner false for the two new enquiries and the install accepted 6 hours ago; reviews requested on the older done jobs', () => {
   const state = seedState();
+  const unseen = [7, 11, 35];
+  const reviewed = [1, 2, 3, 4, 38, 39, 40, 41];
   for (const b of state.bookings) {
     const n = Number(b.id.slice(-2));
-    assert.equal(b.seenByOwner, n !== 7 && n !== 11, b.id);
-    assert.equal(b.reviewRequested, n <= 4, b.id);
+    assert.equal(b.seenByOwner, !unseen.includes(n), b.id);
+    assert.equal(b.reviewRequested, reviewed.includes(n), b.id);
   }
-  assert.deepEqual(selectUnseenBookings(state).map((b) => b.id), ['bk_seed_07', 'bk_seed_11']);
+  assert.deepEqual(selectUnseenBookings(state).map((b) => b.id), ['bk_seed_07', 'bk_seed_35', 'bk_seed_11'], 'newest first');
 });
 
 test('createdAt rules: two days before for past and today jobs, the earlier of now-5min and three days before for future jobs', () => {
@@ -98,7 +102,7 @@ test('createdAt rules: two days before for past and today jobs, the earlier of n
   assert.equal(byId(state, 'bk_seed_08').createdAt, '2026-10-21T09:00');
   assert.equal(byId(state, 'bk_seed_09').createdAt, '2026-10-23T09:00');
   assert.equal(byId(state, 'bk_seed_14').createdAt, '2026-10-23T20:25');
-  assert.equal(byId(state, 'bk_seed_11').createdAt, '2026-10-23T19:50', 'now - 40 minutes');
+  assert.equal(byId(state, 'bk_seed_11').createdAt, '2026-10-22T14:30', 'now - 30 hours: overdue against the 24 hour promise');
   assert.equal(byId(state, 'bk_seed_07').createdAt, '2026-10-23T20:18', 'now - 12 minutes');
   for (const b of state.bookings) {
     assert.ok(b.createdAt <= '2026-10-23T20:30', `${b.id} is not created in the future`);
@@ -109,20 +113,19 @@ test('createdAt rules: two days before for past and today jobs, the earlier of n
 
 test('fixture totals at 2026-10-23T20:30', () => {
   const state = seedState();
-  assert.equal(state.bookings.length, 15);
-  assert.deepEqual(selectNeedsYou(state).map((b) => b.id), ['bk_seed_11', 'bk_seed_07'], 'two enquiries need you, oldest first');
-  assert.equal(selectNeedsYou(state).length, 2);
-  assert.deepEqual(selectOwed(state).map((b) => b.id), ['bk_seed_04', 'bk_seed_06']);
-  assert.equal(selectOwedTotal(state), 245);
+  assert.equal(state.bookings.length, 42);
+  assert.deepEqual(selectNeedsYou(state).map((b) => b.id), ['bk_seed_11', 'bk_seed_34', 'bk_seed_35', 'bk_seed_07'], 'two enquiries and two pencilled installs need you, oldest first');
+  assert.deepEqual(selectOwed(state).map((b) => b.id), ['bk_seed_04', 'bk_seed_41', 'bk_seed_42', 'bk_seed_06']);
+  assert.equal(selectOwedTotal(state), 170 + 1970 + 1394 + 75);
   const insights = selectInsights(state, '2026-10-23T20:30');
-  assert.equal(insights.collectedMonth, 1209);
-  assert.equal(insights.collectedMonthCount, 4);
-  assert.equal(insights.owedTotal, 245);
-  assert.equal(insights.owedCount, 2);
-  assert.equal(insights.bookedNext14, 1059);
-  assert.equal(insights.bookedNext14Count, 8, 'the seven jobs plus the pencilled-in enquiry, which is free');
-  assert.equal(insights.avgJob, 242);
-  assert.equal(selectCustomers(state).length, 11);
+  assert.equal(insights.collectedMonth, 3038);
+  assert.equal(insights.collectedMonthCount, 5, 'the free survey visits are not counted');
+  assert.equal(insights.owedTotal, 3609);
+  assert.equal(insights.owedCount, 4);
+  assert.equal(insights.bookedNext14, 8123);
+  assert.equal(insights.bookedNext14Count, 12, 'the jobs and installs booked or pencilled in, plus the pencilled-in enquiries, which are free');
+  assert.equal(insights.avgJob, 826, 'the free survey visits are not averaged in');
+  assert.equal(selectCustomers(state).length, 27);
 });
 
 test('day loads: Sat few, Sun closed, Mon good, Tue full, Wed full (blocked windows are not free)', () => {
@@ -171,19 +174,19 @@ test('no two non-cancelled bookings (or a block) share a window', () => {
   assertNoOverlaps(seedState());
 });
 
-test('Padraig is the repeat landlord: an EICR and an EV install at two addresses', () => {
+test('Padraig is the repeat landlord: an EICR, the free survey and an EV install at two addresses', () => {
   const state = seedState();
   const padraig = state.bookings.filter((b) => b.customer.name === 'Padraig Quinn');
-  assert.equal(padraig.length, 2);
-  assert.deepEqual(padraig.map((b) => b.serviceId), ['eicr', 'ev']);
+  assert.equal(padraig.length, 3);
+  assert.deepEqual(padraig.map((b) => b.serviceId), ['eicr', 'ev', 'ev_quote']);
   assert.equal(new Set(padraig.map((b) => b.address.line1)).size, 2);
 });
 
 test('the diary is EV-led: free quote visits and EV installs are most of it, the other services fill in around them', () => {
   const state = seedState();
   const count = (id) => state.bookings.filter((b) => b.serviceId === id).length;
-  assert.equal(count('ev_quote'), 6);
-  assert.equal(count('ev'), 2);
+  assert.equal(count('ev_quote'), 24);
+  assert.equal(count('ev'), 11);
   assert.ok(count('ev_quote') + count('ev') > state.bookings.length / 2, 'most bookings are EV');
   assert.ok(state.bookings.filter((b) => b.serviceId === 'ev_quote').every((b) => b.quotedPrice === 0));
   assert.ok(state.bookings.every((b) => b.ref.startsWith('EL-')));
@@ -210,12 +213,14 @@ test('every EV booking carries the funnel answers (valid values, the postcode ma
 
 test('pencilled-in enquiries: tentative only while pending, website enquiries have no street, confirmed surveys are the owner\'s doing', () => {
   const state = seedState();
-  assert.deepEqual(state.bookings.filter((b) => b.tentative).map((b) => b.id), ['bk_seed_07', 'bk_seed_11']);
-  assert.ok(state.bookings.filter((b) => b.tentative).every((b) => b.status === 'new' && b.serviceId === 'ev_quote' && bookingWindowIds(b).length === 1));
+  assert.deepEqual(state.bookings.filter((b) => b.tentative).map((b) => b.id), ['bk_seed_07', 'bk_seed_11', 'bk_seed_34', 'bk_seed_35']);
+  assert.ok(state.bookings.filter((b) => b.tentative).every((b) => b.status === 'new'));
+  assert.ok(state.bookings.filter((b) => b.tentative && b.serviceId === 'ev_quote').every((b) => bookingWindowIds(b).length === 1));
+  assert.ok(state.bookings.filter((b) => b.tentative && b.serviceId === 'ev').every((b) => bookingWindowIds(b).length === 2 && b.quoteId), 'a pencilled install is a half day made by an accepted quote');
   for (const id of ['bk_seed_07', 'bk_seed_08', 'bk_seed_11', 'bk_seed_15']) assert.equal(byId(state, id).address.line1, '', `${id} gave only a postcode`);
   assert.equal(byId(state, 'bk_seed_12').address.line1, '6 Ballydoon Mews', 'a WhatsApp enquiry gave an address');
   const s08 = byId(state, 'bk_seed_08');
-  assert.deepEqual(s08.history.map((h) => [h.event, h.by]), [['created', 'customer'], ['confirmed', 'owner']], 'a survey is never auto-confirmed');
+  assert.deepEqual(s08.history.map((h) => [h.event, h.by]), [['created', 'customer'], ['confirmed', 'owner'], ['message', 'owner']], 'a survey is never auto-confirmed (then the photos request)');
   assert.equal(s08.tentative, undefined);
   assert.equal(byId(state, 'bk_seed_10').history[1].by, 'system', 'other website jobs still confirm themselves');
 });
@@ -225,7 +230,7 @@ test('the S07 enquiry alert is msg_seed_07_alert and seed message ids follow msg
   const ids = state.messages.map((m) => m.id);
   assert.ok(ids.includes('msg_seed_07_alert'));
   assert.equal(new Set(ids).size, ids.length, 'ids are unique');
-  for (const id of ids) assert.match(id, /^msg_seed_(0[1-9]|1[0-5])_(alert|conf|rem|done)$/);
+  for (const id of ids) assert.match(id, /^msg_seed_(0[1-9]|[1-3]\d|4[0-2])_(alert|conf|rem|done|qsent|qacc|qaccc|photos)$/);
   const alert = state.messages.find((m) => m.id === 'msg_seed_07_alert');
   assert.equal(alert.kind, 'owner_new_booking');
   assert.equal(alert.to, 'owner');
@@ -250,14 +255,14 @@ test('seed messages: which bookings get which, all marked seed and simulated', (
   assert.deepEqual(kindsOf(5), ['alert', 'conf', 'done'], "today's done jobs also get customer_completed");
   assert.deepEqual(kindsOf(6), ['alert', 'conf', 'done']);
   assert.deepEqual(kindsOf(7), ['alert', 'conf']);
-  assert.deepEqual(kindsOf(8), ['alert', 'conf', 'rem']);
+  assert.deepEqual(kindsOf(8), ['alert', 'conf', 'photos', 'rem']);
   assert.deepEqual(kindsOf(11), ['alert', 'conf'], 'an approval booking has no reminder');
   assert.equal(state.messages.find((m) => m.id === 'msg_seed_11_conf').kind, 'customer_received');
   assert.equal(state.messages.find((m) => m.id === 'msg_seed_05_done').kind, 'customer_completed');
   const rem = state.messages.find((m) => m.id === 'msg_seed_09_rem');
   assert.equal(rem.kind, 'customer_reminder');
   assert.equal(rem.sendAt, '2026-10-25T18:00', '18:00 the evening before Monday 26 Oct');
-  assert.ok(state.messages.every((m) => m.seed === true && m.simulated === true && m.channel === 'whatsapp'));
+  assert.ok(state.messages.every((m) => m.seed === true && m.simulated === true && ['whatsapp', 'email'].includes(m.channel)));
   assert.ok(state.messages.every((m) => m.id.startsWith('msg_seed_')));
   assert.match(state.messages.find((m) => m.id === 'msg_seed_11_alert').body, /Outside Northern Ireland \(DG9\)\. Check you can travel before you confirm the survey\./);
 });
@@ -317,7 +322,7 @@ test('existing records are never double-booked: a day rollover cannot take a win
   // a busy diary can drop a job rather than double-book (the contract allows 14 or more)
   const full = [0, 1, 2, 3].flatMap((w) => ['2026-10-24', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-02'].map((d) => holding(`${d}T${['08:00', '10:00', '13:00', '15:00'][w]}`, 120, `bk_${d}_${w}`)));
   state = seedState(FIXTURE, makeDefaultSettings(), { bookings: full, blocks: [] });
-  assert.ok(state.bookings.length >= 8 && state.bookings.length < 15);
+  assert.ok(state.bookings.length >= 8 && state.bookings.length < 42);
   assert.ok(state.bookings.every((b) => b.urgent || b.status === 'cancelled' || stampDay(b.start) <= '2026-10-23' || !full.some((f) => stampDay(f.start) === stampDay(b.start) && bookingWindowIds(f).some((w) => bookingWindowIds(b).includes(w)))));
 });
 
@@ -331,16 +336,16 @@ test('invariants hold at every weekday 09:00 and Sunday 12:00 in four different 
     const when = new Date(y, m - 1, d, hh, mm);
     const state = seedState(when);
     const label = `${day} ${hh}:${String(mm).padStart(2, '0')} (weekday ${weekdayOf(day)})`;
-    assert.ok(state.bookings.length >= 14, `${label}: ${state.bookings.length} bookings`);
+    assert.equal(state.bookings.length, 42, `${label}: ${state.bookings.length} bookings`);
     const statuses = new Set(state.bookings.map((b) => b.status));
     for (const s of ['new', 'confirmed', 'done', 'cancelled']) assert.ok(statuses.has(s), `${label}: has ${s}`);
     assert.ok(!statuses.has('on_the_way'), `${label}: on_the_way is not seeded`);
     assert.equal(state.bookings.filter((b) => b.urgent).length, 0, `${label}: no emergency is seeded`);
-    assert.deepEqual(state.bookings.filter((b) => b.status === 'new').map((b) => b.id), ['bk_seed_07', 'bk_seed_11'], `${label}: two enquiries need you`);
+    assert.deepEqual(state.bookings.filter((b) => b.status === 'new').map((b) => b.id), ['bk_seed_07', 'bk_seed_11', 'bk_seed_34', 'bk_seed_35'], `${label}: two enquiries and two pencilled installs need you`);
     assert.ok(state.bookings.filter((b) => b.status === 'new').every((b) => b.tentative === true && b.answers && b.answers.timing), `${label}: pencilled in, with answers`);
     assert.ok(selectOwed(state).length >= 1, `${label}: an owed job`);
     const padraig = state.bookings.filter((b) => b.customer.name === 'Padraig Quinn' && b.status !== 'cancelled');
-    assert.equal(padraig.length, 2, `${label}: Padraig has two jobs`);
+    assert.equal(padraig.length, 3, `${label}: Padraig has three jobs`);
     assert.equal(new Set(padraig.map((b) => b.address.line1)).size, 2, `${label}: at two addresses`);
     assertNoOverlaps(state);
     // the first open day after today has window 0 free for customers
@@ -385,7 +390,8 @@ test('the seed survives the 25 Oct clock change (Saturday and Monday around it)'
 
 test('seeded customers, sample customer and simulator pool follow the fictional-data rules', () => {
   const keys = ['aoife', 'padraig', 'niamh', 'declan', 'orla', 'sinead', 'eoin', 'ciaran', 'roisin', 'conor', 'bronagh'];
-  assert.deepEqual(Object.keys(SEED_CUSTOMERS), keys);
+  assert.deepEqual(Object.keys(SEED_CUSTOMERS).slice(0, 11), keys, 'the original customers come first');
+  assert.equal(Object.keys(SEED_CUSTOMERS).length, 27);
   assert.equal(SEED_CUSTOMERS.aoife.name, 'Aoife Magee');
   assert.equal(SEED_CUSTOMERS.padraig.addresses.length, 2);
   assert.equal(SEED_CUSTOMERS.conor.addresses[0].postcode, 'DG9 8AB');
@@ -402,8 +408,8 @@ test('seeded customers, sample customer and simulator pool follow the fictional-
   for (const phone of phones) assert.match(phone, /^07700 900\d{3}$/, phone);
   for (const c of Object.values(SEED_CUSTOMERS)) {
     const n = Number(c.phone.slice(-3));
-    assert.ok(n >= 200 && n <= 399, `${c.phone} is in the seed range`);
-    assert.ok(c.email === '' || c.email.endsWith('.example'));
+    assert.ok(n >= 200 && n <= 499, `${c.phone} is in the seed range (the simulator uses 500 to 507)`);
+    assert.match(c.email, /^[a-z.]+@example\.com$/, 'a sample address at example.com');
   }
   assert.equal(SIM_POOL.length, 8);
   assert.deepEqual(SAMPLE_ENQUIRY_ANSWERS, { parking: 'driveway', vehicle: 'ordered', timing: 'asap', permission: 'yes' });
@@ -430,7 +436,7 @@ test('seed history reflects the status (created, confirmed, done, paid, cancelle
   assert.deepEqual(byId(state, 'bk_seed_04').history.map((h) => h.event), ['created', 'confirmed', 'done']);
   assert.deepEqual(byId(state, 'bk_seed_07').history.map((h) => h.event), ['created']);
   assert.deepEqual(byId(state, 'bk_seed_11').history.map((h) => h.event), ['created']);
-  assert.deepEqual(byId(state, 'bk_seed_08').history.map((h) => h.event), ['created', 'confirmed']);
+  assert.deepEqual(byId(state, 'bk_seed_08').history.map((h) => h.event), ['created', 'confirmed', 'message']);
   assert.deepEqual(byId(state, 'bk_seed_15').history.map((h) => h.event), ['created', 'cancelled']);
   assert.equal(byId(state, 'bk_seed_01').paidAt, '2026-10-03T10:00', 'paidAt is the window end');
   for (const b of state.bookings) {
@@ -447,7 +453,8 @@ test('buildSeed honours custom settings (prices and a rebrand flow into the seed
   settings.services.find((s) => s.id === 'fault').price = 80;
   settings.remindersOn = false;
   const state = seedState(FIXTURE, settings);
-  assert.equal(byId(state, 'bk_seed_09').quotedPrice, 949, 'the EV install uses the edited service price');
+  const priced = seedState(FIXTURE, (() => { const t = makeDefaultSettings(); t.quoteItems.find((i) => i.id === 'install_standard').unitPrice = 500; return t; })());
+  assert.equal(byId(priced, 'bk_seed_09').quotedPrice, 1984, 'an install carries its quote total, so the edited catalogue price flows in (+50)');
   assert.equal(byId(state, 'bk_seed_10').quotedPrice, 80);
   assert.equal(byId(state, 'bk_seed_08').quotedPrice, 0, 'a free quote visit stays free');
   assert.ok(state.messages.find((m) => m.id === 'msg_seed_08_conf').body.includes("it's Lee from Ashby Sparks"));

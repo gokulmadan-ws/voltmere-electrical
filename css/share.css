@@ -1,0 +1,63 @@
+/* css/share.css: Share and promote (sh-card, sh-print ...). Colours come from tokens.css; the print card is real paper, so it uses the
+   colour names white and black (a QR code must be black on white in both themes). Owner: E3 */
+
+.sh-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; max-width: 760px; }
+.sh-stack > * { min-width: 0; }
+.sh-card { display: flex; flex-direction: column; gap: var(--space-4); }
+.sh-card__title { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.2; }
+.sh-card__text { margin: calc(var(--space-2) * -1) 0 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.5; }
+.sh-card__note { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
+.sh-card__note svg { flex: none; margin-top: 2px; }
+.sh-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+@media (min-width: 480px) { .sh-actions { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); } }
+.sh-sub { margin: var(--space-2) 0 calc(var(--space-2) * -1); font-family: var(--font-body); font-size: var(--fs-16); font-weight: var(--fw-bold); letter-spacing: 0; }
+
+/* campaign links */
+.sh-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.sh-use { margin-top: calc(var(--space-2) * -1); }
+.sh-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+@media (min-width: 640px) { .sh-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.sh-counts { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
+.sh-counts svg { flex: none; color: var(--cta-text); }
+.sh-ready { margin: 0; padding: 0; list-style: none; border: 1.5px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.sh-ready__item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); }
+.sh-ready__item + .sh-ready__item { border-top: 1px solid var(--line); }
+.sh-ready__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sh-ready__label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-15); font-weight: var(--fw-bold); }
+.sh-ready__label svg { flex: none; color: var(--text-2); }
+.sh-ready__url { color: var(--text-2); font-size: var(--fs-12); line-height: 1.4; overflow-wrap: anywhere; }
+
+/* the card, as it looks on screen and on paper */
+.sh-print {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-3); box-sizing: border-box;
+  width: 100%; max-width: 340px; margin: 0 auto; padding: var(--space-5) var(--space-4);
+  border: 1px solid var(--line); border-radius: var(--r-lg); background: white; color: black; text-align: center;
+  box-shadow: var(--shadow-2);
+}
+.sh-print__logo { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 200px; min-height: 40px; overflow: hidden; border-radius: var(--r-sm); background: black; }
+.sh-print__logo img { display: block; width: 100%; height: auto; }
+.sh-print__name { padding: var(--space-3); color: white; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); }
+.sh-print__kicker { margin: 0; color: var(--brand-dark); font-size: var(--fs-12); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.sh-print__title { margin: 0; font-family: var(--font-display); font-size: 26px; font-weight: var(--fw-heavy); line-height: 1.15; letter-spacing: var(--tracking-tight); text-wrap: balance; }
+.sh-print__qr { display: flex; justify-content: center; max-width: 100%; }
+.sh-print__qr .ui-qr { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18); border-radius: var(--r-sm); }
+.sh-print__phone { margin: 0; font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); }
+.sh-print__area { margin: 0; color: rgb(60 60 64); font-size: var(--fs-14); }
+
+@media print {
+  @page { margin: 10mm; }
+  /* Only the card prints: hide everything, show the card at the top of the page, and stop the page behind it from adding blank pages. */
+  html, body { height: 100% !important; overflow: hidden !important; background: white !important; }
+  body * { visibility: hidden !important; }
+  .sh-noprint { display: none !important; }
+  .sh-print, .sh-print * { visibility: visible !important; }
+  .sh-print {
+    position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+    width: 120mm; max-width: none; padding: 10mm 8mm; border: 2px solid black; border-radius: 6mm; box-shadow: none;
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  }
+  .sh-print__logo, .sh-print__name { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .sh-print__title { font-size: 9mm; }
+  .sh-print__phone { font-size: 9mm; }
+  .sh-print__qr .ui-qr { width: 70mm !important; height: 70mm !important; }
+}

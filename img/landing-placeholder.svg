@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Home EV charger line drawing">
+  <!-- img/landing-placeholder.svg: shown when one of his photos cannot load: charger line art on the brand's near-black, brand red accent. Owner: L3. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1A1A1D"/><stop offset="1" stop-color="#0B0B0C"/></linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.5"><stop offset="0" stop-color="#E11414" stop-opacity="0.22"/><stop offset="1" stop-color="#E11414" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <rect width="400" height="300" fill="url(#glow)"/>
+  <g fill="#E11414" fill-opacity="0.16"><path d="M0 0H70L0 70Z"/><path d="M400 300H330L400 230Z"/></g>
+  <g fill="none" stroke="#A9A9AE" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="160" y="64" width="80" height="128" rx="14"/>
+    <circle cx="200" cy="106" r="14"/>
+    <path d="M178 148h44"/>
+    <path d="M178 164h26"/>
+    <path d="M200 192v22c0 14 10 22 24 22h26c14 0 20-8 20-20v-10"/>
+  </g>
+  <path d="M203 94l-9 16h8l-5 14 13-19h-8z" fill="#E11414"/>
+  <rect x="262" y="198" width="22" height="30" rx="5" fill="none" stroke="#E11414" stroke-width="3"/>
+</svg>

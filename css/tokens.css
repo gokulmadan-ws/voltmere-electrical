@@ -1,6 +1,6 @@
-/* css/tokens.css: every design token, light and dark. The only file allowed to hold hex colours
-   (plus the brand SVGs in img/). Re-skin the whole site by editing this file.
-   Owner: WP2; re-skinned for 180 Electrical (near-black, near-white, brand red #E11414) by role B2.
+/* css/tokens.css: every design token, light and dark. The only file allowed to hold hex colours (plus the brand SVGs in img/).
+   Owner: B3 (was WP2); re-skinned for 180 Electrical (near-black, near-white, brand red #E11414) by role B2; V3 elevation, motion and focus tokens by B3.
+   Re-skin the whole site by editing this file.
 
    Rules (contract 4.3): light values on :root; the dark block appears TWICE, byte-identical (once
    under prefers-color-scheme with :root:not([data-theme="light"]), once under :root[data-theme="dark"]);
@@ -91,7 +91,12 @@
   --shadow-1: 0 1px 2px rgba(11, 11, 12, 0.08), 0 2px 8px rgba(11, 11, 12, 0.06);
   --shadow-2: 0 8px 28px -8px rgba(11, 11, 12, 0.34);
   --shadow-bar: 0 -2px 12px rgba(11, 11, 12, 0.08);
-  --shadow-brand: 0 8px 22px -10px rgba(225, 20, 20, 0.55); /* soft red glow under a primary button */
+  --shadow-brand: 0 8px 22px -10px rgba(225, 20, 20, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.2); /* soft red glow under a primary button, plus a 1px top highlight */
+  --shadow-3: 0 18px 44px -14px rgba(11, 11, 12, 0.46), 0 2px 8px rgba(11, 11, 12, 0.12); /* popovers, toasts */
+  --elev-hi: 0 0 0 0 transparent;  /* dark cards carry a 1px top highlight; light cards do not need one */
+  /* selection and caret */
+  --selection-bg: rgba(225, 20, 20, 0.22);
+  --selection-fg: var(--text);
 }
 
 /* Dark (the default look: near-black, near-white, red accents). Auto: follows the OS unless the user forced light. */
@@ -145,10 +150,14 @@
     --chat-bg: #0B141A;
     --bubble-out-bg: #12453B;  --bubble-out-fg: #E8F5EE;
     --bubble-in-bg: #202225;   --bubble-in-fg: #F5F5F4;
-    --shadow-1: none;
-    --shadow-2: 0 0 0 1px var(--line);
+    --shadow-1: var(--elev-hi), 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-2: 0 0 0 1px var(--line), 0 22px 50px -16px rgba(0, 0, 0, 0.85);
+    --shadow-3: 0 0 0 1px var(--line), 0 18px 40px -12px rgba(0, 0, 0, 0.9);
+    --elev-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     --shadow-bar: 0 -1px 0 var(--line);
-    --shadow-brand: 0 8px 24px -10px rgba(225, 20, 20, 0.7);
+    --shadow-brand: 0 8px 24px -10px rgba(225, 20, 20, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    --selection-bg: rgba(225, 20, 20, 0.34);
+    --selection-fg: var(--text);
   }
 }
 
@@ -202,10 +211,14 @@
     --chat-bg: #0B141A;
     --bubble-out-bg: #12453B;  --bubble-out-fg: #E8F5EE;
     --bubble-in-bg: #202225;   --bubble-in-fg: #F5F5F4;
-    --shadow-1: none;
-    --shadow-2: 0 0 0 1px var(--line);
+    --shadow-1: var(--elev-hi), 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-2: 0 0 0 1px var(--line), 0 22px 50px -16px rgba(0, 0, 0, 0.85);
+    --shadow-3: 0 0 0 1px var(--line), 0 18px 40px -12px rgba(0, 0, 0, 0.9);
+    --elev-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     --shadow-bar: 0 -1px 0 var(--line);
-    --shadow-brand: 0 8px 24px -10px rgba(225, 20, 20, 0.7);
+    --shadow-brand: 0 8px 24px -10px rgba(225, 20, 20, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    --selection-bg: rgba(225, 20, 20, 0.34);
+    --selection-fg: var(--text);
 }
 
 /* Non-colour tokens: same in both themes. */
@@ -231,6 +244,7 @@
   --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
   /* radii: pill buttons and chips, 18px cards (his rounded-2xl), 12px inputs */
   --r-sm: 8px;  --r-md: 12px;  /* inputs */  --r-lg: 18px;  /* cards */
+  --r-xs: 6px;
   --r-xl: 24px; /* sheet top */ --r-2xl: 28px; /* hero bottom */ --r-pill: 999px;
   /* sizes */
   --tap: 44px;  --h-input: 52px;  --h-btn: 48px;  --h-btn-lg: 56px;
@@ -245,7 +259,13 @@
   --z-scrim: 100;  --z-sheet: 110;  --z-toast: 200;
   /* motion */
   --dur-fast: 120ms;  --dur-base: 200ms;  --dur-sheet: 280ms;  --dur-flip: 450ms;  --dur-highlight: 1200ms;
+  --dur-page: 260ms;  --dur-slow: 420ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+  /* focus ring (base.css): 3px, offset 2px, colour --focus (white on dark, blue on light, white on the black panels) */
+  --focus-width: 3px;  --focus-offset: 2px;
+  /* connection states (StatusDot, ConnectionBadge): always paired with an icon and a word */
+  --conn-connected: var(--ok);  --conn-pending: var(--dot-few);  --conn-error: var(--danger);  --conn-off: var(--dot-full);
 }
 
 /* The page paints its own colours explicitly (rule c): never rely on the browser default. */

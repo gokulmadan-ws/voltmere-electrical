@@ -26,9 +26,9 @@ test('the business defaults are his real, public details (and nothing invented)'
   assert.deepEqual(biz.edgeOutward, []);
 });
 
-test('storage keys keep their names; the schema is v2 (the 180 Electrical model)', () => {
-  assert.equal(SCHEMA_VERSION, 2);
-  assert.deepEqual(STORAGE_KEYS, { state: 'vm_state_v1', theme: 'vm_theme', draft: 'vm_draft_v1', bootFail: 'vm_boot_fail' });
+test('storage keys keep their names; the schema is v3 (quotes, pipeline, connections) and adds the utm session key', () => {
+  assert.equal(SCHEMA_VERSION, 3);
+  assert.deepEqual(STORAGE_KEYS, { state: 'vm_state_v1', theme: 'vm_theme', draft: 'vm_draft_v1', bootFail: 'vm_boot_fail', utm: 'vm_utm' });
   assert.equal(PROMISES.contactWithinHours, 24);
 });
 

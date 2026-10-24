@@ -1,6 +1,9 @@
-// js/core/selectors.js: pure derived data for the UI (needs-you, next-up, customers, insights)
-// Owner: WP1
-import { ENQUIRY_ANSWER_HEADINGS, ENQUIRY_ANSWER_KEYS, PROMISES, answerLabel } from './config.js';
+// js/core/selectors.js: pure derived data for the UI (needs-you, next-up, customers, insights; re-exports the v3 pipeline and quote selectors)
+// Owner: WP1 (v1), A3 (v3 additions)
+import { ENQUIRY_ANSWER_HEADINGS, ENQUIRY_ANSWER_KEYS, PROMISES, answerLabel, imageUrl, makeDefaultBusiness } from './config.js';
+import { nowStampSec } from './clock.js';
+import { summariseConnections } from './connections.js';
+import { isFreeVisit } from './pipeline.js';
 import {
   addDays, diffDays, fmtDayShort, minutesBetween, monthKeyOf, stampDay, weekStart, weekdayOf
 } from './dates.js';
@@ -17,6 +20,13 @@ function byIndex(list) {
 // ---------- brand and services ----------
 
 const brandCache = new WeakMap();
+
+// v3 re-exports: everything a view needs can be imported from here (docs/V3-API.md section 14).
+export {
+  isFreeVisit, leadSourceOf, resolveRange, RANGE_PRESETS, selectPipeline, selectJourney, selectSla, selectLeadSources, selectCostPerLead,
+  selectQuoteStats, selectQuotes, selectQuote, selectQuotesForBooking, selectQuoteForBooking, selectQuoteList, selectQuoteDetail
+} from './pipeline.js';
+export { quoteTotal, quoteLineTotal, quoteStatus, quoteExpiresInDays } from './quotes.js';
 
 export function selectBrand(state) {
   const hit = brandCache.get(state);
@@ -44,10 +54,22 @@ export function selectBrand(state) {
     hoursText: describeHours(s.hours),
     demoPhoneDigits: s.demoPhoneDigits || '',
     coveredOutward: b.coveredOutward,
-    edgeOutward: b.edgeOutward
+    edgeOutward: b.edgeOutward,
+    address: typeof b.address === 'string' ? b.address : '',
+    images: { ...makeDefaultBusiness().images, ...(b.images && typeof b.images === 'object' ? b.images : {}) }
   };
   brandCache.set(state, brand);
   return brand;
+}
+
+/** One of his photos for this state's settings: `selectImageUrl(state, 'hero', { width: 1080 })`. */
+export function selectImageUrl(state, key, { width } = {}) {
+  return imageUrl(key, { width, images: state.settings.business.images });
+}
+
+/** The hub rows for the Connections screen (SIMULATED connections). Reports the settled status of any due simulation. */
+export function selectConnectionsSummary(state, nowSecStr = nowStampSec()) {
+  return summariseConnections(state.settings.connections, nowSecStr);
 }
 
 export function selectServices(state, { activeOnly = true } = {}) {
@@ -154,10 +176,10 @@ export function selectUpcoming(state, nowStampStr) {
 
 const priceOf = (b) => (b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice);
 
-/** done and not paid, oldest start first. */
+/** done and not paid, oldest start first. A free survey visit is never owed. */
 export function selectOwed(state) {
   return byIndex(state.bookings)
-    .filter(({ item }) => item.status === 'done' && !item.paid)
+    .filter(({ item }) => item.status === 'done' && !item.paid && !isFreeVisit(item))
     .sort((a, b) => cmp(a.item.start, b.item.start) || a.index - b.index)
     .map(({ item }) => item);
 }
@@ -290,11 +312,12 @@ export function selectInsights(state, nowStampStr) {
   const today = stampDay(nowStampStr);
   const month = monthKeyOf(nowStampStr);
   const bookings = state.bookings;
-  const collected = bookings.filter((b) => b.status === 'done' && b.paid && b.paidAt && monthKeyOf(b.paidAt) === month);
+  // A free survey visit (ev_quote done at £0) carries no money: it is neither collected nor part of the average job.
+  const collected = bookings.filter((b) => b.status === 'done' && b.paid && b.paidAt && monthKeyOf(b.paidAt) === month && !isFreeVisit(b));
   const owed = selectOwed(state);
   const horizon = addDays(today, 13);
   const ahead = bookings.filter((b) => !b.urgent && ['new', 'confirmed', 'on_the_way'].includes(b.status) && stampDay(b.start) >= today && stampDay(b.start) <= horizon);
-  const recentDone = bookings.filter((b) => b.status === 'done' && diffDays(stampDay(b.start), today) >= 0 && diffDays(stampDay(b.start), today) <= 30);
+  const recentDone = bookings.filter((b) => b.status === 'done' && !isFreeVisit(b) && diffDays(stampDay(b.start), today) >= 0 && diffDays(stampDay(b.start), today) <= 30);
   const sum = (list, f) => list.reduce((t, b) => t + f(b), 0);
 
   const thisWeek = weekStart(today);

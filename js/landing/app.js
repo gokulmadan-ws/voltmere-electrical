@@ -1,19 +1,27 @@
-// js/landing/app.js: customer landing page entry for 180 Electrical: names the tab, composes the sections, opens the enquiry funnel from the hash.
-// Owner: C2
+// js/landing/app.js: customer landing page entry for 180 Electrical: names the tab, captures campaign tags, composes the sections, opens the enquiry funnel from the hash.
+// Owner: L3 (landing page for 180 Electrical; first built by C2)
 import { html, useEffect, useErrorBoundary } from '../vendor/preact-htm.js';
 import { bootApp, useBrand } from '../ui/index.js';
 import { makeDefaultSettings } from '../core/config.js';
 import { getState } from '../core/store.js';
+import { captureUtm } from '../core/utm.js';
 import { closeBooking, useBookRoute } from '../booking/nav.js';
 import { BookingSheet } from '../booking/booking-sheet.js';
 import { LandingHeader } from './header.js';
 import { Hero } from './hero.js';
-import { About, AreaSection, Faq, FinalCta, Gallery, HowItWorks, Pricing, TrustBar, WhyCards } from './sections.js';
+import { About, AreaSection, Faq, FinalCta, HowItWorks, Pricing, TrustBar, WhyCards } from './sections.js';
+import { Gallery } from './gallery.js';
+import { Calculator } from './calculator.js';
 import { Footer } from './footer.js';
 import { StickyBar } from './sticky-bar.js';
+import { initReveal } from './fx.js';
 
 // Cross-page links target this name, so "View customer site" in the dashboard re-uses this tab (16.1). Do not rename.
 window.name = 'vm-site';
+
+// Campaign tags (?utm_source=, ?utm_medium=, ?utm_campaign=, or ?src=) are kept for the funnel's submit (js/core/utm.js).
+// A problem there must never stop the page from showing, so it is guarded.
+try { captureUtm(location.search); } catch (err) { console.error('Campaign tags were not captured', err); }
 
 /** What the booking sheet should show, from the parsed hash (11.1). */
 function routeToIntent(route) {
@@ -36,6 +44,9 @@ function LandingPage() {
     meta.setAttribute('content', `Get a free, no-obligation home EV charger installation quote from ${brand.name}, across Northern Ireland. Prototype with sample data.`);
   }, [brand.name, brand.tagline]);
 
+  // Scroll reveal: everything is visible by default; only what is below the fold gets a small offset that lifts as it arrives.
+  useEffect(() => initReveal(), []);
+
   return html`
     <a class="lp-skip" href="#main">Skip to main content</a>
     <${LandingHeader} />
@@ -43,6 +54,7 @@ function LandingPage() {
       <${Hero} />
       <${TrustBar} />
       <${WhyCards} />
+      <${Calculator} />
       <${About} />
       <${Gallery} />
       <${HowItWorks} />

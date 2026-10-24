@@ -1,5 +1,5 @@
 // js/dashboard/views/new.js: New booking route, wraps BookingSheet in owner mode as an inline page.
-// Owner: WP6
+// Owner: E3 (v1 by WP6)
 import { html, useMemo } from '../../vendor/preact-htm.js';
 import { PageHeader } from '../../ui/index.js';
 import { BookingSheet } from '../../booking/booking-sheet.js';

@@ -51,8 +51,9 @@ function withWarnSpy(fn) {
   assert.deepEqual(warnings, []);
 }
 
-test('there are 19 kinds and every table has the same keys in the same order', () => {
-  assert.equal(TEMPLATE_KINDS.length, 19);
+test('there are 25 kinds (the 19 of the contract, then the six v3 kinds) and every table has the same keys in the same order', () => {
+  assert.equal(TEMPLATE_KINDS.length, 25);
+  assert.deepEqual(TEMPLATE_KINDS.slice(19), ['customer_quote_sent', 'customer_quote_accepted', 'owner_quote_accepted', 'owner_quote_declined', 'customer_photos_request', 'owner_test_event']);
   assert.deepEqual(Object.keys(KIND_LABELS), TEMPLATE_KINDS);
   assert.deepEqual(Object.keys(DEFAULT_TEMPLATES), TEMPLATE_KINDS);
   assert.equal(KIND_LABELS.owner_new_booking, 'New enquiry alert');

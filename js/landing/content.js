@@ -1,5 +1,5 @@
-// js/landing/content.js: landing copy (his verbatim words), photo paths, and the enquiry-start helpers that open the funnel.
-// Owner: C2 (landing page for 180 Electrical)
+// js/landing/content.js: landing copy (his verbatim words), photo settings (crops, alt text) and the enquiry-start helpers that open the funnel.
+// Owner: L3 (landing page for 180 Electrical; first built by C2)
 import { bookHref, openBooking } from '../booking/nav.js';
 
 // The only service the website offers: the free survey and written quote (an enquiry, never a booking, never a price).
@@ -8,30 +8,51 @@ export const ENQUIRY_SERVICE_ID = 'ev_quote';
 // Every CTA on his site has exactly this text.
 export const CTA_LABEL = 'Get my installation quote';
 
-// His real photos, optimised copies placed by the lead. A photo that fails to load falls back to a neutral dark box.
-export const PHOTOS = {
-  logo: 'img/180/logo.jpg',
-  logoFallback: 'img/logo-180.png',
-  hero: 'img/180/hero-charger.jpg',
-  about: 'img/180/about.jpg',
-  work: ['img/180/work-1.jpg', 'img/180/work-2.jpg', 'img/180/work-3.jpg', 'img/180/work-4.jpg']
-};
-
-// Alt text describes what a photo is, without inventing facts about it (no addresses, no charger models).
-export const PHOTO_ALT = {
-  hero: 'A home EV charger fitted to a house wall',
-  about: '180 Electrical installing a home EV charger',
+/**
+ * His photos. The URLs live in ONE place (business.images in js/core/config.js, edited in dashboard Settings); here is only
+ * how each is shown: its shape (w and h are the original's, so the box is reserved before the file arrives), where to aim
+ * the crop (object-position, from the photo's own focal point), an optional zoom (to crop away phone-screenshot bars)
+ * and what it shows. Alt text says what is in the picture and nothing more: no addresses, no product claims.
+ */
+export const IMAGES = {
+  logo: { key: 'logo', w: 1119, h: 743, alt: '180 Electrical' },
+  hero: {
+    key: 'hero', w: 1080, h: 720, position: '50% 42%',
+    alt: 'A man plugging a charging cable into a wall-mounted home EV charger, with a white electric car parked on the driveway behind him'
+  },
+  about: {
+    key: 'about', w: 3600, h: 2697, position: '50% 59%',
+    alt: 'A smiling 180 Electrical installer in a black 180 hoodie, arms crossed, beside a white van on a residential street'
+  },
   work: [
-    'A recent home EV charger installation in Northern Ireland, photo 1',
-    'A recent home EV charger installation in Northern Ireland, photo 2',
-    'A recent home EV charger installation in Northern Ireland, photo 3',
-    'A recent home EV charger installation in Northern Ireland, photo 4'
+    {
+      key: 'work1', w: 1170, h: 1532, position: '50% 50%',
+      alt: 'A black and grey home EV charger on a red brick wall, with its charging cable tethered neatly beside it'
+    },
+    {
+      // A phone screenshot: black bars top and bottom. A zoom crops them away inside the tile.
+      key: 'work2', w: 739, h: 1600, position: '50% 50%', zoom: 1.16,
+      alt: 'A home EV charger on a grey pebbledash wall with the cable clipped neatly along the wall'
+    },
+    {
+      key: 'work3', w: 1200, h: 1600, position: '50% 50%',
+      alt: 'A black EV charger fitted to a red brick pillar, with the cable resting on a holster beside a wooden fence'
+    },
+    {
+      key: 'work4', w: 3600, h: 2684, position: '50% 39%',
+      alt: 'A black EV charger with blue buttons and a cable holster on an orange brick wall beside a black downpipe'
+    }
   ]
 };
+
+// What the WhatsApp buttons pre-fill. The link itself is built by waLink in js/core/messages.js (the one place wa.me URLs are made).
+export const WHATSAPP_TEXT = "Hi, I'd like a quote for a home EV charger.";
 
 export const HERO = {
   eyebrow: 'Local EV charger installation',
   title: 'Your own EV charger. Installed at home in Northern Ireland.',
+  // The words inside the title that get the brand-red treatment (the text itself is never changed).
+  accent: 'Northern Ireland.',
   sub: 'Make charging fit around your day. 180 Electrical helps homeowners across Northern Ireland choose and install the right charger for their home and vehicle.',
   line1: 'Tell us a little about your home and what you need.',
   line2: 'Free, no-obligation quote.',
@@ -53,6 +74,34 @@ export const WHY = {
   ]
 };
 
+// The savings calculator. Everything it shows is arithmetic on figures the visitor can see and change: no promises, no
+// claims about grants or tariffs, no 180 Electrical prices.
+export const CALC = {
+  eyebrow: 'Running costs',
+  title: 'What could you save charging at home?',
+  lead: 'Slide to roughly how far you drive in a year. The estimate uses the example figures below, so change any of them to match your own car and electricity rates.',
+  milesLabel: 'Miles you drive in a year',
+  milesUnit: 'miles a year',
+  assumptionsTitle: 'The figures we have used',
+  assumptionsNote: 'Examples only. These are not 180 Electrical prices. Change them to match yours.',
+  reset: 'Reset',
+  resetLabel: 'Reset to the example figures',
+  badge: 'Illustrative estimate',
+  resultTitle: 'Charging at home could save you about',
+  perYear: 'a year',
+  workingsTitle: 'How it is worked out',
+  footnote: 'An illustration, not a quote or a promise. Your own costs will differ with your car, your driving and the rates you pay.',
+  cta: CTA_LABEL,
+  ctaNote: 'Free, no-obligation quote.',
+  fields: [
+    { key: 'homePence', label: 'Charging at home', unit: 'p/kWh' },
+    { key: 'publicPence', label: 'Public charging', unit: 'p/kWh' },
+    { key: 'petrolPence', label: 'Petrol', unit: 'p/litre' },
+    { key: 'mpg', label: 'Petrol car economy', unit: 'mpg' },
+    { key: 'milesPerKwh', label: 'Electric car efficiency', unit: 'miles/kWh' }
+  ]
+};
+
 export const ABOUT = {
   title: 'Meet your local EV charger installers.',
   p1: '180 Electrical installs home EV chargers for homeowners across Northern Ireland. We take time to understand your property and how you drive, then fit a charger that suits both.',
@@ -65,9 +114,9 @@ export const ABOUT = {
 export const STEPS = {
   title: 'From first enquiry to charging at home.',
   items: [
-    { n: '01', title: 'Tell us about your home', body: 'Answer a few short questions about your location, parking and plans.' },
-    { n: '02', title: 'Discuss your installation', body: 'The team will review your enquiry and explain the next steps. Photos or a survey may be needed to prepare an accurate quote.' },
-    { n: '03', title: 'Arrange your installation', body: 'Once you are happy with the agreed quote and scope, arrange a suitable installation date.' }
+    { n: '01', icon: 'house', title: 'Tell us about your home', body: 'Answer a few short questions about your location, parking and plans.' },
+    { n: '02', icon: 'message-circle', title: 'Discuss your installation', body: 'The team will review your enquiry and explain the next steps. Photos or a survey may be needed to prepare an accurate quote.' },
+    { n: '03', icon: 'calendar-check', title: 'Arrange your installation', body: 'Once you are happy with the agreed quote and scope, arrange a suitable installation date.' }
   ]
 };
 

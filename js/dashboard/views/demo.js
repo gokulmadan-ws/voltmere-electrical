@@ -1,35 +1,41 @@
-// js/dashboard/views/demo.js: Demo tools (demo phone override, simulate website bookings, customer-site links, reset, status, script).
-// Owner: WP8, EV enquiry script and sample enquiries by E2
+// js/dashboard/views/demo.js: Demo tools (demo phone, sample enquiries with photos, customer quote actions, webhook and DNS shortcuts, reset, script).
+// Owner: E3 (v1 by WP8, EV enquiry script by E2)
 import { html, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Card, ConfirmDialog, Field, Icon, Input, PageHeader, TextLink,
   pageHref, pageTarget, toast, useStore
 } from '../../ui/index.js';
-import { getStorageStatus, resetDemo, setDemoPhone, simulateIncomingBooking } from '../../core/store.js';
+import {
+  acceptQuote, addBookingPhotos, checkDomain, declineQuote, getState, getStorageStatus, recordQuoteViewed, resetDemo, sendTestEvent,
+  setDemoPhone, simulateIncomingBooking
+} from '../../core/store.js';
 import { clockOverrideStamp, isClockOverridden } from '../../core/clock.js';
-import { firstName } from '../../core/format.js';
+import { nextFreeSlot } from '../../core/availability.js';
+import { quoteStatus, quoteTotal, selectQuotes } from '../../core/selectors.js';
+import { firstName, gbp } from '../../core/format.js';
 import { routeHref } from '../router.js';
+import { makeSamplePhotos } from '../shared/photos.js';
 
 export const title = 'Demo tools';
 export const css = ['css/settings.css'];
 
 const selectDemoDigits = (state) => state.settings.demoPhoneDigits || '';
 
-// The short script from contract 1.2 (prep, then the three minutes). Plain text, nothing dated.
+// The short script (prep, then the three minutes). Plain text, nothing dated.
 const PREP_STEPS = [
-  'On the phone, in a normal browser tab (not an installed home-screen app), open the customer site and tap Owner login (demo) in the footer. Both pages now share one store.',
+  'On the phone, in a normal browser tab (not an installed home-screen app), open the customer site and tap Owner login (demo) in the footer. Both pages share one store.',
   'Here in Demo tools, type your own mobile under Try on your phone and tap Save. Every Open in WhatsApp link then opens your WhatsApp.',
-  'Optional: open Settings and change the business name, short name, first name and phone to the friend\'s real details.',
+  'Optional: open Settings and check the business details, photos and the sample price list.',
   'Tap Reset diary and messages for a fresh diary, then switch to the customer site tab.'
 ];
 const SCRIPT_STEPS = [
   'Customer site: show the hero, the credentials and the "Get my installation quote" button. Say: this is your funnel, now connected to your diary.',
   'Tap the button and answer the six steps: a BT postcode such as BT9 6QP, Private driveway, "It\'s ordered or arriving soon", As soon as possible, Yes, then a name and mobile. No price is shown and nothing is charged.',
-  'The confirmation says the survey visit is pencilled in, that it is provisional, and that he will be in touch within 24 hours. Say: the customer is never left waiting.',
-  'Tap Open the dashboard in the DEMO panel. The enquiry is a job card under Needs you, with their answers as chips and a Pencilled in label.',
-  'Open the job card: About their home lists all five answers. Tap Messages: the alert to you has the answers in one line. Tap Confirm survey visit and show the customer\'s confirmation.',
-  'Calendar: open the day, tap a free row, Block this time, Dentist, Block. View the customer site: that survey window is no longer offered. The diary you edit is the availability customers see.',
-  'After the survey: open the job, On my way, Mark done, then Quote ready, then Book the install. Flip to dark mode, then open What\'s real and read the honest table.'
+  'The confirmation says the survey visit is pencilled in and that he will be in touch within 24 hours. Say: the customer is never left waiting.',
+  'Open the dashboard. Today shows the enquiry under Needs you, with a countdown against your reply promise and where it came from. Tap Confirm survey visit.',
+  'Open the job: their answers, photos, the quote card and the story from enquiry to install. Tap Request photos, then Build quote, add a charger, and send it by WhatsApp (simulated).',
+  'Here in Demo tools tap A customer opens a quote, then A customer accepts a quote. Today now shows the accepted quote under Needs you, with an install day pencilled in. Confirm it.',
+  'Share and promote: copy a Facebook link, show the QR card, then flip to dark mode and open What\'s real for the honest list of what is simulated.'
 ];
 
 export default function DemoView() {
@@ -53,11 +59,66 @@ export default function DemoView() {
     setPhoneError('');
   };
 
-  // ---- B. Simulate a website booking ----
-  const [result, setResult] = useState(null); // null | { ok, booking } | { ok: false }
-  const simulate = (kind) => {
+  // ---- B. Simulate a website enquiry (the same code as the funnel) ----
+  const [result, setResult] = useState(null); // null | { ok, booking, note } | { ok: false }
+  const simulate = (kind, withPhotos) => {
     const res = simulateIncomingBooking({ kind });
-    setResult(res.ok ? { ok: true, booking: res.booking } : { ok: false, reason: res.reason });
+    if (!res.ok) { setResult({ ok: false, reason: res.reason }); return; }
+    let note = '';
+    if (withPhotos) {
+      try {
+        const photos = addBookingPhotos(res.booking.id, makeSamplePhotos(2));
+        note = photos.ok ? ` with ${photos.added} sample photos` : ' (the photos could not be added)';
+      } catch (err) {
+        note = ' (the photos could not be added)';
+      }
+    }
+    setResult({ ok: true, booking: res.booking, note });
+  };
+
+  // ---- C. A customer acts on a quote ----
+  const [quoteResult, setQuoteResult] = useState(null); // null | { text, href? }
+  const quotesNow = () => selectQuotes(getState());
+  const waitingQuote = (statuses) => quotesNow().find((q) => statuses.includes(quoteStatus(q)));
+  const viewQuote = () => {
+    const q = waitingQuote(['sent']);
+    if (!q) { setQuoteResult({ text: 'No unopened quote to open. Send a quote from a booking first.' }); return; }
+    const res = recordQuoteViewed(q.id);
+    setQuoteResult(res.ok ? { text: `${q.customerName} opened quote ${q.id}.`, href: routeHref('quote-detail', { id: q.id }) } : { text: 'That did not work. Please try again.' });
+  };
+  const acceptOne = () => {
+    const q = waitingQuote(['sent', 'viewed']);
+    if (!q) { setQuoteResult({ text: 'No quote is waiting on a customer. Send a quote from a booking first.' }); return; }
+    const slot = nextFreeSlot(getState(), 'ev');
+    if (!slot) { setQuoteResult({ text: 'No free install day to offer. Free one up in Calendar.' }); return; }
+    let res = acceptQuote(q.id, { date: slot.date, windowId: slot.windowId });
+    if (!res.ok && res.reason === 'slot_taken' && res.alternatives && res.alternatives[0]) res = acceptQuote(q.id, { date: res.alternatives[0].date, windowId: res.alternatives[0].windowId });
+    if (res.ok) setQuoteResult({ text: `${q.customerName} accepted ${q.id} (${gbp(quoteTotal(q))}). An install is pencilled in.`, href: routeHref('bookings', { id: res.booking.id }) });
+    else setQuoteResult({ text: res.reason === 'expired' ? 'That quote has expired.' : 'That did not work. Please try again.' });
+  };
+  const declineOne = () => {
+    const q = waitingQuote(['sent', 'viewed']);
+    if (!q) { setQuoteResult({ text: 'No quote is waiting on a customer.' }); return; }
+    const res = declineQuote(q.id, { reason: 'Found a lower price elsewhere', by: 'customer' });
+    setQuoteResult(res.ok ? { text: `${q.customerName} declined ${q.id}.`, href: routeHref('quote-detail', { id: q.id }) } : { text: 'That did not work. Please try again.' });
+  };
+  const openQuote = waitingQuote(['sent', 'viewed', 'accepted']);
+
+  // ---- C2. Connections shortcuts ----
+  const [connResult, setConnResult] = useState(null);
+  const webhookTest = () => {
+    const res = sendTestEvent('webhook');
+    if (res.ok) setConnResult({ text: `Added ${res.booking.ref} for ${firstName(res.booking.customer.name)} from the webhook test (simulated).`, href: routeHref('bookings', { id: res.booking.id }) });
+    else setConnResult({ text: res.reason === 'disabled' ? 'The webhook is paused. Turn it on in Connections first.' : 'That did not work. Please try again.' });
+  };
+  const skipDns = () => {
+    const before = getState().settings.connections.domain;
+    if (before.status === 'none') { setConnResult({ text: 'No domain is being set up yet.', href: routeHref('connections-domain') }); return; }
+    let res = checkDomain();
+    if (res.ok && res.status !== 'live') res = checkDomain();
+    setConnResult(res.ok && res.status === 'live'
+      ? { text: `${before.domain} is live, with its security certificate (simulated).`, href: routeHref('connections-domain') }
+      : { text: 'That did not work. Please try again.' });
   };
 
   // ---- D. Reset ----
@@ -68,7 +129,9 @@ export default function DemoView() {
     const res = resetDemo({ keepSettings });
     if (res.ok) {
       setResult(null);
-      toast({ message: keepSettings ? 'Diary and messages reset.' : 'Everything reset to the defaults.' });
+      setQuoteResult(null);
+      setConnResult(null);
+      toast({ message: keepSettings ? 'Diary, quotes and messages reset.' : 'Everything reset to the defaults.' });
     } else {
       toast({ message: 'That did not work: the diary changed. Please check and try again.', tone: 'danger' });
     }
@@ -104,16 +167,49 @@ export default function DemoView() {
     <section class="db-section" aria-labelledby="dm-sim-title">
       <h2 class="db-section__title" id="dm-sim-title">Add a sample website enquiry</h2>
       <${Card}>
-        <p class="dm-explain">Runs the same code as the website funnel, so the toast, badge, pencilled-in survey visit and outbox update exactly as they would for a real enquiry.</p>
+        <p class="dm-explain">Runs the same code as the website funnel, so the toast, badge, pencilled-in survey visit, lead source and outbox update exactly as they would for a real enquiry.</p>
         <div class="dm-sim">
-          <${Button} variant="primary" onClick=${() => simulate('standard')} data-testid="demo-sim-standard">New enquiry<//>
-          <${Button} variant="secondary" onClick=${() => simulate('approval')} data-testid="demo-sim-approval">Enquiry outside Northern Ireland<//>
-          <${Button} variant="emergency" onClick=${() => simulate('emergency')} data-testid="demo-sim-emergency">Emergency request (not offered)<//>
+          <${Button} variant="primary" onClick=${() => simulate('standard', false)} data-testid="demo-sim-standard">New enquiry<//>
+          <${Button} variant="primary" icon="camera" onClick=${() => simulate('standard', true)} data-testid="demo-sim-photos">New enquiry with photos<//>
+          <${Button} variant="secondary" onClick=${() => simulate('approval', false)} data-testid="demo-sim-approval">Enquiry outside Northern Ireland<//>
         </div>
         <p class="dm-result" role="status" aria-live="polite" data-testid="demo-sim-result">${result
           ? (result.ok
-            ? html`<span>${`Added ${result.booking.ref} for ${firstName(result.booking.customer.name)}.`}</span><${TextLink} href=${routeHref('bookings', { id: result.booking.id })}>View<//>`
+            ? html`<span>${`Added ${result.booking.ref} for ${firstName(result.booking.customer.name)}${result.note}.`}</span><${TextLink} href=${routeHref('bookings', { id: result.booking.id })}>View<//>`
             : 'No free survey window to pencil in. Free one up in Calendar.')
+          : null}</p>
+      <//>
+    </section>
+
+    <section class="db-section" aria-labelledby="dm-quote-title">
+      <h2 class="db-section__title" id="dm-quote-title">A customer acts on a quote</h2>
+      <${Card}>
+        <p class="dm-explain">Stands in for the customer's phone. These use the real quote code: an accepted quote books the next free install day, pencilled in until you confirm it.</p>
+        <div class="dm-sim">
+          <${Button} variant="secondary" icon="eye" onClick=${viewQuote} data-testid="demo-quote-view">A customer opens a quote<//>
+          <${Button} variant="primary" icon="badge-check" onClick=${acceptOne} data-testid="demo-quote-accept">A customer accepts a quote<//>
+          <${Button} variant="secondary" icon="circle-x" onClick=${declineOne} data-testid="demo-quote-decline">A customer declines a quote<//>
+        </div>
+        <p class="dm-result" role="status" aria-live="polite" data-testid="demo-quote-result">${quoteResult
+          ? html`<span>${quoteResult.text}</span>${quoteResult.href ? html`<${TextLink} href=${quoteResult.href}>View<//>` : null}`
+          : null}</p>
+        ${openQuote
+          ? html`<${Button} variant="ghost" icon="external-link" href=${pageHref('quote.html', `#q=${openQuote.id}`)} target=${pageTarget('quote.html')} data-testid="demo-open-quote">${`Open ${openQuote.id} as the customer sees it`}<//>`
+          : html`<p class="dm-explain" data-testid="demo-open-quote-none">Send a quote from a booking and its customer page opens from here.</p>`}
+      <//>
+    </section>
+
+    <section class="db-section" aria-labelledby="dm-conn-title">
+      <h2 class="db-section__title" id="dm-conn-title">Connections shortcuts</h2>
+      <${Card}>
+        <p class="dm-explain">Everything under Connections is simulated. These skip the waiting.</p>
+        <div class="dm-sim">
+          <${Button} variant="secondary" icon="webhook" onClick=${webhookTest} data-testid="demo-webhook-test">Send a webhook test enquiry<//>
+          <${Button} variant="secondary" icon="globe" onClick=${skipDns} data-testid="demo-dns-skip">Skip the DNS wait<//>
+          <${Button} variant="ghost" icon="plug-zap" href=${routeHref('connections')} data-testid="demo-open-connections">Open Connections<//>
+        </div>
+        <p class="dm-result" role="status" aria-live="polite" data-testid="demo-conn-result">${connResult
+          ? html`<span>${connResult.text}</span>${connResult.href ? html`<${TextLink} href=${connResult.href}>View<//>` : null}`
           : null}</p>
       <//>
     </section>
@@ -129,7 +225,7 @@ export default function DemoView() {
     <section class="db-section" aria-labelledby="dm-reset-title">
       <h2 class="db-section__title" id="dm-reset-title">Reset</h2>
       <${Card}>
-        <p class="dm-explain">Start again before a demo. Your phone number, theme and anything else on this page are kept.</p>
+        <p class="dm-explain">Start again before a demo. Resetting the diary and messages brings back the sample enquiries, quotes and ad spend; your settings, connections and demo phone number are kept.</p>
         <div class="dm-reset">
           <${Button} variant="secondary" icon="rotate-ccw" onClick=${() => setConfirm('diary')} data-testid="demo-reset">Reset diary and messages<//>
           <${Button} variant="danger" icon="refresh-cw" onClick=${() => setConfirm('all')} data-testid="demo-reset-all">Reset everything<//>
@@ -165,11 +261,11 @@ export default function DemoView() {
 
     <${ConfirmDialog}
       open=${confirm === 'diary'} title="Reset the diary?"
-      body="This reseeds the sample bookings relative to today and clears messages. Your business details stay."
+      body="This reseeds the sample bookings, quotes and messages relative to today. Your business details, photos, price list and connections stay."
       confirmLabel="Reset diary" onConfirm=${doReset} onCancel=${() => setConfirm(null)} />
     <${ConfirmDialog}
       open=${confirm === 'all'} title="Reset everything?"
-      body="This also restores the default business details, prices and hours."
+      body="This also restores the default business details, photos, prices, quote price list, hours and every connection (back to Not set up)."
       confirmLabel="Reset all" tone="danger" onConfirm=${doReset} onCancel=${() => setConfirm(null)} />
   </div>`;
 }

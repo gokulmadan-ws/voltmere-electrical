@@ -1,5 +1,5 @@
-// js/ui/form.js: Field, Input, Select, Textarea, Switch (breaker lever), Segmented, Stepper.
-// Owner: WP2
+// js/ui/form.js: Field, Input, Select, Textarea, Switch (breaker lever), Segmented, Stepper, MoneyInput.
+// Owner: B3 (was WP2)
 import { h, createContext, useContext, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Icon } from './display.js';
 import { cx, uid } from './util.js';
@@ -192,4 +192,54 @@ export function Stepper({ value, onChange, step = 5, min = 0, max = 99999, forma
       type: 'button', class: 'ui-stepper__btn', 'aria-label': `Increase ${label}`, 'data-testid': testids.plus,
       disabled: num >= max ? true : undefined, onClick: () => onChange(clamp(num + step))
     }, h('span', { 'aria-hidden': 'true' }, '+')));
+}
+
+/**
+ * Money field: a pound sign, a numeric keyboard, thousands separators on blur. Whole pounds by default (`decimals={2}` for pence).
+ * onChange(number | null) fires while typing once the digits are a valid in-range number; null only with `allowEmpty`.
+ * Works inside Field (aria wired). `suffix` is small trailing text such as "per metre".
+ */
+export function MoneyInput({
+  id, value, onChange, min = 0, max = 99999, decimals = 0, allowEmpty, placeholder, suffix, error, disabled, class: cls, ...rest
+}) {
+  const ctx = useContext(FieldContext);
+  const a = a11yFor(id, error, ctx, rest['aria-describedby']);
+  const [text, setText] = useState(null); // the raw characters while the input has focus, else null
+  const num = value === null || value === undefined || value === '' ? null : Number(value);
+  const fmt = (n) => (n === null || !Number.isFinite(n)
+    ? ''
+    : n.toLocaleString('en-GB', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }));
+  const clamp = (n) => Math.min(max, Math.max(min, n));
+  const onInput = (e) => {
+    let raw = e.target.value.replace(decimals ? /[^0-9.]/g : /[^0-9]/g, '');
+    if (decimals) {
+      const parts = raw.split('.');
+      raw = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, decimals)}` : parts[0];
+    }
+    raw = raw.slice(0, 10);
+    setText(raw);
+    if (raw === '' || raw === '.') { if (allowEmpty && onChange) onChange(null); return; }
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= min && n <= max && onChange) onChange(n);
+  };
+  const onBlur = () => {
+    if (text === null) return;
+    const n = text === '' || text === '.' ? null : Number(text);
+    if (onChange) onChange(n === null ? (allowEmpty ? null : min) : clamp(n));
+    setText(null);
+  };
+  const onFocus = (e) => {
+    const el = e.target;
+    setText(num === null ? '' : String(num));
+    setTimeout(() => { try { el.select(); } catch (err) { /* not selectable */ } }, 0);
+  };
+  const shown = text !== null ? text : fmt(num);
+  return h('span', { class: cx('ui-money', a.invalid && 'is-invalid', disabled && 'is-disabled', cls) },
+    h('span', { class: 'ui-money__sign', 'aria-hidden': 'true' }, '£'),
+    h('input', {
+      id, type: 'text', class: 'ui-money__input', value: shown, onInput, onBlur, onFocus, disabled: disabled ? true : undefined,
+      inputmode: decimals ? 'decimal' : 'numeric', enterkeyhint: 'done', autocomplete: 'off', placeholder: placeholder === undefined ? '0' : placeholder,
+      ...a.props, ...rest, 'aria-describedby': a.props['aria-describedby']
+    }),
+    suffix ? h('span', { class: 'ui-money__suffix' }, suffix) : null);
 }

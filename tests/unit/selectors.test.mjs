@@ -1,5 +1,5 @@
 // tests/unit/selectors.test.mjs: unit tests for js/core/selectors.js (needs-you, next-up, customers, insights, messages)
-// Owner: WP1
+// Owner: WP1 (v1), A3 (v3 updates: the v3 seed numbers, free survey visits, brand address and images)
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { SCHEMA_VERSION, makeDefaultSettings } from '../../js/core/config.js';
@@ -9,7 +9,7 @@ import {
   selectBrand, selectServices, selectService, quotedPriceFor, servicePriceLabel, selectBookingById, selectBookingByRef,
   selectBookingsOn, selectNeedsYou, selectNextUp, selectUpcoming, selectOwed, selectOwedTotal, selectUnseenBookings,
   selectNextOpenDay, selectCustomers, selectCustomerByKey, customerKeyOf, selectRepeatInfo, selectMessages,
-  selectUnreadMessageCount, selectInsights, isWithinChangeCutoff, selectWebsiteServices, enquiryAnswerRows, bookingAreaFlag
+  selectUnreadMessageCount, selectInsights, isWithinChangeCutoff, selectWebsiteServices, enquiryAnswerRows, bookingAreaFlag, isFreeVisit
 } from '../../js/core/selectors.js';
 
 const NOW = '2026-10-23T20:30';
@@ -30,7 +30,8 @@ function fixture() {
   const settings = makeDefaultSettings();
   const seed = buildSeed(now(), settings);
   const top = seed.messages.length;
-  return { v: SCHEMA_VERSION, seededFor: '2026-10-23', refSeq: seed.refSeq, settings, bookings: seed.bookings, blocks: seed.blocks, messages: seed.messages, meta: { rev: 1, msgSeq: top, messagesSeenSeq: top, simCursor: 0 } };
+  settings.marketing.adSpend = seed.adSpend;
+  return { v: SCHEMA_VERSION, seededFor: '2026-10-23', refSeq: seed.refSeq, settings, bookings: seed.bookings, blocks: seed.blocks, messages: seed.messages, quotes: seed.quotes, meta: { rev: 1, msgSeq: top, messagesSeenSeq: top, simCursor: 0 } };
 }
 const frozen = () => deepFreeze(fixture());
 const ids = (list) => list.map((b) => b.id);
@@ -69,9 +70,11 @@ test('selectBrand carries every field the UI reads', () => {
   const state = frozen();
   const brand = selectBrand(state);
   assert.deepEqual(Object.keys(brand).sort(), [
-    'areaName', 'areaText', 'brands', 'coveredOutward', 'credentials', 'demoPhoneDigits', 'descriptor', 'edgeOutward', 'email', 'hoursText',
-    'insuranceLine', 'name', 'ownerFirst', 'ownerFull', 'phone', 'phoneDigits', 'schemeLine', 'shortName', 'tagline', 'telHref', 'towns'
+    'address', 'areaName', 'areaText', 'brands', 'coveredOutward', 'credentials', 'demoPhoneDigits', 'descriptor', 'edgeOutward', 'email', 'hoursText',
+    'images', 'insuranceLine', 'name', 'ownerFirst', 'ownerFull', 'phone', 'phoneDigits', 'schemeLine', 'shortName', 'tagline', 'telHref', 'towns'
   ]);
+  assert.equal(brand.address, '', 'his site gives no street address, so none is invented');
+  assert.deepEqual(Object.keys(brand.images), ['logo', 'hero', 'about', 'work1', 'work2', 'work3', 'work4']);
   assert.deepEqual(brand.credentials, ['Level 3 Electrical Installation', '2391 Inspection and Testing']);
   assert.deepEqual(brand.brands, ['ZAPPI', 'OHME', 'SYNC']);
   assert.equal(brand.schemeLine, '', 'his site makes no scheme claim, so none is invented');
@@ -146,15 +149,16 @@ test('booking lookups by id and ref (case-insensitive) and by day', () => {
   assert.deepEqual(ids(selectBookingsOn(state, '2026-10-23')), ['bk_seed_05', 'bk_seed_06']);
   // Thursday: the confirmed 8am survey, then the pencilled-in enquiry (S07) at 10am
   assert.deepEqual(ids(selectBookingsOn(state, '2026-10-29')), ['bk_seed_14', 'bk_seed_07']);
-  assert.deepEqual(ids(selectBookingsOn(state, '2026-10-22')), []);
+  assert.deepEqual(ids(selectBookingsOn(state, '2026-10-25')), [], 'a Sunday');
+  assert.deepEqual(ids(selectBookingsOn(state, '2026-10-22')), ['bk_seed_16'], 'a finished free survey visit');
 });
 
-test('selectNeedsYou: urgent first, then oldest first (the two seeded enquiries are oldest first)', () => {
+test('selectNeedsYou: urgent first, then oldest first (two enquiries and two pencilled installs, oldest first)', () => {
   const state = fixture();
-  assert.deepEqual(ids(selectNeedsYou(state)), ['bk_seed_11', 'bk_seed_07'], 'Conor made his enquiry 40 minutes ago, Sinead 12');
+  assert.deepEqual(ids(selectNeedsYou(state)), ['bk_seed_11', 'bk_seed_34', 'bk_seed_35', 'bk_seed_07'], 'Conor made his enquiry 30 hours ago, Sinead 12 minutes');
   state.bookings.push(booking({ id: 'bk_urgent2', urgent: true, status: 'new', createdAt: '2026-10-23T20:30', durationMin: 0, start: NOW }));
   state.bookings.push(booking({ id: 'bk_early', status: 'new', createdAt: '2026-10-22T08:00' }));
-  assert.deepEqual(ids(selectNeedsYou(state)), ['bk_urgent2', 'bk_early', 'bk_seed_11', 'bk_seed_07']);
+  assert.deepEqual(ids(selectNeedsYou(state)), ['bk_urgent2', 'bk_early', 'bk_seed_11', 'bk_seed_34', 'bk_seed_35', 'bk_seed_07']);
 });
 
 test('selectNextUp: on_the_way, then an accepted emergency, then the earliest confirmed job not over', () => {
@@ -182,7 +186,7 @@ test('selectNextUp: on_the_way, then an accepted emergency, then the earliest co
 test('selectUpcoming: live jobs that are urgent or not over, by start', () => {
   const state = frozen();
   const upcoming = selectUpcoming(state, NOW);
-  assert.deepEqual(ids(upcoming), ['bk_seed_08', 'bk_seed_09', 'bk_seed_10', 'bk_seed_11', 'bk_seed_12', 'bk_seed_13', 'bk_seed_14', 'bk_seed_07']);
+  assert.deepEqual(ids(upcoming), ['bk_seed_08', 'bk_seed_09', 'bk_seed_10', 'bk_seed_11', 'bk_seed_12', 'bk_seed_13', 'bk_seed_14', 'bk_seed_07', 'bk_seed_34', 'bk_seed_36', 'bk_seed_35', 'bk_seed_37']);
   assert.ok(upcoming.every((b) => ['new', 'confirmed', 'on_the_way'].includes(b.status)));
   // a job whose window ended at exactly now is still upcoming (>=)
   const edge = fixture();
@@ -193,13 +197,18 @@ test('selectUpcoming: live jobs that are urgent or not over, by start', () => {
 
 test('selectOwed and selectOwedTotal', () => {
   const state = frozen();
-  assert.deepEqual(ids(selectOwed(state)), ['bk_seed_04', 'bk_seed_06']);
-  assert.equal(selectOwedTotal(state), 245);
+  assert.deepEqual(ids(selectOwed(state)), ['bk_seed_04', 'bk_seed_41', 'bk_seed_42', 'bk_seed_06']);
+  assert.equal(selectOwedTotal(state), 3609);
   assert.equal(selectOwedTotal({ bookings: [] }), 0);
+  // a free survey visit (an enquiry completed at £0) is never owed
+  const free = fixture();
+  free.bookings.find((b) => b.id === 'bk_seed_16').paid = false;
+  assert.ok(!ids(selectOwed(free)).includes('bk_seed_16'), 'bk_seed_16 is a done free survey with nothing to collect');
+  assert.equal(selectOwedTotal(free), 3609);
 });
 
 test('selectUnseenBookings: newest first', () => {
-  assert.deepEqual(ids(selectUnseenBookings(frozen())), ['bk_seed_07', 'bk_seed_11']);
+  assert.deepEqual(ids(selectUnseenBookings(frozen())), ['bk_seed_07', 'bk_seed_35', 'bk_seed_11']);
   const state = fixture();
   state.bookings.push(booking({ id: 'bk_a', createdAt: NOW }));
   state.bookings.push(booking({ id: 'bk_b', createdAt: NOW }));
@@ -217,23 +226,23 @@ test('selectNextOpenDay skips closed weekdays and days off, and gives up when no
   assert.equal(selectNextOpenDay(state, '2026-10-23'), null);
 });
 
-test('selectCustomers derives 11 customers from the bookings, never stored', () => {
+test('selectCustomers derives 27 customers from the bookings, never stored', () => {
   const state = frozen();
   const customers = selectCustomers(state);
-  assert.equal(customers.length, 11);
+  assert.equal(customers.length, 27);
   assert.ok(!('customers' in state));
   const marcus = customers.find((c) => c.key === '447700900262');
   assert.equal(marcus.name, 'Padraig Quinn');
   assert.equal(marcus.phone, '07700 900262');
-  assert.equal(marcus.jobs, 2);
+  assert.equal(marcus.jobs, 3, 'the safety report, the free survey and the install');
   assert.equal(marcus.cancelled, 0);
   assert.deepEqual(marcus.tags, ['Landlord', 'Repeat']);
   assert.equal(marcus.addresses.length, 2);
   assert.deepEqual(marcus.addresses[0], { line1: '31 Rockmount Road', postcode: 'BT20 4DZ' }, 'newest address first');
-  assert.deepEqual(marcus.bookingIds, ['bk_seed_09', 'bk_seed_02'], 'newest first');
-  assert.equal(marcus.totalValue, 150);
+  assert.deepEqual(marcus.bookingIds, ['bk_seed_09', 'bk_seed_25', 'bk_seed_02'], 'newest first');
+  assert.equal(marcus.totalValue, 150, 'the free survey is worth nothing');
   assert.equal(marcus.owed, 0);
-  assert.equal(marcus.lastJobAt, '2026-10-07T13:00');
+  assert.equal(marcus.lastJobAt, '2026-10-13T08:00', 'the survey visit was the latest finished job');
   assert.equal(marcus.nextJobAt, '2026-10-26T13:00');
 
   const ruth = customers.find((c) => c.name === 'Roisin Maguire');
@@ -256,7 +265,7 @@ test('selectCustomers derives 11 customers from the bookings, never stored', () 
   assert.equal(eileen.owed, 75);
 
   // order: the later of nextJobAt and lastJobAt, newest first; a customer with neither is last
-  assert.equal(customers[0].name, 'Sinead Doherty', 'her pencilled-in survey is the latest job in the diary');
+  assert.equal(customers[0].name, 'Darragh Sloan', 'his install on Wed 4 Nov is the latest job in the diary');
   assert.equal(customers[customers.length - 1].name, 'Bronagh Hughes');
   const recency = (c) => ((c.nextJobAt || '') > (c.lastJobAt || '') ? c.nextJobAt || '' : c.lastJobAt || '');
   for (let i = 1; i < customers.length; i += 1) assert.ok(recency(customers[i - 1]) >= recency(customers[i]), `order at ${i}`);
@@ -266,7 +275,7 @@ test('customers: the identity is the phone number, whatever its spelling, and ta
   const state = fixture();
   state.bookings.push(booking({ id: 'bk_p2', createdAt: NOW, customer: { name: 'Aoife N.', phone: '+44 7700 900231', email: 'aoife@home.example' } }));
   const customers = selectCustomers(state);
-  assert.equal(customers.length, 11, 'same phone, same customer');
+  assert.equal(customers.length, 27, 'same phone, same customer');
   const priya = selectCustomerByKey(state, '447700900231');
   assert.equal(priya.name, 'Aoife N.', 'name from the most recent booking');
   assert.equal(priya.email, 'aoife@home.example');
@@ -289,10 +298,11 @@ test('customers: the identity is the phone number, whatever its spelling, and ta
   // one EICR address is not a landlord; a cancelled EICR does not count
   const m = fixture();
   m.bookings.find((b) => b.id === 'bk_seed_09').status = 'cancelled';
-  assert.deepEqual(selectCustomerByKey(m, '447700900262').tags, ['Landlord'], 'the seed note on his phone booking still says landlord');
+  assert.deepEqual(selectCustomerByKey(m, '447700900262').tags, ['Landlord', 'Repeat'], 'the seed note on his phone booking still says landlord; his survey and EICR are two live jobs');
   m.bookings.find((b) => b.id === 'bk_seed_02').notes = '';
   m.bookings.find((b) => b.id === 'bk_seed_09').notes = '';
-  assert.deepEqual(selectCustomerByKey(m, '447700900262').tags, [], 'one live EICR and one cancelled, no landlord note');
+  m.bookings.find((b) => b.id === 'bk_seed_25').notes = '';
+  assert.deepEqual(selectCustomerByKey(m, '447700900262').tags, ['Repeat'], 'one live EICR, a survey and one cancelled install, no landlord note');
   assert.equal(selectCustomerByKey(m, '447700900262').cancelled, 1);
 });
 
@@ -313,7 +323,7 @@ test('selectRepeatInfo: nth is the position among non-cancelled bookings by crea
   assert.equal(selectRepeatInfo(state, second).nth, 1);
   // Marcus's second EICR
   const fresh = fixture();
-  assert.deepEqual(selectRepeatInfo(fresh, selectBookingById(fresh, 'bk_seed_09')), { isRepeat: true, nth: 2 });
+  assert.deepEqual(selectRepeatInfo(fresh, selectBookingById(fresh, 'bk_seed_09')), { isRepeat: true, nth: 3 }, 'after his safety report and his free survey');
 });
 
 test('selectMessages: newest first by at then seq, and the filters', () => {
@@ -363,22 +373,23 @@ test('selectUnreadMessageCount: non-seed owner messages with seq above messagesS
 test('selectInsights at the fixture clock', () => {
   const state = frozen();
   const ins = selectInsights(state, NOW);
-  assert.equal(ins.collectedMonth, 1209);
-  assert.equal(ins.collectedMonthCount, 4);
-  assert.equal(ins.owedTotal, 245);
-  assert.equal(ins.owedCount, 2);
-  assert.equal(ins.bookedNext14, 1059);
-  assert.equal(ins.bookedNext14Count, 8, 'seven jobs plus the pencilled-in enquiry (a free survey adds nothing to the value)');
-  assert.equal(ins.avgJob, 242);
+  assert.equal(ins.collectedMonth, 3038);
+  assert.equal(ins.collectedMonthCount, 5, 'two installs, the sockets job and... the free survey visits are not counted');
+  assert.equal(ins.owedTotal, 3609);
+  assert.equal(ins.owedCount, 4);
+  assert.equal(ins.bookedNext14, 8123);
+  assert.equal(ins.bookedNext14Count, 12, 'the jobs and installs booked or pencilled in plus the pencilled-in enquiries (a free survey adds nothing to the value)');
+  assert.equal(ins.avgJob, 826, 'the free survey visits are not averaged in');
   assert.equal(ins.weeks.length, 6);
   assert.deepEqual(ins.weeks.map((w) => w.weekStart), ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']);
   assert.deepEqual(ins.weeks.map((w) => w.label), ['Mon 14 Sep', 'Mon 21 Sep', 'Mon 28 Sep', 'Mon 5 Oct', 'Mon 12 Oct', 'Mon 19 Oct']);
-  assert.deepEqual(ins.weeks.map((w) => w.total), [0, 0, 75, 1049, 0, 85], 'paid jobs by paidAt week (Wed 7 Oct and Sat 10 Oct share a week)');
+  assert.deepEqual(ins.weeks.map((w) => w.total), [0, 1490, 1684, 1514, 1364, 85], 'paid jobs by paidAt week (Wed 7 Oct and Sat 10 Oct share a week)');
   assert.deepEqual(ins.byService, [
-    { serviceId: 'ev', name: 'EV charger installation', jobs: 1, total: 899 },
+    { serviceId: 'ev', name: 'EV charger installation', jobs: 6, total: 9191 },
     { serviceId: 'sockets', name: 'Sockets, switches and lights', jobs: 2, total: 255 },
     { serviceId: 'eicr', name: 'EICR safety report', jobs: 1, total: 150 },
-    { serviceId: 'fault', name: 'Fault finding and repairs', jobs: 2, total: 150 }
+    { serviceId: 'fault', name: 'Fault finding and repairs', jobs: 2, total: 150 },
+    { serviceId: 'ev_quote', name: 'Home EV charger quote', jobs: 18, total: 0 }
   ]);
 });
 
@@ -386,19 +397,19 @@ test('selectInsights definitions: this month only, the 14-day window, the 30-day
   const state = fixture();
   // a job paid last month does not count as collected this month
   state.bookings.find((b) => b.id === 'bk_seed_01').paidAt = '2026-09-30T18:00';
-  assert.equal(selectInsights(state, NOW).collectedMonth, 1134);
-  assert.equal(selectInsights(state, NOW).collectedMonthCount, 3);
+  assert.equal(selectInsights(state, NOW).collectedMonth, 2963);
+  assert.equal(selectInsights(state, NOW).collectedMonthCount, 4);
   // the next-14 window is today .. today + 13
   state.bookings.push(booking({ id: 'bk_edge13', start: '2026-11-05T08:00', quotedPrice: 100 }));
   state.bookings.push(booking({ id: 'bk_edge14', start: '2026-11-06T08:00', quotedPrice: 1000 }));
-  assert.equal(selectInsights(state, NOW).bookedNext14, 1159);
-  assert.equal(selectInsights(state, NOW).bookedNext14Count, 9);
+  assert.equal(selectInsights(state, NOW).bookedNext14, 8223);
+  assert.equal(selectInsights(state, NOW).bookedNext14Count, 13);
   // urgent bookings are not "booked work"
   state.bookings.push(booking({ id: 'bk_urg', urgent: true, status: 'new', start: NOW, quotedPrice: 95 }));
-  assert.equal(selectInsights(state, NOW).bookedNext14Count, 9);
+  assert.equal(selectInsights(state, NOW).bookedNext14Count, 13);
   // the 30-day average uses done jobs started within the last 30 days
   state.bookings.push(booking({ id: 'bk_old', status: 'done', start: '2026-09-01T08:00', finalPrice: 9000, paid: true, paidMethod: 'cash', paidAt: '2026-09-01T10:00' }));
-  assert.equal(selectInsights(state, NOW).avgJob, 242);
+  assert.equal(selectInsights(state, NOW).avgJob, 826);
   // no done jobs: an average of 0, never NaN
   const none = fixture();
   none.bookings = none.bookings.filter((b) => b.status !== 'done');
@@ -408,9 +419,36 @@ test('selectInsights definitions: this month only, the 14-day window, the 30-day
   assert.deepEqual(ins.byService, []);
 });
 
+test('selectInsights: a free survey visit (ev_quote done at 0 pounds) is neither collected nor part of the average job, even if marked paid', () => {
+  const base = fixture();
+  const withFree = fixture();
+  // three more free surveys finished this month, one of them marked paid by mistake
+  for (const [i, paid] of [[1, false], [2, true], [3, false]]) {
+    withFree.bookings.push(booking({
+      id: `bk_free${i}`, serviceId: 'ev_quote', serviceName: 'Home EV charger quote', status: 'done', start: `2026-10-1${i}T08:00`, quotedPrice: 0, finalPrice: 0,
+      paid, paidMethod: paid ? 'cash' : null, paidAt: paid ? '2026-10-12T09:00' : null
+    }));
+  }
+  const a = selectInsights(base, NOW);
+  const b = selectInsights(withFree, NOW);
+  assert.equal(b.avgJob, a.avgJob, 'the average job ignores free visits');
+  assert.equal(b.collectedMonthCount, a.collectedMonthCount, 'a paid free visit is not a collected payment');
+  assert.equal(b.collectedMonth, a.collectedMonth, 'and adds no money');
+  assert.equal(b.owedCount, a.owedCount, 'a free visit is never owed');
+  assert.equal(b.owedTotal, a.owedTotal);
+  assert.deepEqual(b.byService.find((x) => x.serviceId === 'ev_quote'), { serviceId: 'ev_quote', name: 'Home EV charger quote', jobs: 21, total: 0 }, 'the survey visits are still counted by service (18 + 3)');
+  // a survey the owner DID charge for is a normal job
+  const charged = fixture();
+  charged.bookings.push(booking({ id: 'bk_charged', serviceId: 'ev_quote', status: 'done', start: '2026-10-12T08:00', quotedPrice: 0, finalPrice: 60, paid: true, paidMethod: 'card', paidAt: '2026-10-12T09:00' }));
+  assert.equal(selectInsights(charged, NOW).collectedMonthCount, a.collectedMonthCount + 1);
+  assert.equal(selectInsights(charged, NOW).collectedMonth, a.collectedMonth + 60);
+  assert.ok(isFreeVisit(withFree.bookings.find((x) => x.id === 'bk_free1')));
+  assert.equal(isFreeVisit(charged.bookings.find((x) => x.id === 'bk_charged')), false);
+});
+
 test('selectInsights reads the same at 09:00 as at 20:30 for finished history', () => {
   const state = fixture();
-  assert.equal(selectInsights(state, '2026-10-23T09:00').owedCount, 2);
+  assert.equal(selectInsights(state, '2026-10-23T09:00').owedCount, 4);
   assert.equal(selectInsights(state, '2026-11-02T09:00').collectedMonth, 0, 'a new month starts at zero');
 });
 

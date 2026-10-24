@@ -1,5 +1,5 @@
 // js/dashboard/shared/job-actions.js: state-driven job primary action, Needs-you buttons, Mark paid and the ETA / complete / paid / cancel / reschedule sheets.
-// Owner: WP5, enquiry and quote flow by E2
+// Owner: E3 (v1 by WP5, enquiry and quote flow by E2)
 import { html, useState, useRef } from '../../vendor/preact-htm.js';
 import {
   Button, IconButton, Chip, Icon, Segmented, Stepper, Switch, Sheet, WhatsAppBubble,
@@ -7,7 +7,7 @@ import {
 } from '../../ui/index.js';
 import {
   getState, confirmBooking, acceptEmergency, declineBooking, markOnTheWay, completeBooking, markPaid, markUnpaid,
-  cancelBooking, rescheduleBooking, sendPaymentNudge, sendReviewRequest, sendQuickMessage
+  cancelBooking, rescheduleBooking, sendPaymentNudge, sendReviewRequest
 } from '../../core/store.js';
 import { buildMessage, telLink, waLink } from '../../core/messages.js';
 import { getDaySlots, getDayStatus, bookingWhen } from '../../core/availability.js';
@@ -17,7 +17,7 @@ import { WINDOWS, PROMISES, PAID_METHODS, PAID_METHOD_LABELS, CANCEL_REASONS } f
 import { firstName, gbp } from '../../core/format.js';
 import { customerKeyOf } from '../../core/selectors.js';
 import { routeHref } from '../router.js';
-import { isEnquiry, quoteProgress } from './enquiry.js';
+import { isEnquiry, isQuotedInstall, quoteProgress } from './enquiry.js';
 
 // The sheets render outside #app, so their styles must be on the page whichever view imported this file.
 // Idempotent: Today and Insights also list the same sheet in their `css` export.
@@ -31,7 +31,12 @@ const firstOf = (b) => firstName(b.customer.name);
 const PRIMARY = {
   confirm: { id: 'confirm', label: 'Confirm', icon: 'check' },
   confirm_survey: { id: 'confirm_survey', label: 'Confirm survey visit', icon: 'calendar-check' },
-  quote_ready: { id: 'quote_ready', label: 'Quote ready', icon: 'send' },
+  confirm_install: { id: 'confirm_install', label: 'Confirm install day', icon: 'calendar-check' },
+  build_quote: { id: 'build_quote', label: 'Build quote', icon: 'file-plus' },
+  finish_quote: { id: 'finish_quote', label: 'Finish quote', icon: 'pencil' },
+  new_quote: { id: 'new_quote', label: 'Write a new quote', icon: 'file-plus' },
+  open_quote: { id: 'open_quote', label: 'Open quote', icon: 'file-text' },
+  open_install: { id: 'open_install', label: 'Open the install', icon: 'plug-zap' },
   book_install: { id: 'book_install', label: 'Book the install', icon: 'plug-zap' },
   accept: { id: 'accept', label: 'Accept', icon: 'check' },
   on_my_way: { id: 'on_my_way', label: 'On my way', icon: 'navigation' },
@@ -43,23 +48,48 @@ const PRIMARY = {
 
 /**
  * The one big button for a booking's state (13.6.1), or null when nothing is left to do. Pure.
- * A free survey visit (ev_quote) confirms as "Confirm survey visit" and, once done, leads to "Quote ready" and then
- * "Book the install". `ctx` = { quoteSent, installBooked } from quoteProgress().
+ * A free survey visit (ev_quote) confirms as "Confirm survey visit"; once it is done the quote takes over: "Build quote",
+ * "Finish quote" (a draft), "Open quote" (out with the customer), then the install. An install made by an accepted quote
+ * confirms as "Confirm install day". `ctx` = quoteProgress(): { quoteSent, installBooked, quote, quoteState, install }.
  */
 export function primaryActionFor(booking, ctx = {}) {
   if (!booking) return null;
   switch (booking.status) {
-    case 'new': return booking.urgent ? PRIMARY.accept : isEnquiry(booking) ? PRIMARY.confirm_survey : PRIMARY.confirm;
+    case 'new':
+      if (booking.urgent) return PRIMARY.accept;
+      if (isEnquiry(booking)) return PRIMARY.confirm_survey;
+      return isQuotedInstall(booking) ? PRIMARY.confirm_install : PRIMARY.confirm;
     case 'confirmed': return booking.urgent ? PRIMARY.mark_done : PRIMARY.on_my_way;
     case 'on_the_way': return PRIMARY.mark_done;
     case 'done':
-      if (isEnquiry(booking)) return !ctx.quoteSent ? PRIMARY.quote_ready : ctx.installBooked ? null : PRIMARY.book_install;
+      if (isEnquiry(booking)) {
+        const state = ctx.quoteState || null;
+        if (state === 'accepted') return ctx.install ? PRIMARY.open_install : null;
+        if (state === 'sent' || state === 'viewed') return PRIMARY.open_quote;
+        if (state === 'draft') return PRIMARY.finish_quote;
+        if (state === 'declined' || state === 'expired') return PRIMARY.new_quote;
+        return ctx.quoteSent && ctx.installBooked ? null : PRIMARY.build_quote;
+      }
       if (!booking.paid) return PRIMARY.mark_paid;
       return booking.reviewRequested ? null : PRIMARY.review;
     case 'cancelled': return PRIMARY.rebook;
     default: return null;
   }
 }
+
+/** Where a link-style primary goes (the quote builder, the quote, the install, a new booking). */
+export function primaryHref(booking, primary, ctx = {}) {
+  if (!primary) return '';
+  switch (primary.id) {
+    case 'build_quote': case 'new_quote': return routeHref('quote-detail', { id: 'new' }, { booking: booking.id });
+    case 'finish_quote': case 'open_quote': return ctx.quote ? routeHref('quote-detail', { id: ctx.quote.id }) : routeHref('quotes');
+    case 'open_install': return ctx.install ? routeHref('bookings', { id: ctx.install.id }) : routeHref('bookings');
+    case 'book_install': return routeHref('new', {}, { customer: customerKeyOf(booking.customer.phone), service: 'ev' });
+    case 'rebook': return routeHref('new', {}, { customer: customerKeyOf(booking.customer.phone), service: booking.serviceId });
+    default: return '';
+  }
+}
+const LINK_PRIMARIES = ['build_quote', 'new_quote', 'finish_quote', 'open_quote', 'open_install', 'book_install', 'rebook'];
 
 const SECONDARY = {
   decline: { id: 'decline', label: 'Decline', icon: 'circle-x', testid: 'job-secondary-decline', danger: true },
@@ -73,7 +103,9 @@ const SECONDARY = {
 /** The secondary buttons for a booking's state (13.6.1 table). Pure. */
 function secondaryActionsFor(b) {
   switch (b.status) {
-    case 'new': return isEnquiry(b) && !b.urgent ? [SECONDARY.reschedule, SECONDARY.decline] : [SECONDARY.decline];
+    case 'new':
+      if (isQuotedInstall(b)) return [SECONDARY.reschedule, { ...SECONDARY.decline, label: 'Cancel install' }];
+      return isEnquiry(b) && !b.urgent ? [SECONDARY.reschedule, SECONDARY.decline] : [SECONDARY.decline];
     case 'confirmed': return b.urgent ? [SECONDARY.cancel] : [SECONDARY.reschedule, SECONDARY.cancel];
     case 'on_the_way': return [SECONDARY.cancel];
     case 'done':
@@ -120,7 +152,8 @@ function useTapGuard() {
 
 const doConfirm = (b) => finish(confirmBooking(b.id), isEnquiry(b)
   ? `Survey visit confirmed. ${firstOf(b)} has been told (simulated).`
-  : `Confirmed. ${firstOf(b)} has been told (simulated).`);
+  : isQuotedInstall(b) ? `Install day confirmed. ${firstOf(b)} has been told (simulated).`
+    : `Confirmed. ${firstOf(b)} has been told (simulated).`);
 const doAccept = (b, eta) => finish(acceptEmergency(b.id, eta), `Accepted. ${firstOf(b)} has been told you're on your way (simulated).`);
 const doDecline = (b) => finish(declineBooking(b.id), `Declined. ${firstOf(b)} has been told (simulated).`);
 const doReview = (b) => finish(sendReviewRequest(b.id), 'Review request logged (simulated).');
@@ -128,18 +161,6 @@ const doNudge = (b) => finish(sendPaymentNudge(b.id), 'Payment reminder logged (
 const doUnpaid = (b) => finish(markUnpaid(b.id), 'Marked unpaid.');
 
 const NO_PROGRESS = { quoteSent: false, installBooked: false };
-
-/** "Quote ready": logs the customer_quote_ready message (simulated) and offers the same text in the owner's own WhatsApp. */
-function doQuoteReady(b, brand) {
-  const res = sendQuickMessage(b.id, 'customer_quote_ready');
-  if (!res || !res.ok) { failToast(res); return; }
-  const url = waLink(b.customer.phone, res.message.body, brand.demoPhoneDigits);
-  toast({
-    message: `Quote-ready message to ${firstOf(b)} logged (simulated). Open it in your WhatsApp to send it for real.`,
-    actionLabel: 'Open WhatsApp', duration: 9000,
-    onAction: () => { window.open(url, '_blank', 'noopener,noreferrer'); }
-  });
-}
 
 const ETA_URGENT = [
   { value: 45, label: '45 min' },
@@ -377,7 +398,6 @@ export function JobActionBar({ booking, variant = 'card' }) {
   const [sheet, setSheet] = useState(null); // { kind, id }
   const [eta, setEta] = useState(45);
   const guard = useTapGuard();
-  const brand = useBrand();
   const progress = useStore((state) => (booking ? quoteProgress(state, booking) : NO_PROGRESS));
   if (!booking) return null;
 
@@ -391,8 +411,7 @@ export function JobActionBar({ booking, variant = 'card' }) {
   const runPrimary = () => guard(() => {
     if (!primary) return;
     switch (primary.id) {
-      case 'confirm': case 'confirm_survey': doConfirm(booking); break;
-      case 'quote_ready': doQuoteReady(booking, brand); break;
+      case 'confirm': case 'confirm_survey': case 'confirm_install': doConfirm(booking); break;
       case 'accept': doAccept(booking, eta); break;
       case 'on_my_way': open('eta'); break;
       case 'mark_done': open('complete'); break;
@@ -420,8 +439,8 @@ export function JobActionBar({ booking, variant = 'card' }) {
     : null;
 
   let primaryNode;
-  if (primary && (primary.id === 'rebook' || primary.id === 'book_install')) {
-    const href = routeHref('new', {}, { customer: customerKeyOf(booking.customer.phone), service: primary.id === 'book_install' ? 'ev' : booking.serviceId });
+  if (primary && LINK_PRIMARIES.includes(primary.id)) {
+    const href = primaryHref(booking, primary, progress);
     primaryNode = html`<${Button} variant="primary" size="lg" block icon=${primary.icon} href=${href} data-testid="job-primary">${primary.label}<//>`;
   } else if (primary) {
     primaryNode = html`<${Button} variant="primary" size="lg" block icon=${primary.icon} onClick=${runPrimary} data-testid="job-primary">${primary.label}<//>`;
@@ -468,12 +487,14 @@ export function JobActionBar({ booking, variant = 'card' }) {
 export function NeedsYouActions({ booking }) {
   const brand = useBrand();
   const [eta, setEta] = useState(45);
+  const [moving, setMoving] = useState(false);
   const guard = useTapGuard();
   if (!booking) return null;
   const id = booking.id;
   const first = firstOf(booking);
   const text = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about booking ${booking.ref}.`;
   const accept = booking.urgent;
+  const install = isQuotedInstall(booking);
   const confirmLabel = (primaryActionFor(booking) || PRIMARY.confirm).label;
   return html`<div class="ja-needs">
     ${accept ? html`<${Segmented} class="ja-eta" size="sm" ariaLabel="How long until you arrive" value=${eta} onChange=${setEta}
@@ -485,7 +506,10 @@ export function NeedsYouActions({ booking }) {
       <${Button} variant="secondary" icon="phone" href=${telLink(booking.customer.phone)} data-testid=${`needs-you-call-${id}`}>Call<//>
       <${Button} variant="secondary" icon="message-circle" href=${waLink(booking.customer.phone, text, brand.demoPhoneDigits)} data-testid=${`needs-you-whatsapp-${id}`}>WhatsApp<//>
     </div>
-    <${Button} variant="ghost" block class="ja-needs__decline" onClick=${() => guard(() => doDecline(booking))} data-testid=${`needs-you-decline-${id}`}>Decline<//>
+    ${install
+      ? html`<${Button} variant="ghost" block icon="calendar-days" class="ja-needs__change" onClick=${() => setMoving(true)} data-testid=${`needs-you-change-${id}`}>Change the day<//>`
+      : html`<${Button} variant="ghost" block class="ja-needs__decline" onClick=${() => guard(() => doDecline(booking))} data-testid=${`needs-you-decline-${id}`}>Decline<//>`}
+    ${moving ? html`<${RescheduleSheet} booking=${booking} onClose=${() => setMoving(false)} />` : null}
   </div>`;
 }
 

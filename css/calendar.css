@@ -1,5 +1,5 @@
 /* css/calendar.css: Calendar screen (week strip, window rows, week grid, legend) and the New booking page wrapper (cal-*).
-   Owner: WP6. Colours come from tokens.css only; the shared kit (ui-*) and page helpers (db-*) are not restyled here. */
+   Owner: E3 (v1 by WP6). Colours come from tokens.css only; the shared kit (ui-*) and page helpers (db-*) are not restyled here. */
 
 /* ================= Week bar ================= */
 .cal-weekbar { display: flex; align-items: center; gap: var(--space-2); }
@@ -100,6 +100,15 @@
 }
 .cal-blocked:active { filter: brightness(0.96); }
 .cal-blocked__text { min-width: 0; padding: 2px 8px; border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
+
+/* A busy time imported from Google Calendar (simulated): solid, dashed edge, calendar icon. Not a button: the sync owns it. */
+.cal-gcal {
+  text-decoration: none; cursor: pointer; border-style: dashed; border-color: var(--link);
+  background: var(--status-new-bg); color: var(--status-new-fg);
+}
+.cal-gcal .cal-blocked__text { background: transparent; padding-inline: 4px; color: inherit; }
+.cal-gcal strong { font-weight: var(--fw-heavy); }
+.cal-legend__list li svg { flex: none; color: var(--status-new-fg); }
 
 /* Past and closed windows: quiet. */
 .cal-muted {

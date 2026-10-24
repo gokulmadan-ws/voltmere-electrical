@@ -1,5 +1,5 @@
-// js/booking/nav.js: booking hash helpers and the tiny route emitter that drives the booking sheet (11.1).
-// Owner: WP3
+// js/booking/nav.js: booking hash helpers, the route emitter that drives the booking sheet (11.1), and the quote funnel's history steps.
+// Owner: WP3, funnel history steps by D3
 import { useEffect, useState } from '../vendor/preact-htm.js';
 import { prefillFunnelPostcode } from './draft.js';
 
@@ -87,40 +87,117 @@ function currentRoute() {
   return sameRoute(next, lastRoute) ? lastRoute : next;
 }
 
+// ---- funnel history ---------------------------------------------------------------------------------------------
+// Each step of the quote funnel is its own history entry (same URL, history.state = { bkStep: n }), so the phone's Back
+// button and swipe-back go to the previous step instead of throwing the customer out of the funnel. The step number lives in
+// history.state, which survives a refresh, so the number of entries above the one that opened the sheet is always bkStep - 1.
+// Closing or finishing unwinds exactly those entries first, so Back never lands on a half-finished step afterwards.
+
+const isFunnelOpts = (o) => !o.bookedRef && !o.manageRef && !o.emergency;
+const here = () => location.pathname + location.search + location.hash;
+
+/** The funnel step stored in the current history entry (1 to 6), or 0 when this entry is not a funnel step. */
+export function funnelHistoryStep() {
+  if (!hasWindow) return 0;
+  const s = history.state;
+  return s && Number.isInteger(s.bkStep) && s.bkStep >= 1 ? s.bkStep : 0;
+}
+
+let unwinding = false;
+
+/** True while the history is being unwound by closeBooking / finishFunnel: the sheet ignores popstate for that time. */
+export function isUnwinding() {
+  return unwinding;
+}
+
+/** history.go(-n), then `then()` once the browser has landed (popstate), or after a safety timeout (no history to walk). */
+function unwind(n, then) {
+  let finished = false;
+  let timer = null;
+  const onPop = () => done();
+  function done() {
+    if (finished) return;
+    finished = true;
+    window.removeEventListener('popstate', onPop);
+    clearTimeout(timer);
+    unwinding = false;
+    then();
+  }
+  unwinding = true;
+  window.addEventListener('popstate', onPop);
+  timer = setTimeout(done, 700);
+  history.go(-n);
+}
+
+/** A forward step: a new history entry, same URL. */
+export function pushFunnelStep(n) {
+  if (!hasWindow) return;
+  history.pushState({ bkStep: n }, '', here());
+}
+
+/** Keep the current entry but record its step (used when there is no earlier funnel entry to go back to). */
+export function replaceFunnelStep(n) {
+  if (!hasWindow) return;
+  history.replaceState({ bkStep: n }, '', here());
+}
+
+/** A step back through the history when this many funnel entries exist below the current one; false when the caller must do it in place. */
+export function backFunnelSteps(k = 1) {
+  if (!hasWindow || funnelHistoryStep() - 1 < k) return false;
+  history.go(-k);
+  return true;
+}
+
+/** Make the history match the step on screen (a refresh, a deep link with a saved draft, a restart): rebuild entries 1..step. */
+export function syncFunnelHistory(step) {
+  if (!hasWindow || funnelHistoryStep() === step) return;
+  history.replaceState({ bkStep: 1 }, '', here());
+  for (let i = 2; i <= step; i += 1) history.pushState({ bkStep: i }, '', here());
+}
+
+/** Leave the funnel for the confirmation: collapse the step entries, then show the new route in the same entry. `after` runs once it has. */
+export function finishFunnel(opts, after) {
+  if (!hasWindow) { if (after) after(); return; }
+  const above = Math.max(0, funnelHistoryStep() - 1);
+  const land = () => {
+    history.replaceState(null, '', bookHref(opts));
+    sync('replace');
+    if (after) after();
+  };
+  if (above > 0) unwind(above, land); else land();
+}
+
 /** Opens the sheet from outside it: ONE pushState (11.1). Inside an open sheet it just replaces.
  *  opts.postcode (optional) is carried into Step 1 of the quote funnel. */
 export function openBooking(opts = {}) {
   if (!hasWindow) return;
   if (opts && opts.postcode) prefillFunnelPostcode(opts.postcode);
   if (lastRoute) { goBooking(opts); return; }
-  history.pushState(null, '', bookHref(opts));
+  history.pushState(isFunnelOpts(opts) ? { bkStep: 1 } : null, '', bookHref(opts));
   sync('push');
 }
 
-/** Every in-sheet step: replaceState, never push, so Back and X both close the sheet in one step. */
+/** Every in-sheet route change outside the funnel steps: replaceState, never push, so Back and X both close the sheet in one step. */
 export function goBooking(opts = {}) {
   if (!hasWindow) return;
-  history.replaceState(null, '', bookHref(opts));
+  history.replaceState(isFunnelOpts(opts) ? { bkStep: 1 } : null, '', bookHref(opts));
   sync('replace');
 }
 
-/** history.back() when the app pushed the entry, else strip the hash in place. A second call while closing is ignored. */
+/** Close the sheet. Unwinds the funnel's step entries and the entry that opened the sheet (one history.go), else strips the hash in place.
+ *  A second call while closing is ignored. */
 export function closeBooking() {
   if (!hasWindow || closing) return;
   if (!currentRoute()) return;
   closing = true;
-  if (openedByApp) {
-    history.back();
-    // Safety net: if Back did not clear the route (no earlier entry), strip the hash ourselves.
-    setTimeout(() => {
-      if (parseBookHash(readHash())) { history.replaceState(null, '', location.pathname + location.search); sync('replace'); }
-      closing = false;
-    }, 400);
-  } else {
-    history.replaceState(null, '', location.pathname + location.search);
-    sync('replace');
+  const above = Math.max(0, funnelHistoryStep() - 1); // funnel entries stacked on the entry that opened the sheet
+  const strip = () => {
+    if (parseBookHash(readHash())) { history.replaceState(null, '', location.pathname + location.search); sync('replace'); }
     closing = false;
-  }
+  };
+  if (openedByApp) unwind(above + 1, strip); // strip is the safety net: if Back did not clear the route (no earlier entry), we do
+  else if (above > 0) unwind(above, strip);
+  else strip();
 }
 
 /** Hook: the parsed booking route, live (emitter, hashchange and popstate). */

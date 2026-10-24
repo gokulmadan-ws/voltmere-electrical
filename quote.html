@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- quote.html: customer quote page entry (head boilerplate, #app, boot module). Owner: Q2 -->
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Your quote · 180 Electrical</title>
+  <meta name="description" content="Your home EV charger installation quote from 180 Electrical, Northern Ireland. Prototype with sample data.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0B0B0C">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="modulepreload" href="js/vendor/preact-htm.js">
+  <link rel="modulepreload" href="js/ui/index.js">
+  <link rel="modulepreload" href="js/core/store.js">
+  <link rel="modulepreload" href="js/quote/app.js">
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/quote.css">
+  <script>
+    (function () {
+      var t = 'dark';
+      try { var s = localStorage.getItem('vm_theme'); if (s === 'light' || s === 'dark' || s === 'auto') t = s; } catch (e) {}
+      var c = '#0B0B0C';
+      if (t === 'auto') {
+        var dark = true;
+        try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
+        c = dark ? '#0B0B0C' : '#F6F5F3';
+      } else {
+        document.documentElement.setAttribute('data-theme', t);
+        if (t === 'light') c = '#F6F5F3';
+      }
+      var m = document.querySelectorAll('meta[name="theme-color"]');
+      for (var i = 0; i < m.length; i++) m[i].setAttribute('content', c);
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>This quote needs JavaScript to show. Please enable it, or call 180 Electrical on 07885 496800.</noscript>
+  <script type="module" src="js/quote/app.js"></script>
+</body>
+</html>

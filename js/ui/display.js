@@ -1,5 +1,5 @@
 // js/ui/display.js: Icon, BrandMark, Chip, StatusPill, SampleTag, Card, Avatar, EmptyState, Stat, Banner, Skeleton, PageHeader, TextLink.
-// Owner: WP2 (BrandMark redrawn for 180 Electrical by role B2)
+// Owner: B3 (was WP2; BrandMark redrawn for 180 Electrical by role B2; Skeleton variants by B3)
 import { h, html } from '../vendor/preact-htm.js';
 import { ICONS } from './icons.js';
 import { IconButton } from './button.js';
@@ -148,14 +148,27 @@ export function Banner({ tone = 'info', icon, actions, class: cls, children, ...
     actions ? h('div', { class: 'ui-banner__actions' }, actions) : null));
 }
 
-/** Shimmering placeholder bars (the view loader uses it). Static under reduced motion. */
-export function Skeleton({ lines = 3, height = 16, class: cls, ...rest }) {
-  const bars = [];
-  for (let i = 0; i < lines; i++) {
-    const last = i === lines - 1 && lines > 1;
-    bars.push(h('span', { class: 'ui-skeleton__bar', key: i, 'aria-hidden': 'true', style: { height: height + 'px', width: last ? '62%' : '100%' } }));
+/**
+ * Shimmering placeholder. variant 'lines' (default): `lines` bars of `height` px. 'card': an avatar, two lines and a wide bar,
+ * for list rows and cards. The shimmer is a GPU sweep and is static under reduced motion.
+ */
+export function Skeleton({ lines = 3, height = 16, variant = 'lines', class: cls, ...rest }) {
+  const bar = (key, style) => h('span', { class: 'ui-skeleton__bar', key, 'aria-hidden': 'true', style });
+  let bars = [];
+  if (variant === 'card') {
+    bars = [
+      h('span', { class: 'ui-skeleton__head', key: 'h', 'aria-hidden': 'true' },
+        bar('a', { width: '40px', height: '40px', borderRadius: '50%', flex: 'none' }),
+        h('span', { class: 'ui-skeleton__stack' }, bar('t', { height: '16px', width: '56%' }), bar('s', { height: '12px', width: '34%' }))),
+      bar('b', { height: '14px', width: '100%' })
+    ];
+  } else {
+    for (let i = 0; i < lines; i++) {
+      const last = i === lines - 1 && lines > 1;
+      bars.push(bar(i, { height: height + 'px', width: last ? '62%' : '100%' }));
+    }
   }
-  return h('div', { class: cx('ui-skeleton', cls), role: 'status', ...rest }, h('span', { class: 'u-sr-only' }, 'Loading'), bars);
+  return h('div', { class: cx('ui-skeleton', variant === 'card' && 'ui-skeleton--card', cls), role: 'status', ...rest }, h('span', { class: 'u-sr-only' }, 'Loading'), bars);
 }
 
 /**

@@ -1,7 +1,8 @@
 {
   "name": "180 Electrical",
   "short_name": "180",
-  "description": "Prototype enquiry site and owner dashboard for 180 Electrical, home EV charger installers in Northern Ireland. Sample data.",
+  "description": "Home EV charger installation across Northern Ireland. Prototype enquiry site and owner dashboard for 180 Electrical, with sample data.",
+  "lang": "en-GB",
   "start_url": "./index.html",
   "scope": "./",
   "display": "browser",
@@ -11,5 +12,9 @@
     { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "img/logo-mark.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Owner dashboard", "short_name": "Dashboard", "url": "./dashboard.html#/today" },
+    { "name": "Quotes", "url": "./dashboard.html#/quotes" }
   ]
 }

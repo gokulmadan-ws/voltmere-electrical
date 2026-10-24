@@ -1,14 +1,17 @@
 // js/booking/manage.js: Manage page (#manage/<ref>): live status, customer cancel (free until the cutoff), call and WhatsApp.
-// Owner: WP3, enquiry wording by D2
+// Owner: WP3, enquiry wording by D2, journey timeline, quote link and cancel rules by D3
 import { html, useState } from '../vendor/preact-htm.js';
-import { Icon, Button, Select, Sheet, EmptyState, toast } from '../ui/index.js';
+import { Icon, Button, Chip, Select, Sheet, EmptyState, toast } from '../ui/index.js';
 import { cancelBooking } from '../core/store.js';
-import { isWithinChangeCutoff, selectBookingByRef, selectService } from '../core/selectors.js';
+import { isWithinChangeCutoff, selectBookingByRef, selectService, selectQuoteForBooking } from '../core/selectors.js';
+import { waLink } from '../core/messages.js';
+import { firstName } from '../core/format.js';
 import { nowStamp } from '../core/clock.js';
 import { stampTime } from '../core/dates.js';
 import { PROMISES } from '../core/config.js';
-import { StepTitle, ContactButtons } from './bk-shared.js';
-import { ConfirmTicket, isEnquiry } from './confirmation.js';
+import { StepTitle } from './bk-shared.js';
+import { ConfirmTicket, JourneyTimeline, QuoteNote, enquiryJourney, isEnquiry, statusChipFor } from './confirmation.js';
+import { replyHours } from './funnel.js';
 
 const REASONS = [
   { value: '', label: 'No reason given' },
@@ -24,19 +27,13 @@ const STEPS = [
   { id: 'on_the_way', label: 'On the way' },
   { id: 'done', label: 'Done' }
 ];
-const ENQUIRY_STATUS_STEPS = [
-  { id: 'new', label: 'Enquiry received' },
-  { id: 'confirmed', label: 'Survey confirmed' },
-  { id: 'on_the_way', label: 'On the way' },
-  { id: 'done', label: 'Done' }
-];
 
+/** The classic four-step status strip (phone jobs). Enquiries use the journey timeline instead. */
 function StatusTimeline({ booking, brand }) {
-  const steps = isEnquiry(booking) ? ENQUIRY_STATUS_STEPS : STEPS;
-  const at = steps.findIndex((s) => s.id === booking.status);
+  const at = STEPS.findIndex((s) => s.id === booking.status);
   return html`<div class="bk-block">
     <ol class="bk-steps" data-testid="manage-status-timeline" aria-label="Booking status">
-      ${steps.map((s, i) => html`<li key=${s.id} class=${'bk-steps__item' + (i < at ? ' is-past' : '') + (i === at ? ' is-current' : '')} aria-current=${i === at ? 'step' : undefined}>
+      ${STEPS.map((s, i) => html`<li key=${s.id} class=${'bk-steps__item' + (i < at ? ' is-past' : '') + (i === at ? ' is-current' : '')} aria-current=${i === at ? 'step' : undefined}>
         <span class="bk-steps__mark" aria-hidden="true">${i < at ? html`<${Icon} name="check" size=${14} />` : null}</span>
         <span class="bk-steps__label">${s.label}</span>
       </li>`)}
@@ -63,10 +60,14 @@ export function Manage({ ctx, refId }) {
   const pending = enquiry && booking.status === 'new';
   const active = booking.status === 'new' || booking.status === 'confirmed';
   const close = isWithinChangeCutoff(booking, nowStamp());
-  // A pencilled-in survey is only provisional, so the customer can always withdraw an enquiry that has not been confirmed.
-  const canCancel = active && !booking.urgent && (pending || !close);
-  const waText = `Hi ${brand.ownerFirst}, it's about booking ${booking.ref}.`;
+  // CONTRACT-GAP: core cancelBooking(id, 'customer') refuses inside freeChangeHours even for a pencilled enquiry nobody has confirmed, so the
+  // button is offered only when the store would accept it. Ask A3 to let a customer withdraw a 'new' ev_quote at any time, then this can drop `!close`.
+  const canCancel = active && !booking.urgent && !close;
+  const waText = `Hi ${brand.ownerFirst}, it's ${firstName(booking.customer.name)}, about ${enquiry ? 'my EV charger enquiry' : 'booking'} ${booking.ref}.`;
   const noun = enquiry ? 'enquiry' : 'visit';
+  const hours = replyHours(state);
+  const chip = statusChipFor(booking, brand);
+  const quote = enquiry ? selectQuoteForBooking(state, booking.id) : null;
 
   const doCancel = () => {
     const res = cancelBooking(booking.id, 'customer', { reason });
@@ -74,32 +75,44 @@ export function Manage({ ctx, refId }) {
     if (res.ok) toast({ message: enquiry ? 'Enquiry cancelled. The pencilled-in time is free again.' : 'Visit cancelled. That time is free again.' });
     else if (res.reason === 'not_allowed') toast({ message: `This is close, so please call ${brand.ownerFirst}.`, tone: 'danger' });
     else if (res.reason === 'not_found') toast({ message: 'That booking no longer exists.', tone: 'danger' });
+    else if (res.reason === 'storage_full') toast({ message: 'This device has no room left to save that change. Please call instead.', tone: 'danger' });
     else toast({ message: 'That did not work: the diary changed. Please check and try again.', tone: 'danger' });
   };
 
-  const contact = enquiry
-    ? html`<div class="bk-contact"><${Button} variant="secondary" size="sm" icon="phone" href=${brand.telHref} data-testid="manage-call">Call ${brand.phone}<//></div>`
-    : html`<${ContactButtons} brand=${brand} text=${waText} />`;
+  const contact = html`<div class="bk-contact">
+    <${Button} variant="secondary" size="md" icon="phone" href=${brand.telHref} data-testid="manage-call">Call ${brand.phone}<//>
+    <${Button} variant="secondary" size="md" icon="message-circle" href=${waLink(brand.phone, waText, brand.demoPhoneDigits)} data-testid="manage-whatsapp">WhatsApp<//>
+  </div>`;
+  const cancelled = booking.status === 'cancelled';
 
-  return html`<div class="bk-step" data-testid="manage-page">
+  return html`<div class="bk-step bk-manage" data-testid="manage-page">
     <${StepTitle} sub=${`Reference ${booking.ref}`}>${enquiry ? 'Your enquiry' : 'Your booking'}<//>
-    <${ConfirmTicket} booking=${booking} service=${service} brand=${brand} testid="manage-ticket" refTestid="manage-ref" showAlert=${false} />
-    ${booking.status === 'cancelled'
+    <div class="bk-confirm__status bk-confirm__status--left" role="status" aria-live="polite">
+      <${Chip} tone=${chip.tone} icon=${chip.icon} data-testid="manage-status">${chip.text}<//>
+    </div>
+    <${ConfirmTicket} booking=${booking} service=${service} brand=${brand} hours=${hours} settings=${state.settings} calendar=${enquiry && active} testid="manage-ticket" refTestid="manage-ref" showAlert=${false} />
+    ${enquiry ? html`<${QuoteNote} state=${state} booking=${booking} brand=${brand} />` : null}
+    ${cancelled
     ? html`<div class="bk-block">
         <p class="bk-note bk-note--strong">${enquiry ? 'This enquiry was cancelled.' : 'This booking was cancelled.'}</p>
         <${Button} variant="primary" size="lg" block class=${enquiry ? 'bk-pill' : ''} onClick=${() => go(enquiry ? { serviceId: 'ev_quote' } : {})}>${enquiry ? 'Get my installation quote' : 'Book again'}<//>
       </div>`
-    : html`<${StatusTimeline} booking=${booking} brand=${brand} />`}
-    ${pending ? html`<p class="bk-note bk-note--strong bk-manage__reply" data-testid="manage-reply-note"><${Icon} name="clock" size=${18} />${' '}<span>We'll be in touch within ${PROMISES.contactWithinHours} hours.</span></p>` : null}
-    ${canCancel ? html`<div class="bk-block">
+    : enquiry
+      ? html`<${JourneyTimeline} items=${enquiryJourney(booking, brand, hours, quote)} testid="manage-status-timeline" label="Where things are" />`
+      : html`<${StatusTimeline} booking=${booking} brand=${brand} />`}
+    ${enquiry && booking.status === 'on_the_way' && booking.etaAt ? html`<p class="bk-note bk-note--strong" data-testid="manage-eta">${brand.ownerFirst} is on the way. Expected about ${stampTime(booking.etaAt)} (${brand.ownerFirst}'s own estimate, not live tracking).</p>` : null}
+    ${pending ? html`<p class="bk-note bk-note--strong bk-manage__reply" data-testid="manage-reply-note"><${Icon} name="clock" size=${18} />${' '}<span>We'll be in touch within ${hours} hours.</span></p>` : null}
+    ${canCancel ? html`<div class="bk-block bk-manage__actions">
       <${Button} variant="secondary" size="lg" block icon="calendar-x" onClick=${() => setConfirming(true)} data-testid="manage-cancel">${enquiry ? 'Cancel enquiry' : 'Cancel visit'}<//>
       <p class="bk-note">${enquiry ? `To change the survey time, call ${brand.ownerFirst}.` : `To change the time, call or WhatsApp ${brand.ownerFirst}.`}</p>
       ${contact}
     </div>` : null}
-    ${active && !canCancel ? html`<div class="bk-block">
+    ${active && !canCancel ? html`<div class="bk-block bk-manage__actions">
       <p class="bk-note bk-note--strong" data-testid="manage-close-note">This is close, so please call ${brand.ownerFirst}.</p>
+      <p class="bk-note">${enquiry ? 'Your survey visit is pencilled in for soon, so changes are best made by phone.' : 'The visit is coming up, so changes are best made by phone.'}</p>
       ${contact}
     </div>` : null}
+    ${cancelled ? html`<div class="bk-block bk-manage__actions">${contact}</div>` : null}
     <${Sheet} open=${confirming} onClose=${() => setConfirming(false)} title=${`Cancel this ${noun}?`} size="auto" testid="confirm-dialog"
       initialFocus='[data-testid="confirm-cancel"]'
       footer=${html`<div class="ui-confirm__actions ui-confirm__actions--danger">

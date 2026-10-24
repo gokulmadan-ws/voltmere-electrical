@@ -1,13 +1,13 @@
-// js/dashboard/views/messages.js: Messages, the WhatsApp outbox (simulated): banner, compare card, filters, live bubble buttons, wa.me links.
-// Owner: WP8, enquiry chips and wording by E2
+// js/dashboard/views/messages.js: Messages, the outbox of WhatsApp and email messages (simulated): banner, compare card, filters, live bubble buttons, links.
+// Owner: E3 (v1 by WP8, enquiry chips and wording by E2)
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Chip, EmptyState, Icon, PageHeader, PrototypeNotice, Segmented, Sheet, WhatsAppBubble,
-  copyText, showUndoToast, toast, useNow, useStore
+  copyText, pageHref, pageTarget, showUndoToast, toast, useNow, useStore
 } from '../../ui/index.js';
 import { acceptEmergency, confirmBooking, markMessagesSeen, sendMessageNow } from '../../core/store.js';
 import { selectMessages } from '../../core/selectors.js';
-import { bubbleActions, messageIsScheduled, telLink, waLink } from '../../core/messages.js';
+import { bubbleActions, mailtoLink, messageIsScheduled, telLink, waLink } from '../../core/messages.js';
 import { DEFAULT_TEMPLATES, KIND_LABELS, TEMPLATE_KINDS, WINDOWS } from '../../core/config.js';
 import { DAY_SHORT, fmtDayShort, fmtRelativeDay, stampDay, stampTime, weekdayOf } from '../../core/dates.js';
 import { nowStamp } from '../../core/clock.js';
@@ -20,7 +20,7 @@ import { AnswerChips, hasAnswers } from '../shared/enquiry.js';
 export const title = 'Messages';
 export const css = ['css/settings.css', 'css/bookings.css'];
 
-const BANNER_TEXT = 'SIMULATED. Nothing is sent from this prototype. These are the messages the live system would send through the WhatsApp Business Platform. Tap "Open in WhatsApp" to try one on your own phone.';
+const BANNER_TEXT = 'SIMULATED. Nothing is sent from this prototype. These are the WhatsApp messages and emails a live system would send for you. Tap "Open in WhatsApp" or "Open in email" to try one from your own phone.';
 const HINT_TEXT = 'Open in WhatsApp goes to the number on the message. These numbers are fictional, so it will not reach a real person. Add your own mobile in Demo tools and every link opens your WhatsApp instead.';
 const FAIL_TEXT = 'That did not work: the diary changed. Please check and try again.';
 
@@ -28,6 +28,7 @@ const FILTERS = [
   { value: 'all', label: 'All', testid: 'msg-filter-all' },
   { value: 'owner', label: 'To me', testid: 'msg-filter-owner' },
   { value: 'customer', label: 'To customers', testid: 'msg-filter-customer' },
+  { value: 'email', label: 'Email', testid: 'msg-filter-email' },
   { value: 'scheduled', label: 'Scheduled', testid: 'msg-filter-scheduled' }
 ];
 
@@ -95,12 +96,12 @@ function CompareCard({ state, alert, booking, nowS }) {
     <summary class="ms-compare__summary">Is this better than a ping?<${Icon} name="chevron-down" size=${22} class="ms-compare__chev" /></summary>
     <div class="ms-compare__body">
       <div class="ms-compare__col">
-        <h3 class="ms-compare__head">A typical ping</h3>
+        <h2 class="ms-compare__head">A typical ping</h2>
         <p class="ms-compare__cap">illustrative: a plain notification</p>
         <div class="ms-card__chat"><${WhatsAppBubble} direction="in" body=${ping} /></div>
       </div>
       <div class="ms-compare__col">
-        <h3 class="ms-compare__head">With this</h3>
+        <h2 class="ms-compare__head">With this</h2>
         <p class="ms-compare__cap">Buttons that act, not just a notification</p>
         <div class="ms-card__chat">
           <${WhatsAppBubble} direction="in" body=${body} time=${stampTime(at)} stateLabel="Sent (simulated)"
@@ -114,10 +115,14 @@ function CompareCard({ state, alert, booking, nowS }) {
 
 // ---------- one message ----------
 
-function MessageCard({ m, booking, nowS, demoDigits, isNew }) {
+const QUOTE_ID_IN_BODY = /quote\.html#q=([A-Za-z0-9-]+)/;
+
+function MessageCard({ m, booking, nowS, demoDigits, isNew, sendFrom }) {
   const scheduled = messageIsScheduled(m, nowS);
   const toOwner = m.to === 'owner';
+  const email = m.channel === 'email';
   const time = scheduled ? `Scheduled ${scheduledLabel(m.sendAt)}` : sentLabel(m);
+  const quoteId = (QUOTE_ID_IN_BODY.exec(m.body) || [])[1] || '';
   const copy = async () => {
     const ok = await copyText(m.body);
     toast({ message: ok ? 'Copied' : 'Could not copy. Select the text and copy it by hand.' });
@@ -126,27 +131,41 @@ function MessageCard({ m, booking, nowS, demoDigits, isNew }) {
     const res = sendMessageNow(m.id);
     if (res.ok) toast({ message: 'Sent now (simulated).' }); else failToast(res);
   };
-  return html`<article class=${`ms-card${isNew ? ' is-new' : ''}`} data-testid=${`message-${m.id}`} aria-label=${`${KIND_LABELS[m.kind] || 'Message'} to ${m.toName}`}>
+  const channelLabel = email ? 'Email' : 'WhatsApp';
+  return html`<article class=${`ms-card${isNew ? ' is-new' : ''}${email ? ' ms-card--email' : ''}`} data-testid=${`message-${m.id}`} data-channel=${m.channel || 'whatsapp'}
+    aria-label=${`${KIND_LABELS[m.kind] || 'Message'} to ${m.toName}`}>
     <div class="ms-card__head">
       <div class="ms-card__to">
         <p class="ms-card__who">${toOwner ? `To: ${m.toName} (you)` : `To: ${m.toName}`}</p>
-        <p class="ms-card__sub">${m.toPhone}</p>
+        <p class="ms-card__sub">${email ? (m.toEmail || 'No email address') : m.toPhone}</p>
       </div>
       <div class="ms-card__meta">
+        <span class=${`ms-channel ms-channel--${email ? 'email' : 'whatsapp'}`} data-testid=${`message-channel-${m.id}`}><${Icon} name=${email ? 'mail' : 'message-circle'} size=${14} />${channelLabel}</span>
         <${Chip} tone=${toOwner ? 'accent' : 'neutral'}>${KIND_LABELS[m.kind] || m.kind}<//>
         <span class="ms-card__time">${time}</span>
       </div>
     </div>
     ${toOwner && booking && hasAnswers(booking) ? html`<${AnswerChips} booking=${booking} class="ms-card__chips" />` : null}
     <div class="ms-card__chat">
-      <${WhatsAppBubble} direction=${toOwner ? 'in' : 'out'} body=${m.body} messageId=${m.id}
-        scheduled=${scheduled} time=${scheduled ? undefined : stampTime(m.sendAt || m.at)}
-        stateLabel=${scheduled ? `Scheduled for ${scheduledLabel(m.sendAt)} (simulated)` : 'Sent (simulated)'}
-        actions=${actionsFor(m, booking, nowS)} onAction=${(id) => runAction(id, booking)} />
+      ${email
+        ? html`<div class="ms-mail" data-testid=${`message-mail-${m.id}`}>
+            <p class="ms-mail__subject">${KIND_LABELS[m.kind] || 'Message'}</p>
+            <p class="ms-mail__from">${`From ${toOwner ? 'your dashboard' : sendFrom} (simulated)`}</p>
+            <p class="ms-mail__body">${m.body}</p>
+            <p class="ms-mail__state"><${Icon} name=${scheduled ? 'clock' : 'check-check'} size=${16} /> ${scheduled ? `Scheduled for ${scheduledLabel(m.sendAt)} (simulated)` : 'Sent (simulated)'}</p>
+          </div>`
+        : html`<${WhatsAppBubble} direction=${toOwner ? 'in' : 'out'} body=${m.body} messageId=${m.id}
+            scheduled=${scheduled} time=${scheduled ? undefined : stampTime(m.sendAt || m.at)}
+            stateLabel=${scheduled ? `Scheduled for ${scheduledLabel(m.sendAt)} (simulated)` : 'Sent (simulated)'}
+            actions=${actionsFor(m, booking, nowS)} onAction=${(id) => runAction(id, booking)} />`}
     </div>
     <div class="ms-card__foot">
-      <${Button} class="is-wide" variant="secondary" icon="send" href=${waLink(m.toPhone, m.body, demoDigits)} data-testid=${`message-open-wa-${m.id}`}>Open in WhatsApp<//>
+      ${email
+        ? html`<${Button} class="is-wide" variant="secondary" icon="mail" href=${mailtoLink(m.toEmail || '', KIND_LABELS[m.kind] || 'Message', m.body)} data-testid=${`message-open-mail-${m.id}`}>Open in email<//>`
+        : html`<${Button} class="is-wide" variant="secondary" icon="send" href=${waLink(m.toPhone, m.body, demoDigits)} data-testid=${`message-open-wa-${m.id}`}>Open in WhatsApp<//>`}
       <${Button} size="sm" icon="copy" onClick=${copy} data-testid=${`message-copy-${m.id}`}>Copy text<//>
+      ${quoteId ? html`<${Button} size="sm" icon="file-text" href=${routeHref('quote-detail', { id: quoteId })} data-testid=${`message-open-quote-${m.id}`}>Open quote<//>` : null}
+      ${quoteId ? html`<${Button} size="sm" icon="external-link" href=${pageHref('quote.html', `#q=${quoteId}`)} target=${pageTarget('quote.html')} data-testid=${`message-view-quote-${m.id}`}>Customer view<//>` : null}
       ${booking
         ? html`<${Button} size="sm" icon="file-text" href=${routeHref('bookings', { id: booking.id })} data-testid=${`message-open-booking-${m.id}`}>Open booking<//>`
         : null}
@@ -192,8 +211,9 @@ export default function MessagesView({ route }) {
     bookingId: bookingId || undefined,
     scheduledOnly: filter === 'scheduled' ? true : undefined,
     nowStamp: nowS
-  });
+  }).filter((m) => filter !== 'email' || m.channel === 'email');
   const demoDigits = state.settings.demoPhoneDigits || '';
+  const sendFrom = (state.settings.connections && state.settings.connections.email && state.settings.connections.email.sendFrom) || state.settings.business.email;
 
   // The compare card uses the latest owner alert in the whole outbox (not the filtered list).
   const alert = selectMessages(state, { to: 'owner' }).find((m) => m.kind === 'owner_new_booking') || null;
@@ -214,7 +234,7 @@ export default function MessagesView({ route }) {
   });
 
   return html`<div class="db-page">
-    <${PageHeader} title="Messages" subtitle="WhatsApp outbox (simulated)" />
+    <${PageHeader} title="Messages" subtitle="WhatsApp and email outbox (simulated)" />
     <div class="ms-stack">
       <${PrototypeNotice} variant="inline" data-testid="messages-banner">${BANNER_TEXT}<//>
 
@@ -236,11 +256,11 @@ export default function MessagesView({ route }) {
       ${list.length === 0
         ? html`<${EmptyState} icon="message-circle"
             title=${state.messages.length === 0 ? 'No messages yet.' : 'Nothing here.'}
-            body=${state.messages.length === 0 ? 'Send an enquiry from the website and watch this fill up.' : 'No messages match this filter.'} />`
+            body=${state.messages.length === 0 ? 'Send an enquiry from the website and watch this fill up.' : filter === 'email' ? 'No emails yet. Connect Gmail and send a quote by email to see one here.' : 'No messages match this filter.'} />`
         : html`<div class="ms-list" data-testid="messages-list">${groups.map((g) => html`<section key=${g.day} aria-label=${fmtRelativeDay(g.day)}>
             <h2 class="ms-day">${fmtRelativeDay(g.day)}</h2>
             ${g.items.map((m) => html`<${MessageCard} key=${m.id} m=${m} booking=${m.bookingId ? bookingsById.get(m.bookingId) || null : null}
-              nowS=${nowS} demoDigits=${demoDigits} isNew=${arrived.current.has(m.id)} />`)}
+              nowS=${nowS} demoDigits=${demoDigits} isNew=${arrived.current.has(m.id)} sendFrom=${sendFrom} />`)}
           </section>`)}</div>`}
     </div>
     <${TemplatesSheet} open=${tplOpen} onClose=${() => setTplOpen(false)} overrides=${state.settings.templates} />
