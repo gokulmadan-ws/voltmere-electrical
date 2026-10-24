@@ -388,7 +388,7 @@ function CalWizard({ cal, onDone }) {
   };
 
   return html`<${Wizard} title="Set-up" steps=${steps} step=${step} onStepChange=${goStep} onFinish=${finish} finishLabel="Finish"
-    onCancel=${() => navigate(routeHref('connections'))} testid="k2-cal-wizard" />`;
+    aside=${html`<${SimBanner} compact />`} onCancel=${() => navigate(routeHref('connections'))} testid="k2-cal-wizard" />`;
 }
 
 function CalDashboard({ cal }) {
@@ -452,8 +452,8 @@ export default function CalendarView() {
   useEffect(() => { settleConnections(); }, []);
   const wizard = cal.status !== 'connected' || setup;
   return html`<div class="db-page k2-page" data-testid="k2-cal-root">
-    <${ConnHeader} title=${wizard ? 'Connect Google Calendar' : 'Google Calendar'} subtitle="Your busy times in the diary, your jobs in your calendar." />
-    <${SimBanner} />
+    <${ConnHeader} title=${wizard ? 'Connect Google Calendar' : 'Google Calendar'} subtitle=${wizard ? undefined : 'Your busy times in the diary, your jobs in your calendar.'} />
+    ${wizard ? null : html`<${SimBanner} compact />`}
     ${wizard ? html`<${CalWizard} cal=${cal} onDone=${() => setSetup(false)} />` : html`<${CalDashboard} cal=${cal} />`}
   </div>`;
 }

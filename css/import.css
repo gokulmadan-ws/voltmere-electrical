@@ -1,0 +1,109 @@
+/* css/import.css: the dashboard Import screen (f4-*): what a customer sent through a WhatsApp link, shown in full before anything is added.
+   Colours come from tokens.css only. Owner: F4 (V4). Mobile first (375), calm at 320, centred column from 768. */
+
+.db-page.f4-page { max-width: 720px; }
+.f4-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.f4-stack > * { min-width: 0; }
+
+/* ---- cards ---- */
+.f4-card { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.f4-h { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.2; }
+.f4-lead { margin: 0; color: var(--text); font-size: var(--fs-16); line-height: 1.5; overflow-wrap: anywhere; }
+.f4-muted { margin: 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.5; }
+.f4-meta { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; overflow-wrap: anywhere; }
+.f4-label { margin: 0; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+
+.f4-who { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.f4-who__main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.f4-who__name { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); line-height: 1.25; letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; }
+.f4-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.f4-tags > li { min-width: 0; max-width: 100%; }
+
+.f4-badge { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--text-2); }
+.f4-badge--ok { border-color: var(--ok); background: var(--ok-tint); color: var(--ok-text); }
+.f4-badge--warn { border-color: var(--dot-few); background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
+
+/* ---- contact ---- */
+.f4-contact { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.f4-phone { margin: 0; font-size: var(--fs-17); font-weight: var(--fw-bold); }
+.f4-contact__btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.f4-contact__btns .ui-btn { min-width: 0; padding-inline: var(--space-3); white-space: nowrap; }
+.f4-email { display: flex; align-items: center; gap: var(--space-2); margin: 0; min-width: 0; color: var(--text-2); font-size: var(--fs-15); }
+.f4-email svg { flex: none; }
+.f4-email a { display: inline-flex; align-items: center; min-width: 0; min-height: var(--tap); color: var(--link); overflow-wrap: anywhere; text-underline-offset: 3px; }
+
+/* ---- answers and notes ---- */
+.f4-pc { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.f4-changed { color: var(--status-on-the-way-fg); font-weight: var(--fw-semibold); }
+.f4-note { display: flex; flex-direction: column; gap: 2px; padding: var(--space-3) var(--space-4); border-radius: var(--r-md); background: var(--surface-2); }
+.f4-note__text { margin: 0; font-size: var(--fs-16); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---- what adding it does ---- */
+.f4-does { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border: 1.5px dashed var(--line); border-radius: var(--r-lg); }
+.f4-does__list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.f4-does__list li { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: var(--space-2); font-size: var(--fs-15); line-height: 1.45; overflow-wrap: anywhere; }
+.f4-does__list svg { margin-top: 2px; color: var(--ok-text); }
+.f4-tips svg { color: var(--text-3); }
+.f4-reassure { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.5; text-align: center; text-wrap: pretty; }
+.f4-how { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--space-2); margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.5; }
+.f4-how svg { margin-top: 2px; }
+
+/* ---- banners ---- */
+.f4-banner__title { display: block; font-weight: var(--fw-bold); }
+.f4-banner__text { display: block; overflow-wrap: anywhere; }
+.f4-problem { align-items: flex-start; }
+
+/* ---- the sticky decision bar: the way out on the left, the one action on the right ---- */
+.f4-bar { gap: var(--space-2); }
+.f4-bar .ui-btn { min-width: 0; padding-inline: var(--space-3); }
+.f4-bar__second { flex: 0 1 auto; }
+.f4-bar__primary { flex: 1 1 0; line-height: 1.2; }
+.f4-bar .ui-btn__label { text-align: center; text-wrap: balance; }
+@media (max-width: 359px) {
+  /* 320: a long action label takes the full width, above the way out */
+  .f4-bar--long { flex-direction: column-reverse; align-items: stretch; }
+  .f4-bar--long .ui-btn { width: 100%; }
+}
+
+/* A page with a decision bar fills the screen below 1100px, so the bar rests at the bottom (the thumb zone) when the content is short and
+   sticks there when it is long (the same idea as the Wizard footer in dashboard.css). */
+.f4-page--bar > .f4-stack, .f4-page--bar > .f4-success { margin-bottom: var(--space-5); }
+@media (max-width: 1099px) {
+  .db-page.f4-page--bar {
+    display: flex; flex-direction: column;
+    min-height: calc(100vh - var(--h-strip) - var(--h-header) - var(--safe-top));
+    min-height: calc(100dvh - var(--h-strip) - var(--h-header) - var(--safe-top));
+  }
+  .f4-page--bar > .f4-bar { margin-top: auto; }
+}
+
+/* Success is short: from 1100px its buttons sit under the content instead of in a band along the bottom of the screen. */
+@media (min-width: 1100px) {
+  .f4-bar--inline { position: static; margin: var(--space-2) 0 0; padding: 0; border: 0; background: none; box-shadow: none; }
+}
+
+/* ---- success ---- */
+.f4-success { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-4); min-width: 0; padding-top: var(--space-2); }
+.f4-tick { display: block; align-self: center; width: 88px; height: 88px; overflow: visible; }
+.f4-tick__disc { fill: var(--ok-tint); transform-origin: 48px 48px; animation: f4-disc 480ms var(--ease-spring) 40ms backwards; }
+.f4-tick__ring {
+  fill: none; stroke: var(--ok); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 214; stroke-dashoffset: 0;
+  transform: rotate(-90deg); transform-origin: 48px 48px; animation: f4-ring 560ms var(--ease-out) 100ms backwards;
+}
+.f4-tick__check { fill: none; stroke: var(--ok-text); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 46; stroke-dashoffset: 0; animation: f4-check 320ms var(--ease-out) 560ms backwards; }
+@keyframes f4-disc { from { opacity: 0; transform: scale(0.6); } }
+@keyframes f4-ring { from { stroke-dashoffset: 214; } }
+@keyframes f4-check { from { stroke-dashoffset: 46; } }
+.f4-success__title { margin: 0; text-align: center; font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.15; }
+.f4-success__title:focus, .f4-success__title:focus-visible { outline: none; }
+.f4-success__lead { margin: 0; text-align: center; color: var(--text-2); font-size: var(--fs-16); line-height: 1.5; text-wrap: pretty; overflow-wrap: anywhere; }
+.f4-undo {
+  align-self: center; display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--tap); padding: 0 var(--space-4);
+  border: 0; border-radius: var(--r-pill); background: none; color: var(--text-2); font-size: var(--fs-15); font-weight: var(--fw-semibold);
+  text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 4px; -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) { .f4-undo:hover { color: var(--text); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .f4-tick__disc, .f4-tick__ring, .f4-tick__check { animation: none; }
+}

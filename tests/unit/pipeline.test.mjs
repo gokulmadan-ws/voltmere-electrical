@@ -110,19 +110,19 @@ test('pipeline items: the shape, SLA flags only on waiting enquiries, value and 
   const quoteOut = all.find((i) => i.bookingId === 'bk_seed_19');
   assert.equal(quoteOut.quoteStatus, 'viewed');
   assert.equal(quoteOut.value, 679 + 450 + 180 + 85 + 95);
-  assert.equal(quoteOut.summary, 'Quote £1489 viewed by the customer');
+  assert.equal(quoteOut.summary, 'Quote £1,489 viewed by the customer');
   assert.equal(quoteOut.ageMinutes, 26 * 60, 'in the quote stage since it was sent');
   assert.equal(all.find((i) => i.bookingId === 'bk_seed_16').summary, 'Survey done, quote to write');
-  assert.equal(all.find((i) => i.bookingId === 'bk_seed_17').summary, 'Draft quote £1394, not sent yet');
-  assert.equal(all.find((i) => i.bookingId === 'bk_seed_18').summary, 'Quote £1586 sent, not opened yet');
-  assert.match(all.find((i) => i.bookingId === 'bk_seed_21').summary, /^Accepted £1364\. Install pencilled in Sat 31 Oct, morning, 8–10am$/);
-  assert.match(all.find((i) => i.bookingId === 'bk_seed_23').summary, /^Install Mon 2 Nov, morning, 8–10am$/);
+  assert.equal(all.find((i) => i.bookingId === 'bk_seed_17').summary, 'Draft quote £1,394, not sent yet');
+  assert.equal(all.find((i) => i.bookingId === 'bk_seed_18').summary, 'Quote £1,586 sent, not opened yet');
+  assert.match(all.find((i) => i.bookingId === 'bk_seed_21').summary, /^Accepted £1,364\. Install pencilled in Sat 31 Oct, 8am–12$/);
+  assert.match(all.find((i) => i.bookingId === 'bk_seed_23').summary, /^Install Mon 2 Nov, 8am–12$/);
   const done = all.find((i) => i.bookingId === 'bk_seed_27');
   assert.equal(done.stage, 'done');
   assert.equal(done.value, 1490, 'the money earned: the install final price');
-  assert.match(done.summary, /^Installed Sat 19 Sep, paid £1490$/);
-  assert.equal(all.find((i) => i.bookingId === 'bk_seed_30').summary.endsWith('to collect £1970'), true);
-  assert.deepEqual(p.lost.map((i) => i.summary).sort(), ['Cancelled by the customer', 'Quote declined: Found a lower price elsewhere', 'Quote £1394 expired']);
+  assert.match(done.summary, /^Installed Sat 19 Sep, paid £1,490$/);
+  assert.equal(all.find((i) => i.bookingId === 'bk_seed_30').summary.endsWith('to collect £1,550'), true);
+  assert.deepEqual(p.lost.map((i) => i.summary).sort(), ['Cancelled by the customer', 'Quote declined: Found a lower price elsewhere', 'Quote £1,394 expired']);
 });
 
 test('stage totals: counts and values add up; openValue is everything not yet installed', () => {
@@ -133,7 +133,7 @@ test('stage totals: counts and values add up; openValue is everything not yet in
   }
   assert.equal(p.openValue, p.stages.filter((s) => s.id !== 'done').reduce((t, s) => t + s.value, 0));
   assert.equal(p.stages.find((s) => s.id === 'enquiry').value, 0);
-  assert.equal(p.stages.find((s) => s.id === 'done').value, 9191);
+  assert.equal(p.stages.find((s) => s.id === 'done').value, 8771);
   assert.equal(p.lostValue, p.lost.reduce((t, i) => t + i.value, 0));
   assert.ok(p.lostValue > 0, 'the declined and expired quotes still show what was lost');
   assert.equal(p.totalCount, p.stages.reduce((t, s) => t + s.count, 0) + p.lostCount);
@@ -264,7 +264,7 @@ test('pipeline value: the quote total from the quote stage on, the install price
   const done = selectPipeline(stateOf([e3, i3], [q3]), NOW).stages.find((s) => s.id === 'done').items[0];
   assert.equal(done.value, 1560);
   assert.equal(done.paid, false);
-  assert.match(done.summary, /to collect £1560$/);
+  assert.match(done.summary, /to collect £1,560$/);
 });
 
 test('stageSince and ageMinutes: from the moment each item entered its stage', () => {
@@ -420,7 +420,7 @@ test('selectLeadSources on the seed: 13 Facebook, 4 Instagram, 3 Google, 2 word 
   assert.deepEqual(r.sources.map((s) => [s.id, s.enquiries]), [['facebook', 13], ['instagram', 4], ['google', 3], ['referral', 2], ['phone', 2], ['other', 0]]);
   assert.deepEqual(r.sources.map((s) => s.sharePct), [54, 17, 13, 8, 8, 0], '13 of 24 is about 55 percent');
   assert.deepEqual(r.range, { from: null, to: null, preset: 'all' });
-  assert.deepEqual(r.total, { enquiries: 24, quotes: 16, accepted: 11, installs: 6, revenue: 9191 });
+  assert.deepEqual(r.total, { enquiries: 24, quotes: 16, accepted: 11, installs: 6, revenue: 8771 });
   assert.equal(r.sources.reduce((t, s) => t + s.revenue, 0), r.total.revenue);
   assert.ok(r.sources.every((s) => s.label === LEAD_SOURCE_LABELS[s.id]));
   const fb = r.sources[0];
@@ -501,9 +501,9 @@ test('selectQuoteStats on the seed: sent, accepted, declined, expired, win rate,
   const r = selectQuoteStats(seedState(), 'all', NOW);
   assert.deepEqual([r.sent, r.accepted, r.declined, r.expired, r.decided], [16, 11, 1, 1, 13]);
   assert.equal(r.winRatePct, 85, 'accepted of those that were decided (11 of 13), not of the ones still open');
-  assert.equal(r.avgAcceptedValue, 1556);
+  assert.equal(r.avgAcceptedValue, 1480);
   assert.equal(r.waitingCount, 3);
-  assert.equal(r.waitingValue, 5009, 'two sent and one viewed');
+  assert.equal(r.waitingValue, 4589, 'two sent and one viewed; the one with a possible extra (a consumer unit upgrade) counts its fixed lines only');
   assert.deepEqual([r.draftCount, r.draftValue], [1, 1394]);
   assert.deepEqual(r.range, { from: null, to: null, preset: 'all' });
 });

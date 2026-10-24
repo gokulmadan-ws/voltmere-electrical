@@ -57,7 +57,7 @@ test('each seeded booking lands where 3.4 says (day, window, status, money)', ()
   assert.deepEqual(row(6), ['2026-10-23T10:00', 120, 'done', 'Orla Hegarty', 'fault', 75, 75, false, null]);
   assert.deepEqual(row(7), ['2026-10-29T10:00', 120, 'new', 'Sinead Doherty', 'ev_quote', 0, null, false, null]);
   assert.deepEqual(row(8), ['2026-10-24T10:00', 120, 'confirmed', 'Eoin McCartney', 'ev_quote', 0, null, false, null]);
-  assert.deepEqual(row(9), ['2026-10-26T13:00', 240, 'confirmed', 'Padraig Quinn', 'ev', 1934, null, false, null]);
+  assert.deepEqual(row(9), ['2026-10-26T13:00', 240, 'confirmed', 'Padraig Quinn', 'ev', 1514, null, false, null]);
   assert.deepEqual(row(10), ['2026-10-27T08:00', 120, 'confirmed', 'Niamh Gallagher', 'fault', 75, null, false, null]);
   assert.deepEqual(row(11), ['2026-10-27T10:00', 120, 'new', 'Conor Brennan', 'ev_quote', 0, null, false, null]);
   assert.deepEqual(row(12), ['2026-10-27T13:00', 120, 'confirmed', 'Roisin Maguire', 'ev_quote', 0, null, false, null]);
@@ -69,7 +69,7 @@ test('each seeded booking lands where 3.4 says (day, window, status, money)', ()
   assert.equal(s15.cancelReason, 'Customer asked');
   const s02 = byId(state, 'bk_seed_02');
   assert.equal(s02.variantId, 'flat');
-  assert.equal(s02.variantLabel, 'Flat');
+  assert.equal(s02.variantLabel, '', 'the original EICR is now a landlord EV install: no variant label is printed');
   assert.deepEqual(s02.address, { line1: '8 Millrace Row', postcode: 'BT28 2LN' });
   const s09 = byId(state, 'bk_seed_09');
   assert.equal(s09.variantLabel, '');
@@ -116,15 +116,15 @@ test('fixture totals at 2026-10-23T20:30', () => {
   assert.equal(state.bookings.length, 42);
   assert.deepEqual(selectNeedsYou(state).map((b) => b.id), ['bk_seed_11', 'bk_seed_34', 'bk_seed_35', 'bk_seed_07'], 'two enquiries and two pencilled installs need you, oldest first');
   assert.deepEqual(selectOwed(state).map((b) => b.id), ['bk_seed_04', 'bk_seed_41', 'bk_seed_42', 'bk_seed_06']);
-  assert.equal(selectOwedTotal(state), 170 + 1970 + 1394 + 75);
+  assert.equal(selectOwedTotal(state), 170 + 1550 + 1394 + 75, 'the consumer unit upgrade on the bk_seed_41 quote is a possible extra, so it is not in what is owed');
   const insights = selectInsights(state, '2026-10-23T20:30');
   assert.equal(insights.collectedMonth, 3038);
   assert.equal(insights.collectedMonthCount, 5, 'the free survey visits are not counted');
-  assert.equal(insights.owedTotal, 3609);
+  assert.equal(insights.owedTotal, 3189);
   assert.equal(insights.owedCount, 4);
-  assert.equal(insights.bookedNext14, 8123);
+  assert.equal(insights.bookedNext14, 7703);
   assert.equal(insights.bookedNext14Count, 12, 'the jobs and installs booked or pencilled in, plus the pencilled-in enquiries, which are free');
-  assert.equal(insights.avgJob, 826, 'the free survey visits are not averaged in');
+  assert.equal(insights.avgJob, 784, 'the free survey visits are not averaged in');
   assert.equal(selectCustomers(state).length, 27);
 });
 
@@ -241,8 +241,8 @@ test('the S07 enquiry alert is msg_seed_07_alert and seed message ids follow msg
   assert.ok(alert.body.includes('Survey pencilled in: Thu 29 Oct, arriving between 10am and 12 (provisional)'));
   const conf = state.messages.find((m) => m.id === 'msg_seed_07_conf');
   assert.equal(conf.kind, 'customer_received');
-  assert.ok(conf.body.includes('Your free survey visit is pencilled in for Thu 29 Oct, 10am–12. This is provisional'));
-  assert.ok(conf.body.includes('Daniel will be in touch within 24 hours'));
+  assert.ok(conf.body.includes('Earliest visit Daniel could offer: Thu 29 Oct, 10am–12. Daniel will confirm within 24 hours.'));
+  assert.ok(!conf.body.includes('plan around'));
   assert.ok(!state.messages.some((m) => m.kind === 'owner_emergency' || m.kind === 'customer_emergency_received'), 'no emergency messages are seeded');
 });
 
@@ -454,9 +454,34 @@ test('buildSeed honours custom settings (prices and a rebrand flow into the seed
   settings.remindersOn = false;
   const state = seedState(FIXTURE, settings);
   const priced = seedState(FIXTURE, (() => { const t = makeDefaultSettings(); t.quoteItems.find((i) => i.id === 'install_standard').unitPrice = 500; return t; })());
-  assert.equal(byId(priced, 'bk_seed_09').quotedPrice, 1984, 'an install carries its quote total, so the edited catalogue price flows in (+50)');
+  assert.equal(byId(priced, 'bk_seed_09').quotedPrice, 1564, 'an install carries its quote total, so the edited catalogue price flows in (+50)');
   assert.equal(byId(state, 'bk_seed_10').quotedPrice, 80);
   assert.equal(byId(state, 'bk_seed_08').quotedPrice, 0, 'a free quote visit stays free');
   assert.ok(state.messages.find((m) => m.id === 'msg_seed_08_conf').body.includes("it's Lee from Ashby Sparks"));
   assert.ok(!state.messages.some((m) => m.kind === 'customer_reminder'), 'reminders off means no scheduled reminders');
+});
+
+test('T10: the seed reads as a home EV charger business: surveys and installs only, a varied message history, alerts that name their enquiry', () => {
+  const state = seedState();
+  const names = new Set(state.bookings.map((b) => b.serviceName));
+  for (const word of [/socket/i, /fault/i, /eicr/i, /fuse box/i]) {
+    assert.ok(![...names].some((n) => word.test(n)), `no service reads ${word}`);
+  }
+  assert.ok([...names].every((n) => /EV charger|Home EV charger quote/.test(n)), [...names].join(' | '));
+  // the original non-EV jobs keep their service id, price and place (the pipeline and the diary maths are untouched)
+  assert.equal(byId(state, 'bk_seed_06').serviceId, 'fault');
+  assert.equal(byId(state, 'bk_seed_06').serviceName, 'EV charger survey');
+  assert.equal(byId(state, 'bk_seed_05').serviceName, 'EV charger install visit');
+  // messages are not all "just now": at least five different days, and the alerts carry a heading naming the enquiry
+  const days = new Set(state.messages.map((m) => stampDay(m.at)));
+  assert.ok(days.size >= 6, `${days.size} different days`);
+  assert.ok(state.messages.every((m) => m.at <= '2026-10-23T20:30' || m.sendAt));
+  const alerts = state.messages.filter((m) => m.kind === 'owner_new_booking');
+  assert.ok(alerts.length >= 5);
+  assert.ok(alerts.every((m) => /^New (enquiry|booking): \S+ [A-Z], BT\d+$|^New (enquiry|booking): \S+ [A-Z], DG\d+$/.test(m.title)), alerts.map((m) => m.title).join(' | '));
+  assert.equal(state.messages.find((m) => m.id === 'msg_seed_07_alert').title, 'New enquiry: Sinead D, BT42');
+  assert.ok(new Set(alerts.map((m) => m.title)).size >= alerts.length - 1, 'headings tell the alerts apart (one customer, Declan, has two jobs)');
+  // a future job booked on an earlier day, not five minutes ago
+  assert.equal(byId(state, 'bk_seed_13').createdAt, '2026-10-22T17:50');
+  assert.equal(byId(state, 'bk_seed_14').createdAt, '2026-10-23T20:25', 'one job really was booked just now');
 });

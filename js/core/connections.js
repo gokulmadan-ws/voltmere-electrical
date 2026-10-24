@@ -197,10 +197,11 @@ export function summariseConnections(connections, nowSecStr) {
   else if (d.status === 'pending') rows.domain = ['pending', 'Waiting for DNS', `${d.domain}: add the records, then check`, d.status];
   else rows.domain = ['off', 'Not set up', 'Use your own address, such as www.180electrical.co.uk', d.status];
 
+  // The webhook is "on" from the start, but it only counts as tried out once an enquiry has come through it (a test event is enough).
   const w = c.webhook;
-  rows.webhook = w.enabled
-    ? ['connected', 'On', w.lastEventAt ? `Last test event ${w.lastEventAt.replace('T', ' ')}` : 'No events yet. Send a test event to see an enquiry arrive.', 'enabled']
-    : ['off', 'Paused', 'Enquiries from your funnel are not being passed on.', 'disabled'];
+  if (!w.enabled) rows.webhook = ['off', 'Paused', 'Enquiries from your funnel are not being passed on.', 'disabled'];
+  else if (w.lastEventAt) rows.webhook = ['connected', 'On', `Last test event ${w.lastEventAt.replace('T', ' ')}`, 'enabled'];
+  else rows.webhook = ['pending', 'Waiting for your first enquiry', 'No events yet. Send a test event to see an enquiry arrive.', 'enabled'];
 
   const t = c.tracking;
   if (t.metaPixelId || t.googleTagId) {

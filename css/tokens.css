@@ -14,7 +14,7 @@
 
    Colour roles (token names are unchanged from the contract, meanings moved):
    --cta / --cta-ink      brand red FILL with white text (white on #E11414 is 4.87:1, so the brand red itself is used):
-                          primary buttons, selected chips, active tab, step marks, the "PROTOTYPE" badge.
+                          primary buttons, selected chips, active tab, step marks. (The "PROTOTYPE" label is a grey outline: red means "act".)
    --cta-press            #B00E12, his hover red: hover and pressed state of a primary button, chip borders.
    --cta-soft             brand tint (rgba(225,20,20,.10) in dark): selected option / highlighted card background.
    --cta-text             brand red used as TEXT or an icon. #E11414 on #0B0B0C is only 4.0:1 and 3.7:1 on a card, so
@@ -72,6 +72,7 @@
   --ok: #1B7F45;            /* icons, dots */
   --ok-text: #146C3A;
   --ok-tint: #D9F5E3;
+  --switch-thumb: #FFFFFF;  /* the round knob of a switch, white in both themes */
   /* booking status: one pair per status (bg / fg) */
   --status-new-bg: #E3ECFF;        --status-new-fg: #1D4ED8;
   --status-confirmed-bg: #D9F5E3;  --status-confirmed-fg: #146C3A;

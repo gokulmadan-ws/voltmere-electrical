@@ -1,7 +1,7 @@
 // js/core/selectors.js: pure derived data for the UI (needs-you, next-up, customers, insights; re-exports the v3 pipeline and quote selectors)
 // Owner: WP1 (v1), A3 (v3 additions)
 import { ENQUIRY_ANSWER_HEADINGS, ENQUIRY_ANSWER_KEYS, PROMISES, answerLabel, imageUrl, makeDefaultBusiness } from './config.js';
-import { nowStampSec } from './clock.js';
+import { nowStamp, nowStampSec } from './clock.js';
 import { summariseConnections } from './connections.js';
 import { isFreeVisit } from './pipeline.js';
 import {
@@ -10,6 +10,8 @@ import {
 import { bookingEndStamp, describeHours } from './availability.js';
 import { gbp, outsideAreaLabel, toWaDigits } from './format.js';
 import { messageIsScheduled, telLink } from './messages.js';
+import { assessQuoteDecision } from './quotes.js';
+import { parseImport, quoteLinkInfo } from './handoff.js';
 
 // Selectors never mutate state (it is frozen); every sort below works on a copy.
 
@@ -26,7 +28,7 @@ export {
   isFreeVisit, leadSourceOf, resolveRange, RANGE_PRESETS, selectPipeline, selectJourney, selectSla, selectLeadSources, selectCostPerLead,
   selectQuoteStats, selectQuotes, selectQuote, selectQuotesForBooking, selectQuoteForBooking, selectQuoteList, selectQuoteDetail
 } from './pipeline.js';
-export { quoteTotal, quoteLineTotal, quoteStatus, quoteExpiresInDays } from './quotes.js';
+export { quoteTotal, quoteLineTotal, quoteStatus, quoteExpiresInDays, isOptionalLine, quoteFixedLines, quoteExtraLines, quoteExtrasTotal } from './quotes.js';
 
 export function selectBrand(state) {
   const hit = brandCache.get(state);
@@ -353,4 +355,65 @@ export function selectInsights(state, nowStampStr) {
 /** True when the start is less than PROMISES.freeChangeHours away, INCLUDING a start already in the past. */
 export function isWithinChangeCutoff(booking, nowStampStr) {
   return minutesBetween(nowStampStr, booking.start) < PROMISES.freeChangeHours * 60;
+}
+
+// ---------- v4: the WhatsApp link handoff (docs/V4-API.md) ----------
+
+/**
+ * What the owner's import screen shows and does with a link, WITHOUT changing anything. `parsed` is parseImport's result (or anything it accepts).
+ * { ok: true, kind, state: 'ready' | 'done' | 'blocked', reason, message, title, summary, actionLabel, bookingId, quote, localTotal, href }, or
+ * { ok: false, reason, message } when the link cannot be read. 'done' = already added or decided (the action would do nothing); 'blocked' = cannot be
+ * applied on this device (the message says why in plain words). Uses the same rules the store applies (quotes.js assessQuoteDecision).
+ */
+export function previewImport(state, parsed, nowStampStr = nowStamp()) {
+  const read = parsed && parsed.ok === true && parsed.data ? parsed : parseImport(parsed, { now: nowStampStr });
+  if (!read.ok) return { ok: false, reason: read.reason, message: read.message };
+  const d = read.data;
+  const base = { ok: true, kind: read.kind, state: 'ready', reason: '', message: '', title: '', summary: '', actionLabel: '', bookingId: null, quote: null, localTotal: null, href: '#/pipeline' };
+  if (read.kind === 'enq') {
+    const existing = (state.bookings || []).find((b) => b.importId === d.importId);
+    const service = (state.settings.services || []).find((x) => x.id === 'ev_quote');
+    const blocked = !existing && (!service || !service.active);
+    return {
+      ...base,
+      state: existing ? 'done' : blocked ? 'blocked' : 'ready',
+      reason: blocked ? 'service_unavailable' : '',
+      message: blocked ? 'Home charger enquiries are switched off on this device, so this one cannot be added.' : '',
+      title: `${d.name} sent an enquiry`,
+      summary: `${d.name}, ${d.postcode}`,
+      actionLabel: 'Add to my dashboard',
+      bookingId: existing ? existing.id : null,
+      href: existing ? `#/bookings/${existing.id}` : '#/bookings'
+    };
+  }
+  if (read.kind === 'acc' || read.kind === 'dec') {
+    const verdict = assessQuoteDecision(state.quotes, d, nowStampStr);
+    const accepted = read.kind === 'acc';
+    const local = verdict.localTotal;
+    const summary = accepted ? d.summary : `${d.customerFirst} declined quote ${d.quoteId}${local === null ? '' : ` (${gbp(local)})`}${d.reasonLabel ? `. Reason: ${d.reasonLabel}` : ''}`;
+    return {
+      ...base,
+      state: verdict.state,
+      reason: verdict.reason,
+      message: verdict.message,
+      title: `${d.customerFirst} ${accepted ? 'accepted' : 'declined'} a quote`,
+      summary,
+      actionLabel: accepted ? 'Mark quote accepted and plan the install' : 'Mark quote declined',
+      bookingId: verdict.bookingId,
+      quote: verdict.quote,
+      localTotal: local,
+      href: verdict.bookingId ? `#/bookings/${verdict.bookingId}` : verdict.quote ? `#/quotes/${verdict.quote.id}` : '#/pipeline'
+    };
+  }
+  return {
+    ...base, state: 'blocked', reason: 'wrong_kind', message: 'This is a quote link for a customer. It opens on the customer\'s quote page, not here.', title: 'A quote link', summary: `${d.customerFirst}, quote ${d.id}`
+  };
+}
+
+/** The link to copy or send for a stored quote: { url, portable, chars, reason, notesTruncated } (portable false = it opens only in this browser), or null for an unknown quote. */
+export function selectQuoteLinkInfo(state, quoteId) {
+  const quote = state.quotes && Object.prototype.hasOwnProperty.call(state.quotes, quoteId) ? state.quotes[quoteId] : null;
+  if (!quote) return null;
+  const booking = (state.bookings || []).find((b) => b.id === quote.bookingId) || null;
+  return quoteLinkInfo(quote, { booking });
 }

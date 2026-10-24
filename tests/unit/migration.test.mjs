@@ -2,7 +2,7 @@
 // Owner: A3 core
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_IMAGES, SCHEMA_VERSION, STORAGE_KEYS, makeDefaultConnections, makeDefaultSettings } from '../../js/core/config.js';
+import { DEFAULT_IMAGES, DEFAULT_QUOTE_NOTES, LEGACY_QUOTE_NOTES, SCHEMA_VERSION, STORAGE_KEYS, makeDefaultConnections, makeDefaultSettings } from '../../js/core/config.js';
 import { setClock } from '../../js/core/clock.js';
 import { selectBookingById, selectPipeline } from '../../js/core/selectors.js';
 import * as store from '../../js/core/store.js';
@@ -140,6 +140,28 @@ test('a state that is already v3 loads as it is (no reseed on the same day)', ()
   assert.equal(storage.getItem(STORAGE_KEYS.state), raw, 'not rewritten');
   assert.ok(selectBookingById(again, made.booking.id));
   assert.equal(again.bookings.length, 43);
+});
+
+test('a saved v3 state from before the polish round is brought up to date: the catalogue flags the consumer unit as a possible extra and the long sample terms become the short ones', () => {
+  const old = JSON.parse(JSON.stringify(initStore({ storage: memStorage(), force: true })));
+  for (const item of old.settings.quoteItems) delete item.optional; // the old catalogue had no flag
+  old.settings.quoteDefaults.notes = LEGACY_QUOTE_NOTES[0];
+  old.settings.quoteItems.find((i) => i.id === 'cable_extra').unitPrice = 15; // a price he edited stays
+  const storage = memStorage({ [STORAGE_KEYS.state]: JSON.stringify(old) });
+  const state = initStore({ storage, force: true });
+  assert.deepEqual(state.settings.quoteItems.filter((i) => i.optional).map((i) => i.id), ['consumer_unit']);
+  assert.ok(state.settings.quoteItems.every((i) => typeof i.optional === 'boolean'));
+  assert.equal(state.settings.quoteItems.find((i) => i.id === 'cable_extra').unitPrice, 15, 'his edits are kept');
+  assert.equal(state.settings.quoteDefaults.notes, DEFAULT_QUOTE_NOTES);
+  // terms he wrote himself are never replaced
+  old.settings.quoteDefaults.notes = 'Sample terms: payment on completion.';
+  const kept = initStore({ storage: memStorage({ [STORAGE_KEYS.state]: JSON.stringify(old) }), force: true });
+  assert.equal(kept.settings.quoteDefaults.notes, 'Sample terms: payment on completion.');
+  // an item the owner already flagged either way is left alone
+  old.settings.quoteItems.find((i) => i.id === 'consumer_unit').optional = false;
+  old.settings.quoteItems.find((i) => i.id === 'enclosure').optional = true;
+  const flagged = initStore({ storage: memStorage({ [STORAGE_KEYS.state]: JSON.stringify(old) }), force: true });
+  assert.deepEqual(flagged.settings.quoteItems.filter((i) => i.optional).map((i) => i.id), ['enclosure']);
 });
 
 test('a state from the future (v4) or a v3 state missing its quotes is discarded and reseeded, never trusted', () => {

@@ -4,14 +4,14 @@
 /* Column width of the page content: full width on phones, centred 720px on tablets, 1080px beside the sidebar. */
 :root {
   --db-col: none;
-  --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 28px); /* default: clears the tab bar AND the FAB (12.3) */
+  --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 24px); /* default: clears the tab bar AND the FAB (12.3) */
 }
 @media (min-width: 768px) { :root { --db-col: 720px; } }
 @media (min-width: 1100px) { :root { --db-col: 1080px; --toast-bottom: 24px; } }
-/* The shell tells CSS what sits at the bottom of the screen (data-db-nav on <html>, set by shell.js), so the new-enquiry toast always
-   floats just above it: above the tab bar (and the FAB where there is one), above a sticky action bar on immersive pages. */
-:root[data-db-nav="tabs"] { --toast-bottom: calc(var(--h-tabbar) + 14px); }
-:root[data-db-nav="fab"] { --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 28px); }
+/* The shell tells CSS what sits at the bottom of the screen (data-db-nav on <html>, set by shell.js), so a toast always floats above
+   it: above the tab bar AND the FAB's height on every tab page (even where there is no FAB, a page's own bottom button, such as the
+   WhatsApp button on a Today card, is never covered), above a sticky action bar on immersive pages. */
+:root[data-db-nav="tabs"], :root[data-db-nav="fab"] { --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 24px); }
 :root[data-db-nav="immersive"] { --toast-bottom: 100px; }
 @media (min-width: 1100px) {
   :root[data-db-nav="tabs"], :root[data-db-nav="fab"] { --toast-bottom: 24px; }
@@ -30,7 +30,8 @@
   --db-stick-pad: 0px;
   min-height: 100vh; min-height: 100dvh;
 }
-.db-shell--fab { --db-page-pb: calc(var(--h-tabbar) + var(--h-fab) + var(--safe-bottom) + var(--space-6)); }
+/* T11: with a FAB the last row must clear it at scroll end: tab bar + FAB + its 16px offset + 24px of air. */
+.db-shell--fab { --db-page-pb: calc(var(--h-tabbar) + var(--h-fab) + var(--safe-bottom) + var(--space-4) + var(--space-5)); }
 .db-shell--immersive { --db-page-pb: var(--space-5); --db-stick-bottom: 0px; --db-stick-pad: var(--safe-bottom); }
 .db-main { display: block; min-width: 0; }
 
@@ -78,17 +79,34 @@
   color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; line-height: 1.25;
 }
 .db-header__actions { display: flex; align-items: center; flex: none; gap: 2px; }
-/* On the narrowest phones the caption would end in an ellipsis: drop it, the name stays whole. */
+/* On phones the caption is just "Dashboard" (T11: the room goes to the "View site" label); on the narrowest it would end in an
+   ellipsis, so it is dropped and the name stays whole. */
+@media (max-width: 419px) { .db-brand__sub-pre { display: none; } }
 @media (max-width: 359px) { .db-header__brand .db-brand__sub { display: none; } }
+/* "View site" (T11): the public-site link is a labelled outline pill, not an unexplained arrow. Icon-only below 360px (aria-label stays). */
+.db-site-link {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 6px;
+  min-height: var(--tap); min-width: var(--tap); margin: 0 6px 0 4px; padding: 0 14px;
+  border: 1.5px solid var(--field-border); border-radius: var(--r-pill);
+  color: var(--text); text-decoration: none; white-space: nowrap;
+  font-size: var(--fs-14); font-weight: var(--fw-bold); line-height: 1;
+  transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.db-site-link:active { background: var(--surface-2); transform: scale(0.96); }
+@media (hover: hover) { .db-site-link:hover { background: var(--surface-2); } }
+.db-site-link__icon { display: none; }
+@media (max-width: 359px) {
+  .db-site-link { width: var(--tap); margin-inline: 0; padding: 0; border-color: transparent; }
+  .db-site-link__text { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .db-site-link__icon { display: block; }
+}
 
 /* ================= Bottom tab bar (below 1100px) ================= */
 .db-tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-tabbar);
   padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+  /* Fully opaque: page text must never ghost through under the tab labels. */
   background: var(--surface); border-top: 1.5px solid var(--line); box-shadow: var(--shadow-bar);
-}
-@supports (backdrop-filter: blur(8px)) {
-  .db-tabbar { background: color-mix(in srgb, var(--surface) 90%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(16px); backdrop-filter: saturate(1.4) blur(16px); }
 }
 /* The track holds the list and the sliding pill; the pill moves by whole tab widths (--tab-i), so it needs no measuring. */
 .db-tabbar__track { position: relative; max-width: 560px; margin: 0 auto; height: var(--h-tabbar); }
@@ -97,18 +115,19 @@
   height: 100%; margin: 0; padding: 0; list-style: none;
 }
 .db-tabbar__indicator {
-  position: absolute; top: 8px; left: 0; width: 20%; height: 30px;
+  position: absolute; top: 12px; left: 0; width: 20%; height: 30px;
   display: flex; align-items: center; justify-content: center;
   transform: translateX(calc(var(--tab-i, 0) * 100%));
   transition: transform var(--dur-sheet) var(--ease-spring), opacity var(--dur-base) var(--ease-out);
   pointer-events: none;
 }
-.db-tabbar__indicator::before { content: ''; width: 56px; height: 30px; border-radius: var(--r-pill); background: var(--cta); box-shadow: var(--shadow-brand); }
+/* The active tab is neutral (T02): a grey pill with a 2px ink ring. Brand red stays on the one primary button and the logo. */
+.db-tabbar__indicator::before { content: ''; width: 56px; height: 30px; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 2px var(--text); }
 .db-tabbar__indicator.is-hidden { opacity: 0; }
 .db-tabbar__item { display: block; min-width: 0; }
 .db-tab {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
-  height: 100%; min-width: 0; padding-top: 8px;
+  height: 100%; min-width: 0; padding-top: 12px;
   color: var(--text-2); text-decoration: none;
   font-size: var(--fs-12); font-weight: var(--fw-semibold); line-height: 1.2;
 }
@@ -120,17 +139,19 @@
 .db-tab:active .db-tab__pill { transform: scale(0.9); }
 .db-tab__label { max-width: 100%; white-space: nowrap; transition: color var(--dur-base) var(--ease-out); }
 .db-tab.is-active { color: var(--text); font-weight: var(--fw-bold); }
-.db-tab.is-active .db-tab__pill { color: var(--cta-ink); }
+.db-tab.is-active .db-tab__pill { color: var(--text); }
 @keyframes db-tab-pop { 40% { transform: translateY(-2px) scale(1.12); } }
 .db-tab.is-active .ui-icon { animation: db-tab-pop var(--dur-sheet) var(--ease-spring) 60ms both; }
+/* The count badge (T11): the same numeric badge on Today and Bookings, sitting OUTSIDE the pill's top-right shoulder (its circle clears the
+   pill's right cap, so it never touches the active ring) with a 2px ring in the bar colour. --danger orange-red = needs you. */
 .db-tab__badge {
-  position: absolute; top: -5px; right: 2px;
+  position: absolute; top: -12px; right: -13px;
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--r-pill);
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill);
   background: var(--danger); color: var(--danger-ink); box-shadow: 0 0 0 2px var(--surface);
   font-size: var(--fs-12); font-weight: var(--fw-heavy); line-height: 1; font-variant-numeric: tabular-nums;
 }
-.db-tab__badge--dot { top: -2px; right: 10px; min-width: 10px; width: 10px; height: 10px; padding: 0; }
+.db-tab__badge--dot { min-width: 10px; width: 10px; height: 10px; padding: 0; } /* legacy bare dot (unused: both tabs show a number) */
 
 /* ================= Floating "New booking" button ================= */
 .db-fab {
@@ -179,8 +200,8 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
 .db-nav__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .db-nav__item:active { background: var(--surface-2); }
 @media (hover: hover) { .db-nav__item:hover { background: var(--surface-2); color: var(--text); } }
-.db-nav__item.is-active { background: var(--cta-soft); color: var(--text); font-weight: var(--fw-bold); box-shadow: inset 0 0 0 1.5px var(--cta); }
-.db-nav__item.is-active .ui-icon { color: var(--cta-text); }
+.db-nav__item.is-active { background: var(--surface-2); color: var(--text); font-weight: var(--fw-bold); box-shadow: inset 0 0 0 2px var(--text); } /* neutral (T02) */
+.db-nav__item.is-active .ui-icon { color: var(--text); }
 .db-nav__badge {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--r-pill);
@@ -218,6 +239,8 @@ html.is-keyboard-open #app .db-sticky-actions { display: none; }
   width: 100%; min-width: 0; max-width: var(--db-col); margin-inline: auto;
   padding: var(--space-4) max(var(--gutter), var(--safe-right)) var(--db-page-pb) max(var(--gutter), var(--safe-left));
 }
+.db-page--note { padding-block: var(--space-3) 0; }
+.db-page--note:empty { display: none; }
 .db-section { min-width: 0; margin-top: var(--space-5); }
 .db-section:first-child { margin-top: 0; }
 .db-section__title {
@@ -280,6 +303,20 @@ a.db-list__item:active, button.db-list__item:active { background: var(--surface-
 @media (min-width: 768px) {
   .db-page .ui-wizard__footer { margin-inline: 0; padding-inline: 0; }
 }
+/* T11, phones: while a wizard is on screen the app header goes (its messages, theme and site icons were live mid-flow and the header cost
+   56px of the first screen), the page's own title block folds away (the wizard's top row names the flow, the <h1> stays for screen
+   readers, its back arrow is replaced by the row's back and close), and the page starts at the strip. See css/components.css (Wizard). */
+@media (max-width: 767px) {
+  .db-shell:has(.ui-wizard) > .db-header { display: none; }
+  /* with no header below it, the strip is the top of the screen: keep it clear of a notch */
+  .db-shell:has(.ui-wizard) > .ui-notice--strip { height: calc(var(--h-strip) + var(--safe-top)); padding-top: var(--safe-top); }
+  .db-main:has(.ui-wizard) { min-height: calc(100vh - var(--h-strip) - var(--safe-top)); min-height: calc(100dvh - var(--h-strip) - var(--safe-top)); }
+  .db-main:has(.ui-wizard) > .db-view > .db-page { padding-top: 0; }
+  .db-page:has(.ui-wizard) > .ui-page-header {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .db-page:has(.ui-wizard) .ui-page-header__back { display: none; }
+}
 
 /* CONTRACT-GAP: 12.2 names db-master-detail and --has-detail but not the two panes; they are __list and __detail. */
 /* Master-detail: below 1100 only one pane shows; --has-detail flips which. From 1100: list 420px, detail beside it. */
@@ -307,3 +344,35 @@ a.db-list__item:active, button.db-list__item:active { background: var(--surface-
 .db-skel__title { width: 52%; }
 .db-skel__sub { width: 34%; }
 .db-skel__cards { margin-top: var(--space-3); }
+
+/* ================= Neutral selection, dashboard-wide (T02) =================
+   One saturated brand red used to carry the primary button, SELECTED, ON, the current step and money owed, so red could no longer mean
+   "act". Selected is now neutral everywhere: a grey fill, a 2px ink ring, ink text (and a check on chips, see components.css). The
+   rules below restate that for the view-owned selectable widgets; `:root` lifts their specificity above the views' own stylesheets,
+   which load after this file. Colours come from tokens only. */
+:root .pl-tile.is-selected,
+:root .ja-day.is-selected, :root .ja-window.is-selected,
+:root .cal-day.is-selected,
+:root .q1-day.is-selected, :root .q1-win.is-selected {
+  background: var(--surface-2); border-color: var(--text); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--text);
+}
+:root .ja-day.is-selected .ja-day__dow, :root .ja-day.is-selected .ja-day__mon,
+:root .ja-window.is-selected .ja-window__state,
+:root .cal-day.is-selected .cal-day__dow, :root .cal-day.is-selected .cal-day__sub,
+:root .q1-day.is-selected .q1-day__dow, :root .q1-day.is-selected .q1-day__mon,
+:root .q1-win.is-selected .q1-win__state { color: var(--text); }
+:root .cal-day.is-selected .cal-day__who { color: var(--text); }
+:root .cal-day.is-selected .cal-day__dot { box-shadow: 0 0 0 2px var(--surface-2); }
+:root .bl-row.is-selected, :root .cu-row.is-selected { background: var(--surface-2); box-shadow: inset 0 0 0 2px var(--text); }
+:root .ui-seg__opt.is-selected .bl-count { background: var(--text); color: var(--bg); }
+/* Small marks that were solid brand red: a count on the filter icon, and the "you are here" dot in an enquiry's trail (T02). */
+:root .bl-filter__n { background: var(--text); color: var(--bg); }
+:root .en-trail__item.is-now .en-trail__mark { background: var(--text); border-color: var(--text); color: var(--bg); }
+/* Choice cards (radio style) in the set-up wizards and the quote brand picker. */
+:root .k1-choice.is-selected, :root .k2-choice.is-on, :root .q1-brand.is-selected {
+  border-color: var(--text); background: var(--surface-2); box-shadow: inset 0 0 0 0.5px var(--text);
+}
+:root .k1-choice.is-selected .k1-choice__mark { border-color: var(--text); }
+:root .k1-choice.is-selected .k1-choice__mark::after { background: var(--text); }
+:root .k2-choice.is-on .k2-choice__dot { border-color: var(--text); background: radial-gradient(circle, var(--text) 0 36%, var(--surface) 40%); }
+:root .q1-brand.is-selected .q1-brand__tick { background: var(--text); color: var(--bg); }

@@ -198,13 +198,13 @@ test('selectUpcoming: live jobs that are urgent or not over, by start', () => {
 test('selectOwed and selectOwedTotal', () => {
   const state = frozen();
   assert.deepEqual(ids(selectOwed(state)), ['bk_seed_04', 'bk_seed_41', 'bk_seed_42', 'bk_seed_06']);
-  assert.equal(selectOwedTotal(state), 3609);
+  assert.equal(selectOwedTotal(state), 3189, 'bk_seed_41 owes its fixed total: the consumer unit upgrade on its quote is a possible extra and is not counted');
   assert.equal(selectOwedTotal({ bookings: [] }), 0);
   // a free survey visit (an enquiry completed at £0) is never owed
   const free = fixture();
   free.bookings.find((b) => b.id === 'bk_seed_16').paid = false;
   assert.ok(!ids(selectOwed(free)).includes('bk_seed_16'), 'bk_seed_16 is a done free survey with nothing to collect');
-  assert.equal(selectOwedTotal(free), 3609);
+  assert.equal(selectOwedTotal(free), 3189);
 });
 
 test('selectUnseenBookings: newest first', () => {
@@ -375,20 +375,20 @@ test('selectInsights at the fixture clock', () => {
   const ins = selectInsights(state, NOW);
   assert.equal(ins.collectedMonth, 3038);
   assert.equal(ins.collectedMonthCount, 5, 'two installs, the sockets job and... the free survey visits are not counted');
-  assert.equal(ins.owedTotal, 3609);
+  assert.equal(ins.owedTotal, 3189);
   assert.equal(ins.owedCount, 4);
-  assert.equal(ins.bookedNext14, 8123);
+  assert.equal(ins.bookedNext14, 7703);
   assert.equal(ins.bookedNext14Count, 12, 'the jobs and installs booked or pencilled in plus the pencilled-in enquiries (a free survey adds nothing to the value)');
-  assert.equal(ins.avgJob, 826, 'the free survey visits are not averaged in');
+  assert.equal(ins.avgJob, 784, 'the free survey visits are not averaged in');
   assert.equal(ins.weeks.length, 6);
   assert.deepEqual(ins.weeks.map((w) => w.weekStart), ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']);
   assert.deepEqual(ins.weeks.map((w) => w.label), ['Mon 14 Sep', 'Mon 21 Sep', 'Mon 28 Sep', 'Mon 5 Oct', 'Mon 12 Oct', 'Mon 19 Oct']);
   assert.deepEqual(ins.weeks.map((w) => w.total), [0, 1490, 1684, 1514, 1364, 85], 'paid jobs by paidAt week (Wed 7 Oct and Sat 10 Oct share a week)');
   assert.deepEqual(ins.byService, [
-    { serviceId: 'ev', name: 'EV charger installation', jobs: 6, total: 9191 },
-    { serviceId: 'sockets', name: 'Sockets, switches and lights', jobs: 2, total: 255 },
-    { serviceId: 'eicr', name: 'EICR safety report', jobs: 1, total: 150 },
-    { serviceId: 'fault', name: 'Fault finding and repairs', jobs: 2, total: 150 },
+    { serviceId: 'ev', name: 'EV charger installation', jobs: 6, total: 8771 },
+    { serviceId: 'sockets', name: 'EV charger install visit', jobs: 2, total: 255 },
+    { serviceId: 'eicr', name: 'EV charger installation (landlord)', jobs: 1, total: 150 },
+    { serviceId: 'fault', name: 'EV charger survey', jobs: 2, total: 150 },
     { serviceId: 'ev_quote', name: 'Home EV charger quote', jobs: 18, total: 0 }
   ]);
 });
@@ -402,14 +402,14 @@ test('selectInsights definitions: this month only, the 14-day window, the 30-day
   // the next-14 window is today .. today + 13
   state.bookings.push(booking({ id: 'bk_edge13', start: '2026-11-05T08:00', quotedPrice: 100 }));
   state.bookings.push(booking({ id: 'bk_edge14', start: '2026-11-06T08:00', quotedPrice: 1000 }));
-  assert.equal(selectInsights(state, NOW).bookedNext14, 8223);
+  assert.equal(selectInsights(state, NOW).bookedNext14, 7803);
   assert.equal(selectInsights(state, NOW).bookedNext14Count, 13);
   // urgent bookings are not "booked work"
   state.bookings.push(booking({ id: 'bk_urg', urgent: true, status: 'new', start: NOW, quotedPrice: 95 }));
   assert.equal(selectInsights(state, NOW).bookedNext14Count, 13);
   // the 30-day average uses done jobs started within the last 30 days
   state.bookings.push(booking({ id: 'bk_old', status: 'done', start: '2026-09-01T08:00', finalPrice: 9000, paid: true, paidMethod: 'cash', paidAt: '2026-09-01T10:00' }));
-  assert.equal(selectInsights(state, NOW).avgJob, 826);
+  assert.equal(selectInsights(state, NOW).avgJob, 784);
   // no done jobs: an average of 0, never NaN
   const none = fixture();
   none.bookings = none.bookings.filter((b) => b.status !== 'done');

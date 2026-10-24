@@ -5,6 +5,26 @@ import { Icon } from '../ui/index.js';
 import { selectServices } from '../core/selectors.js';
 import { StepTitle, ContactButtons, listPrice } from './bk-shared.js';
 
+// A price label longer than this ('Quoted for your home') would squeeze the title if it sat in the right-hand column, so it becomes a
+// muted third line under the duration. Short ones ('Free', 'From £75', 'From £150', '£195') stay right-aligned on one line.
+const LONG_PRICE = 12;
+
+/** One service row: icon, title over duration (over a long price note), a short price on the right, a chevron. */
+function ServiceRow({ service: s, onPick }) {
+  const price = listPrice(s);
+  const long = price.length > LONG_PRICE;
+  return html`<button type="button" class=${long ? 'bk-service bk-service--note' : 'bk-service'} data-testid=${'service-option-' + s.id} onClick=${onPick}>
+    <span class="bk-service__icon"><${Icon} name=${s.icon} size=${24} /></span>
+    <span class="bk-service__main">
+      <span class="bk-service__name">${s.name}</span>
+      <span class="bk-service__meta">${s.durationLabel}</span>
+      ${long ? html`<span class="bk-service__note">${price}</span>` : null}
+    </span>
+    ${long ? null : html`<span class="bk-service__price">${price}</span>`}
+    <${Icon} name="chevron-right" size=${20} class="bk-service__chev" />
+  </button>`;
+}
+
 export function ServiceStep({ ctx }) {
   const { state, brand, ownerMode, go } = ctx;
   const services = selectServices(state).filter((s) => s.id !== 'emergency');
@@ -26,15 +46,7 @@ export function ServiceStep({ ctx }) {
     </button>` : null}
     <${StepTitle}>What do you need?<//>
     <div class="bk-services">
-      ${services.map((s) => html`<button type="button" key=${s.id} class="bk-service" data-testid=${'service-option-' + s.id} onClick=${() => go({ serviceId: s.id })}>
-        <span class="bk-service__icon"><${Icon} name=${s.icon} size=${24} /></span>
-        <span class="bk-service__main">
-          <span class="bk-service__name">${s.name}</span>
-          <span class="bk-service__meta">${s.durationLabel}</span>
-        </span>
-        <span class="bk-service__price">${listPrice(s)}</span>
-        <${Icon} name="chevron-right" size=${20} class="bk-service__chev" />
-      </button>`)}
+      ${services.map((s) => html`<${ServiceRow} key=${s.id} service=${s} onPick=${() => go({ serviceId: s.id })} />`)}
     </div>
     <p class="bk-helper">A call about a charger? Start with ${(services.find((s) => s.id === 'ev_quote') || { name: 'the quote visit' }).name}: a free survey and written quote. The installation itself is booked once the quote is agreed.</p>
   </div>`;

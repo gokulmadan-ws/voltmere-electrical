@@ -10,7 +10,7 @@ import { nowStamp } from '../core/clock.js';
 import { stampTime } from '../core/dates.js';
 import { PROMISES } from '../core/config.js';
 import { StepTitle } from './bk-shared.js';
-import { ConfirmTicket, JourneyTimeline, QuoteNote, enquiryJourney, isEnquiry, statusChipFor } from './confirmation.js';
+import { ConfirmTicket, JourneyTimeline, QuoteNote, VisitCard, enquiryJourney, isEnquiry, statusChipFor, visitWords } from './confirmation.js';
 import { replyHours } from './funnel.js';
 
 const REASONS = [
@@ -67,12 +67,14 @@ export function Manage({ ctx, refId }) {
   const noun = enquiry ? 'enquiry' : 'visit';
   const hours = replyHours(state);
   const chip = statusChipFor(booking, brand);
+  // One status: once Daniel has confirmed the visit, the visit card (right under) says so, so the pill stays away.
+  const visitSaysIt = enquiry && active && !!visitWords(booking) && booking.status === 'confirmed';
   const quote = enquiry ? selectQuoteForBooking(state, booking.id) : null;
 
   const doCancel = () => {
     const res = cancelBooking(booking.id, 'customer', { reason });
     setConfirming(false);
-    if (res.ok) toast({ message: enquiry ? 'Enquiry cancelled. The pencilled-in time is free again.' : 'Visit cancelled. That time is free again.' });
+    if (res.ok) toast({ message: enquiry ? 'Enquiry cancelled. The suggested visit time is free again.' : 'Visit cancelled. That time is free again.' });
     else if (res.reason === 'not_allowed') toast({ message: `This is close, so please call ${brand.ownerFirst}.`, tone: 'danger' });
     else if (res.reason === 'not_found') toast({ message: 'That booking no longer exists.', tone: 'danger' });
     else if (res.reason === 'storage_full') toast({ message: 'This device has no room left to save that change. Please call instead.', tone: 'danger' });
@@ -86,11 +88,12 @@ export function Manage({ ctx, refId }) {
   const cancelled = booking.status === 'cancelled';
 
   return html`<div class="bk-step bk-manage" data-testid="manage-page">
-    <${StepTitle} sub=${`Reference ${booking.ref}`}>${enquiry ? 'Your enquiry' : 'Your booking'}<//>
+    <${StepTitle} sub=${enquiry ? undefined : `Reference ${booking.ref}`}>${enquiry ? 'Your enquiry' : 'Your booking'}<//>
     <div class="bk-confirm__status bk-confirm__status--left" role="status" aria-live="polite">
-      <${Chip} tone=${chip.tone} icon=${chip.icon} data-testid="manage-status">${chip.text}<//>
+      ${visitSaysIt ? null : html`<${Chip} tone=${chip.tone} icon=${chip.icon} data-testid="manage-status">${chip.text}<//>`}
     </div>
-    <${ConfirmTicket} booking=${booking} service=${service} brand=${brand} hours=${hours} settings=${state.settings} calendar=${enquiry && active} testid="manage-ticket" refTestid="manage-ref" showAlert=${false} />
+    <${ConfirmTicket} booking=${booking} service=${service} brand=${brand} hours=${hours} settings=${state.settings} calendar=${enquiry && active} testid="manage-ticket" refTestid="manage-ref" />
+    ${enquiry && active ? html`<${VisitCard} booking=${booking} brand=${brand} settings=${state.settings} />` : null}
     ${enquiry ? html`<${QuoteNote} state=${state} booking=${booking} brand=${brand} />` : null}
     ${cancelled
     ? html`<div class="bk-block">
@@ -104,12 +107,12 @@ export function Manage({ ctx, refId }) {
     ${pending ? html`<p class="bk-note bk-note--strong bk-manage__reply" data-testid="manage-reply-note"><${Icon} name="clock" size=${18} />${' '}<span>We'll be in touch within ${hours} hours.</span></p>` : null}
     ${canCancel ? html`<div class="bk-block bk-manage__actions">
       <${Button} variant="secondary" size="lg" block icon="calendar-x" onClick=${() => setConfirming(true)} data-testid="manage-cancel">${enquiry ? 'Cancel enquiry' : 'Cancel visit'}<//>
-      <p class="bk-note">${enquiry ? `To change the survey time, call ${brand.ownerFirst}.` : `To change the time, call or WhatsApp ${brand.ownerFirst}.`}</p>
+      <p class="bk-note">${enquiry ? `To change the visit time, call ${brand.ownerFirst}.` : `To change the time, call or WhatsApp ${brand.ownerFirst}.`}</p>
       ${contact}
     </div>` : null}
     ${active && !canCancel ? html`<div class="bk-block bk-manage__actions">
       <p class="bk-note bk-note--strong" data-testid="manage-close-note">This is close, so please call ${brand.ownerFirst}.</p>
-      <p class="bk-note">${enquiry ? 'Your survey visit is pencilled in for soon, so changes are best made by phone.' : 'The visit is coming up, so changes are best made by phone.'}</p>
+      <p class="bk-note">${enquiry ? 'Your visit is coming up soon, so changes are best made by phone.' : 'The visit is coming up, so changes are best made by phone.'}</p>
       ${contact}
     </div>` : null}
     ${cancelled ? html`<div class="bk-block bk-manage__actions">${contact}</div>` : null}
@@ -120,7 +123,7 @@ export function Manage({ ctx, refId }) {
         <${Button} variant="danger" onClick=${doCancel} data-testid="manage-cancel-confirm">Cancel ${noun}<//>
       </div>`}>
       <p class="ui-confirm__body">${enquiry
-    ? 'Your pencilled-in survey visit is released straight away. You can send a new enquiry whenever you like.'
+    ? 'Any suggested visit time is released straight away. You can send a new enquiry whenever you like.'
     : `It is free to cancel more than ${PROMISES.freeChangeHours} hours before. The time becomes free for someone else straight away.`}</p>
       <div class="bk-reason-select">
         <label class="ui-field__label" for="bk-cancel-reason">Reason (optional)</label>

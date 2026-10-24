@@ -258,10 +258,17 @@ async function whatsappFlow(browser) {
   const pending = await until(async () => /Waiting for approval/.test(await text(page, T('k2-wa-templates-status'))), 2500);
   const stNow = await conn(page, 'whatsapp');
   check('wa: submitting sets every template to pending first', !!pending || Object.values(stNow.templates).every((s) => s === 'pending' || s === 'approved'), await text(page, T('k2-wa-templates-status')));
-  const approved = await until(async () => (await conn(page, 'whatsapp')).templates && Object.values((await conn(page, 'whatsapp')).templates).every((s) => s === 'approved'), 9000);
-  check('wa: then the templates become approved (simulated)', !!approved);
+  // They stay pending, the way Meta's check takes a day or two: nothing is approved "in seconds" any more.
+  await sleep(4500);
+  const stillPending = Object.values((await conn(page, 'whatsapp')).templates).every((s) => s === 'pending');
+  check('wa: the templates stay pending (Meta takes 1 to 2 days), not approved in seconds', stillPending && /Pending, usually 1–2 days/.test(await text(page, T('k2-wa-group-owner-badge'))), await text(page, T('k2-wa-templates-status')));
+  check('wa: the pending line says 1 to 2 days and offers a clearly labelled "Prototype: fast-forward" button', /1 to 2 days/.test(await text(page, T('k2-wa-templates-status'))) && /Prototype: fast-forward/.test(await text(page, T('k2-wa-templates-fastforward'))), await text(page, T('k2-wa-ff')));
+  check('wa: the hub summary is amber "Templates pending" meanwhile', /Templates pending/.test(await page.evaluate(async () => { const s = await import('/js/core/selectors.js'); const st = await import('/js/core/store.js'); return s.selectConnectionsSummary(st.getState()).find((r) => r.key === 'whatsapp').label; })));
+  await page.click(T('k2-wa-templates-fastforward'));
+  const approved = await until(async () => (await conn(page, 'whatsapp')).templates && Object.values((await conn(page, 'whatsapp')).templates).every((s) => s === 'approved'), 4000);
+  check('wa: the fast-forward button approves every template', !!approved);
   check('wa: approval badges read "Approved" and the summary says so', (await text(page, T('k2-wa-tpl-badge-owner_new_booking'))) === 'Approved' && /All 24 messages approved/.test(await text(page, T('k2-wa-templates-status'))), await text(page, T('k2-wa-templates-status')));
-  check('wa: the submit button is gone once everything is in', !(await visible(page, T('k2-wa-templates-submit'))));
+  check('wa: the submit and fast-forward buttons are gone once everything is in', !(await visible(page, T('k2-wa-templates-submit'))) && !(await visible(page, T('k2-wa-templates-fastforward'))));
 
   // reload mid-wizard (templates step): the wizard resumes where it stopped
   await open(page, '#/connections/whatsapp');
@@ -652,8 +659,10 @@ async function resilience(browser) {
     await clickNext(page, 'k2-wa-wizard');
     await page.waitForSelector(T('k2-wa-templates'));
     await page.click(T('k2-wa-templates-submit'));
-    await until(async () => (await conn(page, 'whatsapp')).templates.owner_new_booking === 'approved', 9000);
-    check('storage blocked: templates still go through approval', (await conn(page, 'whatsapp')).templates.owner_new_booking === 'approved');
+    await page.waitForSelector(T('k2-wa-templates-fastforward'));
+    await page.click(T('k2-wa-templates-fastforward'));
+    await until(async () => (await conn(page, 'whatsapp')).templates.owner_new_booking === 'approved', 4000);
+    check('storage blocked: templates still go through approval (with the fast-forward button)', (await conn(page, 'whatsapp')).templates.owner_new_booking === 'approved');
     const real = bag.filter((x) => !/localStorage|sessionStorage|denied|SecurityError|storage/i.test(x));
     check('storage blocked: no unexpected console errors', real.length === 0, real.slice(0, 4).join(' || '));
     await ctx.close();

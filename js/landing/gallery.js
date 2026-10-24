@@ -1,8 +1,9 @@
-// js/landing/gallery.js: "Our recent work" (swipe row on phones, four-up grid on desktop) and its photo viewer (lightbox).
-// Owner: L3 (landing page for 180 Electrical)
+// js/landing/gallery.js: "Recent work" (a snap carousel on phones with ONE position indicator, the dots; a bento grid on desktop; each photo with a neutral caption chip, "Recent install")
+// and its photo viewer (lightbox: an opaque scrim, big previous/next buttons). Owner: LP2 (landing page for 180 Electrical)
 import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Icon, cx, useStore } from '../ui/index.js';
 import { ABOUT, IMAGES } from './content.js';
+import { reducedMotion } from './fx.js';
 import { PLACEHOLDER_SRC, Photo, photoSrc, selectImages } from './media.js';
 import { SectionHead } from './sections.js';
 
@@ -81,25 +82,71 @@ function Lightbox({ items, index, onIndex, onClose }) {
         </button>
       </div>
       <figure class="lp-lb__figure">
-        <div class=${cx('lp-lb__stage', status === 'loading' && !failed && 'is-loading')} onPointerDown=${onPointerDown} onPointerUp=${onPointerUp} onPointerCancel=${() => { swipe.current = null; }}>
-          <img key=${`${item.key}-${failed}`} class=${cx('lp-lb__img', failed && 'is-ph')}
-            src=${failed ? PLACEHOLDER_SRC : src} alt=${failed ? `${item.alt} (photo not available right now)` : item.alt}
-            width=${item.w} height=${item.h} decoding="async" referrerpolicy="no-referrer" draggable=${false}
-            onLoad=${() => setStatus((s) => (s === 'failed' ? s : 'loaded'))} onError=${() => setStatus('failed')} data-testid="l3-lightbox-img" />
+        <div class="lp-lb__frame">
+          <div class=${cx('lp-lb__stage', status === 'loading' && !failed && 'is-loading')} onPointerDown=${onPointerDown} onPointerUp=${onPointerUp} onPointerCancel=${() => { swipe.current = null; }}>
+            <img key=${`${item.key}-${failed}`} class=${cx('lp-lb__img', failed && 'is-ph')}
+              src=${failed ? PLACEHOLDER_SRC : src} alt=${failed ? `${item.alt} (photo not available right now)` : item.alt}
+              width=${item.w} height=${item.h} decoding="async" referrerpolicy="no-referrer" draggable=${false}
+              onLoad=${() => setStatus((s) => (s === 'failed' ? s : 'loaded'))} onError=${() => setStatus('failed')} data-testid="l3-lightbox-img" />
+          </div>
+          <button type="button" class="lp-lb__btn lp-lb__nav lp-lb__nav--prev" onClick=${() => go(-1)} aria-label="Previous photo" data-testid="l3-lightbox-prev"><${Icon} name="chevron-left" size=${34} /></button>
+          <button type="button" class="lp-lb__btn lp-lb__nav lp-lb__nav--next" onClick=${() => go(1)} aria-label="Next photo" data-testid="l3-lightbox-next"><${Icon} name="chevron-right" size=${34} /></button>
         </div>
-        <figcaption class="lp-lb__caption">${item.alt}</figcaption>
+        <figcaption class="lp-lb__caption" data-testid="l3-lightbox-caption">${item.title || item.alt}</figcaption>
       </figure>
-      <button type="button" class="lp-lb__btn lp-lb__nav lp-lb__nav--prev" onClick=${() => go(-1)} aria-label="Previous photo" data-testid="l3-lightbox-prev"><${Icon} name="chevron-left" size=${26} /></button>
-      <button type="button" class="lp-lb__btn lp-lb__nav lp-lb__nav--next" onClick=${() => go(1)} aria-label="Next photo" data-testid="l3-lightbox-next"><${Icon} name="chevron-right" size=${26} /></button>
     </div>
   `;
+}
+
+/**
+ * Which card of the swipe row is "current": the one whose left edge is nearest the row's left padding edge, or the last one
+ * once the row is scrolled to its end (the last card can never reach the left edge). 0 when nothing scrolls (the wide grid).
+ */
+function currentCard(list) {
+  const cards = Array.from(list.children);
+  if (!cards.length || list.scrollWidth - list.clientWidth <= 1) return 0;
+  if (list.scrollLeft >= list.scrollWidth - list.clientWidth - 2) return cards.length - 1;
+  const box = list.getBoundingClientRect();
+  const pad = parseFloat(getComputedStyle(list).paddingLeft) || 0;
+  let best = 0;
+  let bestGap = Infinity;
+  cards.forEach((card, i) => {
+    const gap = Math.abs(card.getBoundingClientRect().left - box.left - pad);
+    if (gap < bestGap) { best = i; bestGap = gap; }
+  });
+  return best;
 }
 
 export function Gallery() {
   const items = IMAGES.work;
   const [open, setOpen] = useState(-1);
+  const [current, setCurrent] = useState(0);
   const tiles = useRef([]);
   const lastOpen = useRef(0);
+  const listRef = useRef(null);
+
+  // The swipe row reports where it is (the dots follow the scroll). One rAF-throttled passive listener.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return undefined;
+    let queued = false;
+    const read = () => { queued = false; setCurrent(currentCard(list)); };
+    const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(read); } };
+    list.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    read();
+    return () => { list.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
+  }, []);
+
+  /** Scroll the row so card `i` sits at its left edge (smooth unless the visitor asked for less motion). */
+  const goTo = (i) => {
+    const list = listRef.current;
+    const card = list && list.children[i];
+    if (!card) return;
+    const box = list.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(list).paddingLeft) || 0;
+    list.scrollTo({ left: list.scrollLeft + card.getBoundingClientRect().left - box.left - pad, behavior: reducedMotion() ? 'auto' : 'smooth' });
+  };
 
   const show = (i) => { lastOpen.current = i; setOpen(i); };
   const close = () => {
@@ -112,19 +159,24 @@ export function Gallery() {
   return html`
     <section class="lp-section lp-section--gallery" id="work" aria-labelledby="work-title" data-testid="gallery">
       <div class="lp-container">
-        <${SectionHead} eyebrow=${ABOUT.galleryEyebrow} title=${ABOUT.galleryTitle} titleId="work-title" level=${3} />
+        <${SectionHead} eyebrow=${ABOUT.galleryEyebrow} title=${ABOUT.galleryTitle} titleId="work-title" center=${true} />
       </div>
-      <ul class="lp-gallery" data-testid="l3-gallery-row">
-        ${items.map((img, i) => html`<li class="lp-gallery__item" key=${img.key} data-reveal="up" style=${`--i:${i}`}>
+      <ul class="lp-gallery" ref=${listRef} data-testid="l3-gallery-row">
+        ${items.map((img, i) => html`<li class=${cx('lp-gallery__item', `lp-gallery__item--${i + 1}`)} key=${img.key} data-reveal="up" style=${`--i:${i}`}>
           <button type="button" class="lp-tile" ref=${(el) => { tiles.current[i] = el; }} onClick=${() => show(i)}
-            aria-haspopup="dialog" data-testid=${`l3-gallery-open-${i}`}>
-            <${Photo} as="span" img=${img} ratio="4 / 5" widths=${[360, 600, 900]} sizes="(min-width: 768px) 25vw, 70vw"
+            aria-haspopup="dialog" aria-label=${`Open photo: ${img.title}`} data-testid=${`l3-gallery-open-${i}`}>
+            <${Photo} as="span" img=${img} ratio="4 / 5" widths=${[360, 600, 900]} sizes="(min-width: 768px) 40vw, 80vw"
               class="lp-tile__photo" data-testid=${`gallery-photo-${i}`} />
-            <span class="lp-tile__zoom" aria-hidden="true"><${Icon} name="search" size=${18} /></span>
+            <span class="lp-tile__shade" aria-hidden="true"></span>
+            <span class="lp-tile__chip" data-testid=${`gallery-chip-${i}`}>${img.chip}</span>
           </button>
         </li>`)}
       </ul>
-      <div class="lp-container"><p class="lp-gallery__hint">Select a photo to see it full size.</p></div>
+      <div class="lp-gallery__dots" role="group" aria-label="Choose a photo" data-testid="gallery-dots">
+        ${items.map((img, i) => html`<button type="button" class=${cx('lp-gallery__dot', i === current && 'is-current')} key=${img.key}
+          aria-label=${`Show photo ${i + 1} of ${items.length}`} aria-current=${i === current ? 'true' : undefined}
+          onClick=${() => goTo(i)} data-testid=${`gallery-dot-${i}`}><span aria-hidden="true"></span></button>`)}
+      </div>
       ${open >= 0 ? html`<${Lightbox} items=${items} index=${open} onIndex=${show} onClose=${close} />` : null}
     </section>
   `;

@@ -1,17 +1,25 @@
-// js/landing/sections.js: trust badges, why cards, about + brands, the "how it works" stepper, pricing, area (postcode), FAQ accordion, final CTA.
-// Owner: L3 (landing page for 180 Electrical; first built by C2). No prices and no reviews anywhere on this page: he has neither.
+// js/landing/sections.js: why list, Meet Daniel (portrait + his words), "how it works" stepper, the quote section (his words, plus a tagged idea), area (postcode check), FAQ accordion, final CTA.
+// Owner: LP2 (landing page for 180 Electrical; first built by C2). The public page says only what HIS site says, plus clearly tagged IDEAS: every block we added
+// carries data-proto and a ProtoTag ("Idea from us, not on your site today"), and "Only my content" hides it. No price, spec or payment term is ever shown outside one.
+// Rhythm: sections alternate between the page, a lighter band (Meet Daniel, how it works, running costs, the FAQ) and one deep-red band for the final call to action;
+// layouts vary (list, portrait split, carousel, timeline, copy + idea card, form card, sticky-heading rows); headings balance; one voice, Daniel in the third person.
 import { html, useState } from '../vendor/preact-htm.js';
-import { Button, Field, Icon, Input, cx, uid, useBrand, useStore } from '../ui/index.js';
+import { Button, Field, Icon, Input, cx, pageHref, pageTarget, uid, useBrand, useStore } from '../ui/index.js';
 import { isValidPostcode, normalisePostcode, postcodeZone } from '../core/format.js';
 import { waLink } from '../core/messages.js';
 import {
-  ABOUT, AREA, CTA_LABEL, DEFAULT_BRANDS, DEFAULT_CREDENTIALS, FAQ, FINAL, IMAGES, PRICING, STEPS, TRUST_TITLE, WHATSAPP_TEXT, WHY,
-  bookClick, startEnquiry
+  ABOUT, AREA, CTA_LABEL, DEFAULT_BRANDS, FAQ, FINAL, IMAGES, PRICING, STEPS, WHATSAPP_TEXT, WHY,
+  bookClick, fillOwner, startEnquiry
 } from './content.js';
+import { ProtoTag, protoProps } from './idea.js';
 import { Photo } from './media.js';
 
-// Stable selector function (useStore wants the same function every render).
+// What Meet Daniel shows while (or if) his own photo cannot load: a quiet head-and-shoulders silhouette, not the charger drawing.
+const PORTRAIT_FALLBACK = 'img/landing-portrait.svg';
+
+// Stable selector functions (useStore wants the same function every render).
 const selectBusiness = (state) => state.settings.business;
+const selectQuotes = (state) => state.quotes;
 
 /** The list from the store when it has one, else his verbatim default. */
 const listOr = (value, fallback) => (Array.isArray(value) && value.length ? value : fallback);
@@ -19,88 +27,86 @@ const listOr = (value, fallback) => (Array.isArray(value) && value.length ? valu
 /** The staggered-reveal offset of the n-th item in a group (see .lp-rv in landing.css). */
 const stagger = (i) => `--i:${i}`;
 
-/** Eyebrow + heading + optional lead, the one section-head pattern. */
-export function SectionHead({ eyebrow, title, titleId, lead, level = 2, class: cls }) {
+/** A heading's text with its one accent phrase in the brand red (a span, so the words themselves are untouched). Used by the final call to action only. */
+export function AccentText({ text, accent }) {
+  const at = accent ? text.lastIndexOf(accent) : -1;
+  if (at < 0) return text;
+  return html`${text.slice(0, at)}<span class="lp-hl">${accent}</span>${text.slice(at + accent.length)}`;
+}
+
+/** Eyebrow + heading + optional lead (+ children, e.g. the idea tag), the one section-head pattern. The heading is plain white. `center` centres it from 768px. */
+export function SectionHead({ eyebrow, title, titleId, lead, level = 2, center = false, class: cls, children }) {
   const H = `h${level}`;
   return html`
-    <div class=${cx('lp-section__head', cls)} data-reveal="up">
+    <div class=${cx('lp-section__head', center && 'lp-section__head--center', cls)} data-reveal="up">
       ${eyebrow ? html`<p class="lp-eyebrow">${eyebrow}</p>` : null}
       <${H} id=${titleId} class="lp-title">${title}<//>
       ${lead ? html`<p class="lp-lead">${lead}</p>` : null}
+      ${children}
     </div>
   `;
 }
 
-/* ---------------- Trust bar: his two credentials as proper badges ---------------- */
-
-const TRUST_ICONS = ['badge-check', 'shield-check'];
-
-export function TrustBar() {
-  const business = useStore(selectBusiness);
-  const credentials = listOr(business.credentials, DEFAULT_CREDENTIALS);
-  return html`
-    <section class="lp-trust" aria-labelledby="trust-title" data-testid="trust-bar">
-      <div class="lp-container">
-        <div class="lp-trust__panel" data-reveal="up">
-          <h2 id="trust-title" class="lp-trust__title">${TRUST_TITLE}</h2>
-          <ul class="lp-trust__list">
-            ${credentials.map((c, i) => html`<li class="lp-trust__item" key=${c} data-testid=${`l3-credential-${i}`}>
-              <span class="lp-seal" aria-hidden="true"><${Icon} name=${TRUST_ICONS[i % TRUST_ICONS.length]} size=${24} /></span>
-              <span class="lp-trust__text">${c}</span>
-            </li>`)}
-          </ul>
-        </div>
-      </div>
-    </section>
-  `;
-}
-
-/* ---------------- Home charging that works around you ---------------- */
+/* ---------------- Home charging that works around you: a plain numbered list, no cards ---------------- */
 
 export function WhyCards() {
   return html`
     <section class="lp-section lp-section--why" id="why" aria-labelledby="why-title" data-testid="why-cards">
       <div class="lp-container">
-        <${SectionHead} title=${WHY.title} titleId="why-title" />
-        <ul class="lp-cards">
-          ${WHY.cards.map((c, i) => html`<li class="lp-card" key=${c.title} data-reveal="up" style=${stagger(i)}>
-            <span class="lp-card__icon"><${Icon} name=${c.icon} size=${26} /></span>
-            <h3 class="lp-card__title">${c.title}</h3>
-            <p class="lp-card__body">${c.body}</p>
+        <${SectionHead} eyebrow=${WHY.eyebrow} title=${WHY.title} titleId="why-title" />
+        <ol class="lp-why">
+          ${WHY.cards.map((c, i) => html`<li class="lp-why__item" key=${c.title} data-reveal="up" style=${stagger(i)}>
+            <span class="lp-why__n" aria-hidden="true">0${i + 1}</span>
+            <h3 class="lp-why__title">${c.title}</h3>
+            <p class="lp-why__body">${c.body}</p>
           </li>`)}
-        </ul>
-        <div class="lp-section__cta" data-reveal="up">
-          <${Button} variant="primary" size="lg" iconRight="arrow-right" class="lp-cta" onClick=${bookClick({})} data-testid="why-cta">${CTA_LABEL}<//>
-        </div>
+        </ol>
       </div>
     </section>
   `;
 }
 
-/* ---------------- About: his two paragraphs, the brands he fits, a portrait ---------------- */
+/* ---------------- Meet Daniel: his portrait (full-bleed on a phone, a card beside his words from 900px) with a line from his own words ---------------- */
 
 export function About() {
   const business = useStore(selectBusiness);
+  const brand = useBrand();
   const brands = listOr(business.brands, DEFAULT_BRANDS);
+  const o = brand.ownerFirst;
+  const wa = waLink(brand.phone, WHATSAPP_TEXT, brand.demoPhoneDigits);
   return html`
-    <section class="lp-section lp-section--line" id="about" aria-labelledby="about-title" data-testid="about">
-      <div class="lp-container lp-about">
-        <div class="lp-about__copy" data-reveal="up">
-          <h2 id="about-title" class="lp-title">${ABOUT.title}</h2>
-          <p class="lp-about__p">${ABOUT.p1}</p>
-          <p class="lp-about__p">${ABOUT.p2}</p>
-          <div class="lp-brands" data-testid="brands">
-            <p class="lp-brands__label" id="brands-label">${ABOUT.brandsLabel}</p>
-            <ul class="lp-brands__list" aria-labelledby="brands-label">
-              ${brands.map((b) => html`<li class="lp-brands__item" key=${b}>${b}</li>`)}
+    <section class="lp-meet lp-section--band" id="about" aria-labelledby="about-title" data-testid="about">
+      <div class="lp-meet__inner">
+        <div class="lp-meet__media">
+          <${Photo} img=${IMAGES.about} ratio="4 / 5" sizes="(min-width: 900px) 46vw, 100vw" widths=${[640, 1000, 1600]} fallback=${PORTRAIT_FALLBACK} class="lp-meet__photo" data-testid="about-photo">
+            <span class="lp-meet__shade" aria-hidden="true"></span>
+            <div class="lp-container lp-meet__over">
+              <p class="lp-meet__caption" data-testid="about-caption"><${Icon} name="user" size=${16} /><span>${fillOwner(ABOUT.caption, o)}</span></p>
+              <p class="lp-meet__pull" data-testid="about-pull">${ABOUT.pull}</p>
+            </div>
+          <//>
+        </div>
+        <div class="lp-container lp-meet__body">
+          <div class="lp-meet__copy" data-reveal="up">
+            <p class="lp-eyebrow">${ABOUT.eyebrow}</p>
+            <h2 id="about-title" class="lp-title">${fillOwner(ABOUT.title, o)}</h2>
+            <p class="lp-about__p" data-testid="about-body">${fillOwner(ABOUT.body, o)}</p>
+            <ul class="lp-meet__ticks" data-testid="about-ticks">
+              ${ABOUT.ticks.map((t) => html`<li class="lp-meet__tick" key=${t}><${Icon} name="circle-check" size=${20} /><span>${t}</span></li>`)}
             </ul>
           </div>
-        </div>
-        <div class="lp-about__visual" data-reveal="up" style=${stagger(1)}>
-          <${Photo} img=${IMAGES.about} ratio="4 / 3" sizes="(min-width: 900px) 46vw, 100vw" widths=${[480, 800, 1200]}
-            class="lp-about__photo" data-testid="about-photo">
-            <span class="lp-about__tag"><${Icon} name="map-pin" size=${16} />Northern Ireland</span>
-          <//>
+          <div class="lp-meet__aside" data-reveal="up" style=${stagger(1)}>
+            <div class="lp-meet__actions">
+              <${Button} variant="secondary" size="lg" icon="phone" href=${brand.telHref} class="lp-pill lp-solid" data-testid="about-call">Call ${o}<//>
+              <${Button} variant="secondary" size="lg" icon="message-circle" href=${wa} target="_blank" rel="noopener noreferrer" class="lp-pill" data-testid="about-whatsapp">WhatsApp<//>
+            </div>
+            <div class="lp-brands" data-testid="brands">
+              <p class="lp-brands__label" id="brands-label">${fillOwner(ABOUT.brandsLabel, o)}</p>
+              <ul class="lp-brands__list" aria-labelledby="brands-label">
+                ${brands.map((b) => html`<li class="lp-brands__item" key=${b}>${b}</li>`)}
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -110,17 +116,17 @@ export function About() {
 /* ---------------- From first enquiry to charging at home: the stepper ---------------- */
 
 export function HowItWorks() {
+  const brand = useBrand();
   return html`
-    <section class="lp-section lp-section--band" id="how" aria-labelledby="how-title" data-testid="how-it-works">
+    <section class="lp-section lp-section--band lp-section--how" id="how" aria-labelledby="how-title" data-testid="how-it-works">
       <div class="lp-container">
-        <${SectionHead} title=${STEPS.title} titleId="how-title" />
+        <${SectionHead} eyebrow=${STEPS.eyebrow} title=${STEPS.title} titleId="how-title" center=${true} />
         <ol class="lp-steps" data-reveal="steps" data-testid="l3-steps">
           ${STEPS.items.map((s, i) => html`<li class="lp-step" key=${s.n} style=${stagger(i)}>
-            <span class="lp-step__node" aria-hidden="true"><${Icon} name=${s.icon} size=${22} /></span>
+            <span class="lp-step__node" aria-hidden="true">${s.n}</span>
             <div class="lp-step__card">
-              <span class="lp-step__num" aria-hidden="true">${s.n}</span>
-              <h3 class="lp-step__title">${s.title}</h3>
-              <p class="lp-step__body">${s.body}</p>
+              <h3 class="lp-step__title">${fillOwner(s.title, brand.ownerFirst)}</h3>
+              <p class="lp-step__body">${fillOwner(s.body, brand.ownerFirst)}</p>
             </div>
           </li>`)}
         </ol>
@@ -129,92 +135,115 @@ export function HowItWorks() {
   `;
 }
 
-/* ---------------- Your installation, clearly quoted (no prices, on purpose) ---------------- */
+/* ---------------- Your installation, clearly quoted: his words, then ONE tagged idea (an example quote to open; no figure on this page) ---------------- */
 
-const FACTORS = [
-  { icon: 'plug-zap', label: 'Your charger choice' },
-  { icon: 'navigation', label: 'The cable route' },
-  { icon: 'wrench', label: 'Any electrical work required' }
-];
+/**
+ * A sample quote to open: one the owner has sent (so it is complete), with the fewest lines (the plainest one).
+ * null when the store holds none; the idea card is then left out altogether (there is nothing to open).
+ */
+function pickSampleQuote(quotes) {
+  const list = Object.values(quotes || {}).filter((q) => q && ['sent', 'viewed', 'accepted'].includes(q.status) && Array.isArray(q.lines) && q.lines.length >= 3);
+  list.sort((a, b) => a.lines.length - b.lines.length || (a.id < b.id ? -1 : 1));
+  return list[0] || null;
+}
 
 export function Pricing() {
+  const quotes = useStore(selectQuotes);
+  const brand = useBrand();
+  const quote = pickSampleQuote(quotes);
+  const t = PRICING.teaser;
   return html`
-    <section class="lp-section" id="pricing" aria-labelledby="pricing-title" data-testid="pricing">
-      <div class="lp-container">
-        <div class="lp-pricing" data-reveal="up">
-          <div class="lp-pricing__copy">
-            <h2 id="pricing-title" class="lp-title">${PRICING.title}</h2>
-            <p class="lp-pricing__body">${PRICING.body}</p>
-          </div>
-          <ul class="lp-factors" aria-label="What a quote depends on">
-            ${FACTORS.map((f, i) => html`<li class="lp-factors__item" key=${f.label} style=${stagger(i)}>
-              <span class="lp-factors__icon"><${Icon} name=${f.icon} size=${22} /></span>
-              <span>${f.label}</span>
-            </li>`)}
-          </ul>
-          <div class="lp-pricing__cta">
-            <${Button} variant="primary" size="lg" iconRight="arrow-right" class="lp-cta" onClick=${bookClick({})} data-testid="pricing-cta">${CTA_LABEL}<//>
-          </div>
+    <section class="lp-section lp-section--quote" id="pricing" aria-labelledby="pricing-title" data-testid="pricing">
+      <div class="lp-container lp-quote">
+        <div class="lp-quote__copy" data-reveal="up">
+          <p class="lp-eyebrow">${PRICING.eyebrow}</p>
+          <h2 id="pricing-title" class="lp-title">${PRICING.title}</h2>
+          <p class="lp-quote__body">${fillOwner(PRICING.body, brand.ownerFirst)}</p>
+          <p class="lp-quote__promise" data-testid="pricing-promise"><${Icon} name="file-check" size=${22} /><span>${PRICING.promise}</span></p>
         </div>
+        <div class="lp-quote__cta" data-sticky-hide>
+          <${Button} variant="primary" size="lg" iconRight="arrow-right" class="lp-cta" onClick=${bookClick({})} data-testid="pricing-cta">${CTA_LABEL}<//>
+        </div>
+        ${quote ? html`<div class="lp-qidea lp-qcard" role="group" ...${protoProps({ 'data-testid': 'quote-preview' })} data-reveal="up" style=${stagger(1)} aria-label=${t.title}>
+          <${ProtoTag} />
+          <div class="lp-qidea__sheet" aria-hidden="true">
+            <ul class="lp-qidea__lines">
+              ${t.lines.map((name) => html`<li class="lp-qidea__line" key=${name}><span class="lp-qidea__name">${name}</span><span class="lp-qidea__bar"></span></li>`)}
+            </ul>
+          </div>
+          <p class="lp-qidea__text">${t.body}</p>
+          <div class="lp-qidea__foot">
+            <${Button} variant="secondary" size="lg" iconRight="arrow-right" class="lp-pill lp-qidea__link" href=${pageHref('quote.html', '#q=' + quote.id + '&preview=1')} target=${pageTarget('quote.html')} data-testid="pricing-sample-link">${t.link}<//>
+            <span class="lp-qidea__note" data-testid="quote-preview-tag">${t.note}</span>
+          </div>
+        </div>` : null}
       </div>
     </section>
   `;
 }
 
-/* ---------------- EV charger installation in Northern Ireland: postcode check opens the funnel ---------------- */
+/* ---------------- EV charger installation in Northern Ireland: a postcode check first, then on to the funnel ---------------- */
 
 export function AreaSection() {
   const business = useStore(selectBusiness);
+  const brand = useBrand();
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
+  const [checked, setChecked] = useState(''); // the normalised postcode the visitor has just checked ('' until then)
   const [inputId] = useState(() => uid('lp-pc'));
   const pc = normalisePostcode(value);
   const valid = isValidPostcode(pc);
-  const zone = valid ? postcodeZone(pc, business) : null;
+  // The verdict belongs to the postcode that was checked: edit the box and the button goes back to "Check my postcode".
+  const done = valid && checked === pc;
+  const zone = done ? postcodeZone(pc, business) : null;
+  const o = brand.ownerFirst;
 
   const submit = (e) => {
     e.preventDefault();
-    if (!pc) { startEnquiry({}); return; }
+    if (done) { startEnquiry({ postcode: pc }); return; }
     if (!valid) {
+      setChecked('');
       setError(AREA.invalid);
       const input = e.currentTarget && e.currentTarget.querySelector ? e.currentTarget.querySelector('input') : null;
       if (input) input.focus();
       return;
     }
     setError('');
-    startEnquiry({ postcode: pc });
+    setChecked(pc);
   };
 
   return html`
-    <section class="lp-section lp-section--line lp-section--area" id="area" aria-labelledby="area-title" data-testid="area">
+    <section class="lp-section lp-section--area" id="area" aria-labelledby="area-title" data-testid="area">
       <div class="lp-container lp-area">
         <div class="lp-area__copy" data-reveal="up">
-          <span class="lp-area__pin" aria-hidden="true"><span class="lp-area__ring"></span><span class="lp-area__ring"></span><${Icon} name="map-pin" size=${28} /></span>
+          <p class="lp-eyebrow">${fillOwner(AREA.eyebrow, o)}</p>
           <h2 id="area-title" class="lp-title">${AREA.title}</h2>
-          <p class="lp-area__body">${AREA.body}</p>
+          <p class="lp-area__body">${fillOwner(AREA.body, o)}</p>
         </div>
-        <form class="lp-area__form" onSubmit=${submit} novalidate data-testid="area-form" data-reveal="up" style=${stagger(1)}>
+        <form class="lp-area__form" onSubmit=${submit} novalidate data-testid="area-form" data-reveal="up" style=${stagger(1)} data-sticky-hide>
           <${Field} label="Your postcode" id=${inputId} hint=${AREA.note} error=${error}>
             <${Input} id=${inputId} value=${value}
-              onInput=${(e) => { setValue(e.target.value); if (error) setError(''); }}
-              placeholder="e.g. BT1 1AA" type="text" inputmode="text" autocomplete="postal-code" autocapitalize="characters"
+              onInput=${(e) => { setValue(e.target.value); if (error) setError(''); if (checked) setChecked(''); }}
+              placeholder="e.g. BT7 3AB" type="text" inputmode="text" autocomplete="postal-code" autocapitalize="characters"
               spellcheck=${false} enterkeyhint="go" maxlength="8" data-testid="coverage-input" />
           <//>
           <div class="lp-area__result" data-testid="coverage-result" aria-live="polite">
             ${zone === 'covered' ? html`<p class="lp-area__ok"><${Icon} name="circle-check" size=${20} /><span>${AREA.covered}</span></p>` : null}
-            ${zone === 'outside' ? html`<p class="lp-area__warn"><${Icon} name="info" size=${20} /><span>${AREA.outside}</span></p>` : null}
+            ${zone === 'edge' ? html`<p class="lp-area__warn"><${Icon} name="info" size=${20} /><span>${fillOwner(AREA.edge, o).split('{phone}')[0]}<a class="lp-area__tel" href=${brand.telHref}>${brand.phone}</a>${fillOwner(AREA.edge, o).split('{phone}')[1]}</span></p>` : null}
+            ${zone === 'outside' ? html`<p class="lp-area__warn"><${Icon} name="info" size=${20} /><span>${fillOwner(AREA.outside, o)}</span></p>` : null}
           </div>
-          <${Button} variant="primary" size="lg" iconRight="arrow-right" type="submit" class="lp-cta" data-testid="coverage-book">${CTA_LABEL}<//>
+          <${Button} variant="primary" size="lg" iconRight="arrow-right" type="submit" class="lp-cta" data-testid="coverage-book">${done ? AREA.continue(pc) : AREA.check}<//>
         </form>
       </div>
     </section>
   `;
 }
 
-/* ---------------- FAQ accordion (real buttons, aria-expanded, arrow keys) ---------------- */
+/* ---------------- FAQ accordion (real buttons, aria-expanded, arrow keys); the cost question opens first ---------------- */
 
 export function Faq() {
-  const [open, setOpen] = useState(-1);
+  const brand = useBrand();
+  const [open, setOpen] = useState(() => FAQ.items.findIndex((it) => it.q === FAQ.openFirst));
   const [base] = useState(() => uid('lp-faq'));
 
   // Up/Down/Home/End move between the questions (the buttons stay in the normal Tab order too).
@@ -234,9 +263,9 @@ export function Faq() {
   };
 
   return html`
-    <section class="lp-section lp-section--line" id="faq" aria-labelledby="faq-title" data-testid="faq">
+    <section class="lp-section lp-section--band lp-section--faq" id="faq" aria-labelledby="faq-title" data-testid="faq">
       <div class="lp-container lp-faqwrap">
-        <${SectionHead} title=${FAQ.title} titleId="faq-title" />
+        <${SectionHead} eyebrow=${FAQ.eyebrow} title=${FAQ.title} titleId="faq-title" />
         <div class="lp-faq" onKeyDown=${onKeyDown}>
           ${FAQ.items.map((it, i) => {
             const isOpen = open === i;
@@ -249,7 +278,7 @@ export function Faq() {
                 </button>
               </h3>
               <div class="lp-faq__panel" id=${`${base}-a-${i}`} role="region" aria-labelledby=${`${base}-q-${i}`}>
-                <div class="lp-faq__clip"><p class="lp-faq__a">${it.a}</p></div>
+                <div class="lp-faq__clip"><p class="lp-faq__a">${fillOwner(it.a, brand.ownerFirst)}</p></div>
               </div>
             </div>`;
           })}
@@ -259,7 +288,7 @@ export function Faq() {
   `;
 }
 
-/* ---------------- Final call to action ---------------- */
+/* ---------------- Final call to action: the one deep-red band (a brand moment); its button turns white so the primary action still stands out ---------------- */
 
 export function FinalCta() {
   const brand = useBrand();
@@ -267,14 +296,14 @@ export function FinalCta() {
   return html`
     <section class="lp-final-section" aria-labelledby="final-title">
       <div class="lp-container">
-        <div class="lp-final" data-testid="final-cta" data-reveal="up">
+        <div class="lp-final" data-testid="final-cta" data-reveal="up" data-sticky-hide>
           <div class="lp-final__copy">
-            <h2 id="final-title" class="lp-final__line">${FINAL.title}</h2>
-            <p class="lp-final__body">${FINAL.body}</p>
+            <h2 id="final-title" class="lp-final__line"><${AccentText} text=${FINAL.title} accent=${FINAL.accent} /></h2>
+            <p class="lp-final__body">${fillOwner(FINAL.body, brand.ownerFirst)}</p>
           </div>
           <div class="lp-final__actions">
             <${Button} variant="primary" size="lg" iconRight="arrow-right" class="lp-cta" onClick=${bookClick({})} data-testid="final-book">${CTA_LABEL}<//>
-            <p class="lp-final__call"><span>Prefer to speak to us?</span></p>
+            <p class="lp-final__call"><span>Prefer to speak to ${brand.ownerFirst}?</span></p>
             <div class="lp-final__alt">
               <a class="lp-final__link" href=${brand.telHref} data-testid="final-call"><${Icon} name="phone" size=${20} /><span>Call <span class="u-nowrap">${brand.phone}</span></span></a>
               <a class="lp-final__link" href=${wa} target="_blank" rel="noopener noreferrer" data-testid="l3-final-whatsapp"><${Icon} name="message-circle" size=${20} /><span>WhatsApp</span></a>

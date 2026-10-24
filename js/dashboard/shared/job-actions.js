@@ -3,13 +3,13 @@
 import { html, useState, useRef } from '../../vendor/preact-htm.js';
 import {
   Button, IconButton, Chip, Icon, Segmented, Stepper, Switch, Sheet, WhatsAppBubble,
-  toast, showUndoToast, useBrand, useStore, cx, loadCss
+  toast, showUndoToast, useBrand, useMediaQuery, useStore, cx, loadCss
 } from '../../ui/index.js';
 import {
   getState, confirmBooking, acceptEmergency, declineBooking, markOnTheWay, completeBooking, markPaid, markUnpaid,
   cancelBooking, rescheduleBooking, sendPaymentNudge, sendReviewRequest
 } from '../../core/store.js';
-import { buildMessage, telLink, waLink } from '../../core/messages.js';
+import { buildMessage, telLink, smsLink, mailtoLink, mapsLink, waLink } from '../../core/messages.js';
 import { getDaySlots, getDayStatus, bookingWhen } from '../../core/availability.js';
 import { todayKey } from '../../core/clock.js';
 import { addDays, makeStamp, fmtDayLong, weekdayOf, DAY_SHORT, MONTH_SHORT, stampDay, parseDayKey } from '../../core/dates.js';
@@ -17,7 +17,7 @@ import { WINDOWS, PROMISES, PAID_METHODS, PAID_METHOD_LABELS, CANCEL_REASONS } f
 import { firstName, gbp } from '../../core/format.js';
 import { customerKeyOf } from '../../core/selectors.js';
 import { routeHref } from '../router.js';
-import { isEnquiry, isQuotedInstall, quoteProgress } from './enquiry.js';
+import { isEnquiry, isPencilled, isQuotedInstall, quoteProgress } from './enquiry.js';
 
 // The sheets render outside #app, so their styles must be on the page whichever view imported this file.
 // Idempotent: Today and Insights also list the same sheet in their `css` export.
@@ -37,6 +37,9 @@ const PRIMARY = {
   new_quote: { id: 'new_quote', label: 'Write a new quote', icon: 'file-plus' },
   open_quote: { id: 'open_quote', label: 'Open quote', icon: 'file-text' },
   open_install: { id: 'open_install', label: 'Open the install', icon: 'plug-zap' },
+  confirm_install_linked: { id: 'confirm_install_linked', label: 'Confirm install day', icon: 'calendar-check' },
+  nudge_quote: { id: 'nudge_quote', label: 'Nudge on WhatsApp', icon: 'message-circle' },
+  call_customer: { id: 'call_customer', label: 'Call', icon: 'phone' },
   book_install: { id: 'book_install', label: 'Book the install', icon: 'plug-zap' },
   accept: { id: 'accept', label: 'Accept', icon: 'check' },
   on_my_way: { id: 'on_my_way', label: 'On my way', icon: 'navigation' },
@@ -49,7 +52,7 @@ const PRIMARY = {
 /**
  * The one big button for a booking's state (13.6.1), or null when nothing is left to do. Pure.
  * A free survey visit (ev_quote) confirms as "Confirm survey visit"; once it is done the quote takes over: "Build quote",
- * "Finish quote" (a draft), "Open quote" (out with the customer), then the install. An install made by an accepted quote
+ * "Finish quote" (a draft), then while it is out with the customer "Nudge <first> on WhatsApp" (unopened) or "Call <first>" (read), then the install. An install made by an accepted quote
  * confirms as "Confirm install day". `ctx` = quoteProgress(): { quoteSent, installBooked, quote, quoteState, install }.
  */
 export function primaryActionFor(booking, ctx = {}) {
@@ -64,8 +67,11 @@ export function primaryActionFor(booking, ctx = {}) {
     case 'done':
       if (isEnquiry(booking)) {
         const state = ctx.quoteState || null;
-        if (state === 'accepted') return ctx.install ? PRIMARY.open_install : null;
-        if (state === 'sent' || state === 'viewed') return PRIMARY.open_quote;
+        // The same verb as the Today card that led here: an accepted quote whose install day is still pencilled in confirms it.
+        if (state === 'accepted') return ctx.install ? (ctx.install.status === 'new' ? PRIMARY.confirm_install_linked : PRIMARY.open_install) : null;
+        // A quote nobody has opened is nudged on WhatsApp; one that was read is a phone call.
+        if (state === 'sent') return PRIMARY.nudge_quote;
+        if (state === 'viewed') return PRIMARY.call_customer;
         if (state === 'draft') return PRIMARY.finish_quote;
         if (state === 'declined' || state === 'expired') return PRIMARY.new_quote;
         return ctx.quoteSent && ctx.installBooked ? null : PRIMARY.build_quote;
@@ -77,10 +83,21 @@ export function primaryActionFor(booking, ctx = {}) {
   }
 }
 
-/** Where a link-style primary goes (the quote builder, the quote, the install, a new booking). */
+/** The button text: a few primaries name the customer ("Nudge Cathy on WhatsApp", "Call Tiernan"). */
+export function primaryLabel(primary, booking) {
+  if (!primary) return '';
+  const first = booking ? firstOf(booking) : '';
+  if (primary.id === 'nudge_quote') return `Nudge ${first} on WhatsApp`;
+  if (primary.id === 'call_customer') return `Call ${first}`;
+  return primary.label;
+}
+
+/** Where a link-style primary goes (the quote builder, the quote, the install, a new booking, a phone call, a WhatsApp message). */
 export function primaryHref(booking, primary, ctx = {}) {
   if (!primary) return '';
   switch (primary.id) {
+    case 'call_customer': return telLink(booking.customer.phone);
+    case 'nudge_quote': return waLink(booking.customer.phone, nudgeText(booking, ctx), ctx.demoPhoneDigits || '');
     case 'build_quote': case 'new_quote': return routeHref('quote-detail', { id: 'new' }, { booking: booking.id });
     case 'finish_quote': case 'open_quote': return ctx.quote ? routeHref('quote-detail', { id: ctx.quote.id }) : routeHref('quotes');
     case 'open_install': return ctx.install ? routeHref('bookings', { id: ctx.install.id }) : routeHref('bookings');
@@ -89,7 +106,14 @@ export function primaryHref(booking, primary, ctx = {}) {
     default: return '';
   }
 }
-const LINK_PRIMARIES = ['build_quote', 'new_quote', 'finish_quote', 'open_quote', 'open_install', 'book_install', 'rebook'];
+const LINK_PRIMARIES = ['build_quote', 'new_quote', 'finish_quote', 'open_quote', 'open_install', 'book_install', 'rebook', 'call_customer', 'nudge_quote'];
+
+/** The WhatsApp nudge for a quote that is out and has not been opened. */
+function nudgeText(booking, ctx) {
+  const brand = ctx.brand || { ownerFirst: '', name: '' };
+  const quote = ctx.quote;
+  return `Hi ${firstOf(booking)}, it's ${brand.ownerFirst} from ${brand.name}. Just checking you got your written quote${quote ? ` (${quote.id})` : ''}. Any questions, reply here or give me a call.`;
+}
 
 const SECONDARY = {
   decline: { id: 'decline', label: 'Decline', icon: 'circle-x', testid: 'job-secondary-decline', danger: true },
@@ -374,17 +398,33 @@ function RescheduleSheet({ booking, onClose }) {
 }
 
 /** Overflow sheet on booking detail: the SECONDARY actions as 56px rows. */
-function OverflowSheet({ actions, onPick, onClose }) {
-  return html`<${Sheet} open title="More actions" testid="detail-overflow-sheet" onClose=${onClose}>
+function OverflowSheet({ actions, onPick, onClose, title = 'More actions', testid = 'detail-overflow-sheet' }) {
+  return html`<${Sheet} open title=${title} testid=${testid} onClose=${onClose}>
     <ul class="db-list ja-more">
       ${actions.map((a) => html`<li key=${a.id}>
-        <button type="button" class=${cx('db-list__item', 'ja-more__item', a.danger && 'is-danger')} data-testid=${a.testid} onClick=${() => onPick(a.id)}>
-          <${Icon} name=${a.icon} size=${22} />
-          <span class="ja-more__label">${a.label}</span>
-        </button>
+        ${a.href
+          ? html`<a class=${cx('db-list__item', 'ja-more__item')} href=${a.href} data-testid=${a.testid} onClick=${onClose}
+              target=${a.external ? '_blank' : undefined} rel=${a.external ? 'noopener noreferrer' : undefined}>
+              <${Icon} name=${a.icon} size=${22} />
+              <span class="ja-more__label">${a.label}</span>
+            </a>`
+          : html`<button type="button" class=${cx('db-list__item', 'ja-more__item', a.danger && 'is-danger')} data-testid=${a.testid} onClick=${() => onPick(a.id)}>
+              <${Icon} name=${a.icon} size=${22} />
+              <span class="ja-more__label">${a.label}</span>
+            </button>`}
       </li>`)}
     </ul>
   <//>`;
+}
+
+/** Text, Email and Open in Maps for a customer: they live in the ONE overflow menu of a booking, after the secondary actions. */
+function contactActions(booking) {
+  const first = firstOf(booking);
+  return [
+    { id: 'sms', icon: 'smartphone', label: `Text ${first}`, href: smsLink(booking.customer.phone), testid: 'detail-sms' },
+    booking.customer.email ? { id: 'email', icon: 'send', label: 'Email', href: mailtoLink(booking.customer.email, `Booking ${booking.ref}`), testid: 'detail-email' } : null,
+    { id: 'maps', icon: 'navigation', label: 'Open in Maps', href: mapsLink(booking.address.line1, booking.address.postcode), testid: 'detail-maps', external: true }
+  ].filter(Boolean);
 }
 
 // ---------- JobActionBar ----------
@@ -398,6 +438,7 @@ export function JobActionBar({ booking, variant = 'card' }) {
   const [sheet, setSheet] = useState(null); // { kind, id }
   const [eta, setEta] = useState(45);
   const guard = useTapGuard();
+  const brand = useBrand();
   const progress = useStore((state) => (booking ? quoteProgress(state, booking) : NO_PROGRESS));
   if (!booking) return null;
 
@@ -412,6 +453,7 @@ export function JobActionBar({ booking, variant = 'card' }) {
     if (!primary) return;
     switch (primary.id) {
       case 'confirm': case 'confirm_survey': case 'confirm_install': doConfirm(booking); break;
+      case 'confirm_install_linked': if (progress.install) doConfirm(progress.install); break;
       case 'accept': doAccept(booking, eta); break;
       case 'on_my_way': open('eta'); break;
       case 'mark_done': open('complete'); break;
@@ -438,14 +480,16 @@ export function JobActionBar({ booking, variant = 'card' }) {
     ? html`<${Segmented} class="ja-eta" size="sm" ariaLabel="How long until you arrive" options=${ETA_URGENT.map((o) => ({ ...o, testid: `job-eta-${o.value}` }))} value=${eta} onChange=${setEta} />`
     : null;
 
+  // `compact` (Today's Next up): the primary at 48px and nothing else; the secondaries live on the booking.
+  const size = variant === 'compact' ? 'md' : 'lg';
   let primaryNode;
   if (primary && LINK_PRIMARIES.includes(primary.id)) {
-    const href = primaryHref(booking, primary, progress);
-    primaryNode = html`<${Button} variant="primary" size="lg" block icon=${primary.icon} href=${href} data-testid="job-primary">${primary.label}<//>`;
+    const href = primaryHref(booking, primary, { ...progress, brand, demoPhoneDigits: brand.demoPhoneDigits });
+    primaryNode = html`<${Button} variant="primary" size=${size} block icon=${variant === 'compact' ? undefined : primary.icon} href=${href} data-testid="job-primary">${primaryLabel(primary, booking)}<//>`;
   } else if (primary) {
-    primaryNode = html`<${Button} variant="primary" size="lg" block icon=${primary.icon} onClick=${runPrimary} data-testid="job-primary">${primary.label}<//>`;
+    primaryNode = html`<${Button} variant="primary" size=${size} block icon=${variant === 'compact' ? undefined : primary.icon} onClick=${runPrimary} data-testid="job-primary">${primaryLabel(primary, booking)}<//>`;
   } else {
-    primaryNode = html`<${Button} variant="secondary" size="lg" block icon="circle-check" disabled data-testid="job-primary">All done<//>`;
+    primaryNode = html`<${Button} variant="secondary" size=${size} block icon="circle-check" disabled data-testid="job-primary">All done<//>`;
   }
 
   const sheets = html`
@@ -454,14 +498,22 @@ export function JobActionBar({ booking, variant = 'card' }) {
     ${kind === 'paid' ? html`<${PaidSheet} booking=${booking} onClose=${close} />` : null}
     ${kind === 'cancel' ? html`<${CancelSheet} booking=${booking} onClose=${close} />` : null}
     ${kind === 'reschedule' ? html`<${RescheduleSheet} booking=${booking} onClose=${close} />` : null}
-    ${kind === 'overflow' ? html`<${OverflowSheet} actions=${secondary} onPick=${runSecondary} onClose=${close} />` : null}`;
+    ${kind === 'overflow' ? html`<${OverflowSheet} actions=${variant === 'bar' ? secondary.concat(contactActions(booking)) : secondary} onPick=${runSecondary} onClose=${close} />` : null}`;
+
+  if (variant === 'compact') {
+    return html`<div class="ja-bar ja-bar--compact" data-testid="job-action-bar">
+      ${etaPicker}
+      ${primaryNode}
+      ${sheets}
+    </div>`;
+  }
 
   if (variant === 'bar') {
     return html`<div class="ja-bar ja-bar--bar" data-testid="job-action-bar">
       ${etaPicker}
       <div class="ja-bar__row">
         <div class="ja-bar__primary">${primaryNode}</div>
-        ${secondary.length ? html`<${IconButton} icon="ellipsis" label="More actions" size="lg" class="ja-bar__more" onClick=${() => open('overflow')} data-testid="detail-overflow" />` : null}
+        <${IconButton} icon="ellipsis" label="More actions" size="lg" class="ja-bar__more" onClick=${() => open('overflow')} data-testid="detail-overflow" />
       </div>
       ${sheets}
     </div>`;
@@ -480,45 +532,117 @@ export function JobActionBar({ booking, variant = 'card' }) {
 
 // ---------- NeedsYouActions ----------
 
+const NARROW_CONFIRM = { confirm_survey: 'Confirm visit', confirm_install: 'Confirm day' };
+
+/** The secondary actions of a Needs-you item, for its "..." menu. `confirm` is offered here for an outside-area enquiry on a compact row. */
+function needsMenuFor(booking, { withConfirm } = {}) {
+  const first = firstOf(booking);
+  const out = [];
+  if (withConfirm) out.push({ id: 'confirm', label: isEnquiry(booking) ? 'Confirm survey visit' : 'Confirm', icon: 'calendar-check', testid: `needs-you-confirm-${booking.id}` });
+  if (booking.urgent) {
+    out.push({ id: 'decline', label: 'Decline', icon: 'circle-x', testid: `needs-you-decline-${booking.id}`, danger: true });
+    return out;
+  }
+  out.push({ id: 'move', label: 'Change the day', icon: 'calendar-days', testid: `needs-you-change-${booking.id}` });
+  out.push({
+    id: 'decline', label: isQuotedInstall(booking) ? 'Cancel install' : `Decline ${first}`, icon: 'circle-x',
+    testid: `needs-you-decline-${booking.id}`, danger: true
+  });
+  return out;
+}
+
 /**
- * Buttons for a card in Today's "Needs you": Accept (with an ETA picker) or Confirm, Call, WhatsApp, then Decline
- * (one tap, with Undo, set apart from the primary).
+ * The "..." button of a Needs-you item and the sheets behind it (More actions, Change the day). Decline and Change the day live here
+ * so the card keeps its one main action. An enquiry on a compact row (its button says Reply) also lists Confirm survey visit here;
+ * the hero card shows Confirm survey as a button of its own, so it leaves it out (`hero`).
  */
-export function NeedsYouActions({ booking }) {
+export function NeedsYouMenu({ booking, class: cls, hero }) {
+  const [sheet, setSheet] = useState(null); // 'menu' | 'move'
+  const guard = useTapGuard();
+  if (!booking) return null;
+  const actions = needsMenuFor(booking, { withConfirm: !hero && !booking.urgent && isEnquiry(booking) });
+  const close = () => setSheet(null);
+  const pick = (id) => {
+    close();
+    if (id === 'move') setSheet('move');
+    else if (id === 'decline') guard(() => doDecline(booking));
+    else if (id === 'confirm') guard(() => doConfirm(booking));
+  };
+  return html`<${IconButton} icon="ellipsis" label=${`More for ${firstOf(booking)}`} class=${cx('ja-needs__more', cls)}
+      onClick=${() => setSheet('menu')} data-testid=${`needs-you-more-${booking.id}`} />
+    ${sheet === 'menu' ? html`<${OverflowSheet} actions=${actions} onPick=${pick} onClose=${close} title=${`More for ${firstOf(booking)}`} testid="needs-you-menu-sheet" />` : null}
+    ${sheet === 'move' ? html`<${RescheduleSheet} booking=${booking} onClose=${close} />` : null}`;
+}
+
+/**
+ * Buttons for an item in Today's "Needs you".
+ *  - hero, a new enquiry: Call and WhatsApp (a message already written) are the two main buttons; Confirm survey is the quiet one underneath.
+ *  - hero, anything else: ONE red primary (Accept with an ETA picker, or Confirm install day) with Call and WhatsApp as 48px icon buttons beside it.
+ *  - compact (a row under the hero): ONE verb button. Reply for an enquiry (it opens the booking, where Call and WhatsApp are pinned),
+ *    Accept for an emergency, Confirm install day for an accepted quote.
+ */
+export function NeedsYouActions({ booking, compact, hero }) {
   const brand = useBrand();
+  const narrow = useMediaQuery('(max-width: 359px)');
   const [eta, setEta] = useState(45);
-  const [moving, setMoving] = useState(false);
   const guard = useTapGuard();
   if (!booking) return null;
   const id = booking.id;
   const first = firstOf(booking);
-  const text = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about booking ${booking.ref}.`;
   const accept = booking.urgent;
-  const install = isQuotedInstall(booking);
-  const confirmLabel = (primaryActionFor(booking) || PRIMARY.confirm).label;
+  const enquiry = !accept && isEnquiry(booking);
+  const primaryId = (primaryActionFor(booking) || PRIMARY.confirm).id;
+  const fullLabel = (primaryActionFor(booking) || PRIMARY.confirm).label;
+  const callBtn = (labelled) => html`<${Button} variant=${labelled ? 'primary' : 'secondary'} icon="phone" class=${labelled ? 'ja-needs__big' : 'ja-iconbtn'} aria-label=${`Call ${first}`}
+    href=${telLink(booking.customer.phone)} data-testid=${`needs-you-call-${id}`}>${labelled ? 'Call' : undefined}<//>`;
+  const waText = enquiry
+    ? `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name}. Thanks for your home EV charger enquiry (${booking.ref}). I can pop round for a free survey visit${isPencilled(booking) ? `: does ${bookingWhen(booking)} suit?` : '. What day suits you?'}`
+    : `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about booking ${booking.ref}.`;
+  const waBtn = (labelled) => html`<${Button} variant=${labelled ? 'primary' : 'secondary'} icon="message-circle" class=${labelled ? 'ja-needs__big' : 'ja-iconbtn'} aria-label=${`WhatsApp ${first}`}
+    href=${waLink(booking.customer.phone, waText, brand.demoPhoneDigits)} data-testid=${`needs-you-whatsapp-${id}`}>${labelled ? 'WhatsApp' : undefined}<//>`;
+
+  if (compact) {
+    const cls = 'ja-needs__primary ja-needs__primary--compact';
+    if (accept) return html`<${Button} variant="secondary" class=${cls} onClick=${() => guard(() => doAccept(booking, eta))} data-testid=${`needs-you-accept-${id}`}>Accept<//>`;
+    if (enquiry) return html`<${Button} variant="secondary" class=${cls} href=${`#/bookings/${id}`} data-testid=${`needs-you-reply-${id}`}>Reply<//>`;
+    return html`<${Button} variant="secondary" class=${cls} onClick=${() => guard(() => doConfirm(booking))} data-testid=${`needs-you-confirm-${id}`}>${primaryId === 'confirm_install' ? 'Confirm install day' : 'Confirm'}<//>`;
+  }
+
+  if (enquiry) {
+    return html`<div class="ja-needs ja-needs--enquiry">
+      <div class="ja-needs__pair">${callBtn(true)}${waBtn(true)}</div>
+      <${Button} variant="secondary" class="ja-needs__confirm" onClick=${() => guard(() => doConfirm(booking))} data-testid=${`needs-you-confirm-${id}`}>Confirm survey<//>
+    </div>`;
+  }
+
+  const confirmLabel = narrow && NARROW_CONFIRM[primaryId] ? NARROW_CONFIRM[primaryId] : fullLabel;
+  const primary = accept
+    ? html`<${Button} variant="primary" class="ja-needs__primary" onClick=${() => guard(() => doAccept(booking, eta))} data-testid=${`needs-you-accept-${id}`}>Accept<//>`
+    : html`<${Button} variant="primary" class="ja-needs__primary" onClick=${() => guard(() => doConfirm(booking))} data-testid=${`needs-you-confirm-${id}`}>${confirmLabel}<//>`;
   return html`<div class="ja-needs">
     ${accept ? html`<${Segmented} class="ja-eta" size="sm" ariaLabel="How long until you arrive" value=${eta} onChange=${setEta}
       options=${ETA_URGENT.map((o) => ({ ...o, testid: `needs-you-eta-${o.value}` }))} />` : null}
-    ${accept
-      ? html`<${Button} variant="primary" size="lg" block icon="check" onClick=${() => guard(() => doAccept(booking, eta))} data-testid=${`needs-you-accept-${id}`}>Accept<//>`
-      : html`<${Button} variant="primary" size="lg" block icon="check" onClick=${() => guard(() => doConfirm(booking))} data-testid=${`needs-you-confirm-${id}`}>${confirmLabel}<//>`}
-    <div class="ja-needs__contact">
-      <${Button} variant="secondary" icon="phone" href=${telLink(booking.customer.phone)} data-testid=${`needs-you-call-${id}`}>Call<//>
-      <${Button} variant="secondary" icon="message-circle" href=${waLink(booking.customer.phone, text, brand.demoPhoneDigits)} data-testid=${`needs-you-whatsapp-${id}`}>WhatsApp<//>
+    <div class="ja-needs__row">
+      ${primary}
+      ${callBtn(false)}
+      ${waBtn(false)}
     </div>
-    ${install
-      ? html`<${Button} variant="ghost" block icon="calendar-days" class="ja-needs__change" onClick=${() => setMoving(true)} data-testid=${`needs-you-change-${id}`}>Change the day<//>`
-      : html`<${Button} variant="ghost" block class="ja-needs__decline" onClick=${() => guard(() => doDecline(booking))} data-testid=${`needs-you-decline-${id}`}>Decline<//>`}
-    ${moving ? html`<${RescheduleSheet} booking=${booking} onClose=${() => setMoving(false)} />` : null}
   </div>`;
 }
 
-// ---------- PaidButton ----------
+// ---------- PaidButton and NudgeButton ----------
 
-/** "Mark paid" button that opens the payment-method sheet (used by Insights owed rows). */
-export function PaidButton({ booking, size = 'md' }) {
+/** "Mark paid" button that opens the payment-method sheet (Insights owed rows, Today's diary). `variant` is an addition: 'primary' by default. */
+export function PaidButton({ booking, size = 'md', variant = 'primary' }) {
   const [open, setOpen] = useState(false);
   if (!booking) return null;
-  return html`<${Button} variant="primary" size=${size} icon="pound-sterling" onClick=${() => setOpen(true)} data-testid=${`owed-mark-paid-${booking.id}`}>Mark paid<//>
+  return html`<${Button} variant=${variant} size=${size} icon="pound-sterling" onClick=${() => setOpen(true)} data-testid=${`owed-mark-paid-${booking.id}`}>Mark paid<//>
     ${open ? html`<${PaidSheet} booking=${booking} onClose=${() => setOpen(false)} />` : null}`;
+}
+
+/** "Nudge" button for a job that is done but not paid: logs the payment reminder (simulated) with the Undo-less plain toast. */
+export function NudgeButton({ booking, size = 'md', variant = 'secondary' }) {
+  const guard = useTapGuard();
+  if (!booking) return null;
+  return html`<${Button} variant=${variant} size=${size} icon="bell" onClick=${() => guard(() => doNudge(booking))} data-testid=${`diary-nudge-${booking.id}`}>Nudge<//>`;
 }

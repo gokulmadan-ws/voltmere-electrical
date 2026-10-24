@@ -1,5 +1,6 @@
 /* css/quote.css: the customer quote page (q2-*): black hero with his logo, the decision card, itemised lines, the install-day sheet, the confirmation.
-   Owner: Q2. Colours come from tokens.css only (no hex here). Mobile first at 375, solid at 320, two columns from 960.
+   Owner: Q2. Colours come from tokens.css only (no hex here), except --q2-ok / --q2-ok-text: the success green on the black panel (the dark theme's
+   --ok values, because the light theme's --ok is too dark on black). Mobile first at 375, solid at 320, two columns from 960.
    Dark is the default look; the hero, the footer and the sticky bar keep the brand's near-black panel in both themes.
    Motion: transform only (never opacity from 0), so a screenshot at any instant shows every word; prefers-reduced-motion removes it. */
 
@@ -12,7 +13,7 @@
 .q2-app { min-height: 100vh; min-height: 100dvh; background: var(--bg); color: var(--text); }
 .q2-state { display: block; }
 .q2-wrap {
-  width: 100%; max-width: 1080px; margin-inline: auto;
+  width: 100%; max-width: calc(1000px + 2 * var(--gutter)); margin-inline: auto; /* the header, the hero and the cards share one 1000px column */
   padding-left: max(var(--gutter), var(--safe-left)); padding-right: max(var(--gutter), var(--safe-right));
 }
 .q2-main { display: block; }
@@ -34,16 +35,27 @@
 .q2-preview__inner svg { margin-top: 2px; color: var(--panel-accent); }
 .q2-preview p { margin: 0; }
 
+/* ================= Expired: a full-width danger band at the very top (orange-red outline, icon and words; never the brand red) ================= */
+.q2-expiredbar { border-block: 1px solid var(--danger); border-bottom-width: 4px; background: var(--danger-tint); color: var(--danger-text); }
+.q2-expiredbar__inner { display: flex; align-items: flex-start; gap: 12px; padding-block: 14px; font-size: var(--fs-15); line-height: 1.5; }
+.q2-expiredbar svg { flex: none; margin-top: 1px; }
+.q2-expiredbar p { margin: 0; }
+.q2-expiredbar strong { font-weight: var(--fw-heavy); }
+
 /* ================= Hero: the black panel ================= */
 .q2-hero {
   position: relative; isolation: isolate; overflow: hidden;
   background-color: var(--panel); color: var(--panel-text);
-  border-radius: 0 0 var(--r-2xl) var(--r-2xl); box-shadow: 0 1px 0 var(--panel-2);
   padding-bottom: calc(var(--space-7) + 40px);
+  --q2-ok: #4ADE80; --q2-ok-text: #6EE7A0;
 }
+/* The tint and the corner slashes FADE OUT towards the bottom edge (a mask), so they never end in a hard horizontal line: in dark the panel is
+   the page colour, so the last pixels of the hero simply melt into it. */
 .q2-hero::before {
   content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: url('../img/hero-wiring.svg') center top / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 96%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 96%);
 }
 @supports (color: color-mix(in srgb, red 50%, blue)) {
   .q2-hero::before {
@@ -55,26 +67,59 @@
 }
 .q2-hero :focus-visible, .q2-footer :focus-visible, .q2-preview :focus-visible { outline-color: var(--focus-on-panel); }
 
-.q2-top {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  padding-top: calc(var(--safe-top) + 12px); padding-bottom: 12px;
+/* The bar: his logo, who the quote is for, and one tap to call. 20px of air above and below. The prototype strip is a sibling ABOVE the panel. */
+.q2-top { padding-top: 20px; padding-bottom: 20px; }
+.q2-top__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; min-width: 0; }
+.q2-brand { display: inline-flex; align-items: center; flex: none; min-height: var(--tap); border-radius: var(--r-md); color: var(--panel-text); text-decoration: none; }
+/* "Quote for Sean": from 480px it sits beside the logo behind a hairline; on narrower phones it stays for screen readers only. */
+.q2-for {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  font-size: var(--fs-14); font-weight: var(--fw-medium); line-height: 1.2; color: var(--panel-muted);
 }
-.q2-brand { display: inline-flex; align-items: center; flex: none; min-height: var(--tap); border-radius: var(--r-md); text-decoration: none; }
-.q2-logo { display: inline-flex; flex: none; overflow: hidden; line-height: 0; border-radius: var(--r-md); background: var(--panel); }
-.q2-logo__img { display: block; height: 44px; width: auto; max-width: none; aspect-ratio: 1119 / 743; object-fit: contain; mix-blend-mode: lighten; }
-.q2-proto {
-  display: inline-flex; align-items: center; gap: 6px; margin: 0; min-height: 32px; padding: 4px 12px;
-  border: 1px solid var(--panel-2); border-radius: var(--r-pill);
-  background: var(--panel-2); color: var(--panel-text);
-  font-size: var(--fs-12); font-weight: var(--fw-semibold); letter-spacing: 0.02em; line-height: 1.2; text-align: right;
+@media (min-width: 480px) {
+  .q2-for {
+    position: static; flex: 1 1 auto; width: auto; height: auto; min-width: 0; margin: 0 auto 0 0; padding: 4px 0 4px var(--space-3);
+    overflow: hidden; clip-path: none; text-overflow: ellipsis; border-left: 1px solid var(--panel-2);
+  }
+}
+.q2-owner { display: flex; align-items: center; flex: none; min-width: 0; }
+.q2-owner__call {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 8px;
+  min-height: var(--tap); min-width: var(--tap); padding: 0 16px 0 14px;
+  border: 1.5px solid var(--panel-2); border-radius: var(--r-pill); background: var(--panel-2); color: var(--panel-text);
+  font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: 1; text-decoration: none; white-space: nowrap;
 }
 @supports (color: color-mix(in srgb, red 50%, blue)) {
-  .q2-proto { border-color: color-mix(in srgb, var(--panel-text) 22%, transparent); background: color-mix(in srgb, var(--panel-2) 70%, transparent); }
+  .q2-owner__call { border-color: color-mix(in srgb, var(--panel-text) 34%, transparent); background: color-mix(in srgb, var(--panel-text) 10%, transparent); }
 }
-.q2-proto svg { flex: none; color: var(--panel-accent); }
-@media (max-width: 359px) { .q2-proto svg { display: none; } .q2-proto { letter-spacing: 0; padding-inline: 10px; } }
+.q2-owner__call svg { flex: none; color: var(--panel-text); }
+@media (hover: hover) { .q2-owner__call:hover { background: var(--panel-2); border-color: var(--panel-text); } }
+/* "Call Daniel" from 420; on narrower phones the name stays for screen readers only, so the bar never crowds. */
+@media (max-width: 419px) {
+  .q2-owner__name { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 
-.q2-hero__body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding-top: var(--space-4); min-width: 0; }
+/* His logo is a 1119x743 picture: the "180 ELECTRICAL" lockup sits in the middle and red/white corner stripes fill the top-left and bottom-right.
+   The wrapper is a WINDOW onto the lockup (overflow hidden, the picture sized and shifted from the crop fractions below, all fractions of the picture) and the
+   picture is blended with `lighten`, so its near-black card disappears into the near-black header or footer: no chip, no box. The remote logo and the local
+   fallback (img/logo-180.png, same layout) share this one crop. Same window as the landing page's (.lp-logo). */
+.q2-logo {
+  --crop-x: 0.215; --crop-y: 0.295; --crop-w: 0.57; --crop-h: 0.42;   /* the window: left, top, width, height */
+  --logo-h: 50px;
+  position: relative; display: block; flex: none; overflow: hidden; line-height: 0;
+  height: var(--logo-h); aspect-ratio: calc(1119 * var(--crop-w) / (743 * var(--crop-h)));
+  background: transparent;
+}
+.q2-logo__img {
+  position: absolute; display: block; max-width: none; height: auto; aspect-ratio: 1119 / 743;
+  width: calc(100% / var(--crop-w));
+  left: calc(var(--crop-x) / var(--crop-w) * -100%); top: calc(var(--crop-y) / var(--crop-h) * -100%);
+  mix-blend-mode: lighten;
+}
+.q2-logo--header { --logo-h: 44px; }
+@media (min-width: 768px) { .q2-logo--header { --logo-h: 48px; } }
+
+.q2-hero__body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding-top: var(--space-2); min-width: 0; }
 .q2-eyebrow {
   display: inline-flex; align-items: center; gap: 10px; margin: 0;
   font-size: var(--fs-17); font-weight: var(--fw-semibold); line-height: 1.3; color: var(--panel-accent);
@@ -90,17 +135,13 @@
 .q2-lead { margin: 0; max-width: 52ch !important; font-size: var(--fs-17); line-height: 1.55; color: var(--panel-muted); }
 @supports (color: color-mix(in srgb, red 50%, blue)) { .q2-lead { color: color-mix(in srgb, var(--panel-text) 82%, transparent); } }
 
-.q2-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.q2-pill {
-  display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; padding: 6px 12px;
-  border: 1px solid var(--panel-2); border-radius: var(--r-pill); background: var(--panel-2);
-  font-size: var(--fs-14); line-height: 1.3;
-}
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .q2-pill { border-color: color-mix(in srgb, var(--panel-text) 16%, transparent); background: color-mix(in srgb, var(--panel-text) 8%, transparent); }
-}
-.q2-pill__k { flex: none; color: var(--panel-muted); font-weight: var(--fw-medium); }
-.q2-pill__v { min-width: 0; color: var(--panel-text); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
+/* The three facts a customer checks first, on one line: the reference, the quote date, the postcode. */
+.q2-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 2px 0 0; padding: 0; list-style: none; font-size: var(--fs-14); line-height: 1.3; }
+.q2-meta li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.q2-meta svg { flex: none; color: var(--panel-muted); }
+.q2-meta__ref { gap: 8px; }
+.q2-meta__k { color: var(--panel-muted); font-weight: var(--fw-medium); }
+.q2-meta__v, .q2-meta strong { min-width: 0; color: var(--panel-text); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
 
 /* The hero copy rises in one piece after another (translate only). */
 @keyframes q2-rise { from { transform: translateY(14px); } to { transform: none; } }
@@ -110,30 +151,38 @@
 .q2-hero__body > :nth-child(4) { animation-delay: 150ms; }
 .q2-hero__body > :nth-child(5) { animation-delay: 200ms; }
 
-/* Quiet and done heroes (no big card overlapping): shorter, and the first card still pulls up over the edge. */
-.q2-hero--quiet, .q2-hero--done { padding-bottom: calc(var(--space-7) + 8px); }
-.q2-hero--done .q2-hero__body { align-items: center; text-align: center; }
+/* Quiet, done and ready heroes (no big card overlapping): shorter, and the first card still pulls up over the edge. */
+.q2-hero--quiet, .q2-hero--done, .q2-hero--ready { padding-bottom: calc(var(--space-7) + 8px); }
+.q2-hero--done .q2-hero__body, .q2-hero--ready .q2-hero__body { align-items: center; text-align: center; }
 .q2-hero--done .q2-title { max-width: 16ch; }
-.q2-hero--done .q2-lead { max-width: 40ch !important; }
+.q2-hero--ready .q2-title { max-width: 18ch; }
+.q2-hero--done .q2-lead, .q2-hero--ready .q2-lead { max-width: 40ch !important; }
 .q2-pull { position: relative; display: flex; flex-direction: column; gap: var(--space-4); margin-top: calc(-1 * var(--space-6)); padding-bottom: var(--space-4); }
 .q2-pull > * { min-width: 0; }
 @media (min-width: 720px) { .q2-pull { max-width: 720px; } }
 
 /* ================= Page grid: the card pulls up over the hero; two columns on wide screens ================= */
-.q2-grid { position: relative; display: flex; flex-direction: column; gap: var(--space-4); margin-top: calc(-1 * (var(--space-7) + 8px)); }
+.q2-grid { position: relative; display: flex; flex-direction: column; gap: var(--space-4); margin-top: calc(-1 * (var(--space-7) + 24px)); }
 .q2-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .q2-body { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 @media (min-width: 960px) {
-  .q2-hero { padding-bottom: calc(var(--space-8) + 56px); }
-  .q2-hero--quiet, .q2-hero--done { padding-bottom: calc(var(--space-8) + 8px); }
+  /* On wide screens the total and Accept card sits beside the heading, in the right half of the hero, and stays in view as the
+     quote scrolls. The hero keeps a fixed height for its copy so the card can be lifted to the top of it. */
+  :root { --q2-lift-body: 210px; --q2-lift-pad: 56px; --q2-side-w: 388px; }
+  .q2-hero { padding-bottom: var(--q2-lift-pad); }
+  .q2-hero--open .q2-hero__body {
+    min-height: var(--q2-lift-body);
+    padding-right: calc(max(var(--gutter), var(--safe-right)) + var(--q2-side-w) + var(--space-6));
+  }
+  .q2-hero--quiet, .q2-hero--done, .q2-hero--ready { padding-bottom: calc(var(--space-8) + 8px); }
   /* On wide screens the corner slashes stay in the corners instead of stretching across the whole width. */
   .q2-hero::before { background-size: auto, auto, min(100%, 760px) auto; background-position: 0 0, 0 0, left top; }
   .q2-grid {
-    display: grid; grid-template-columns: minmax(0, 1fr) 388px; grid-template-areas: "body side";
-    column-gap: var(--space-6); align-items: start; margin-top: calc(-1 * (var(--space-8) + 24px));
+    display: grid; grid-template-columns: minmax(0, 1fr) var(--q2-side-w); grid-template-areas: "body side";
+    column-gap: var(--space-6); align-items: start; margin-top: 0;
   }
-  .q2-side { grid-area: side; position: sticky; top: var(--space-5); }
-  .q2-body { grid-area: body; padding-top: calc(var(--space-8) + 48px); }
+  .q2-side { grid-area: side; position: sticky; top: var(--space-5); margin-top: calc(-1 * (var(--q2-lift-body) + var(--q2-lift-pad))); }
+  .q2-body { grid-area: body; padding-top: var(--space-6); }
 }
 
 /* ================= Cards ================= */
@@ -145,9 +194,10 @@
 .q2-h2 { margin: 0 0 var(--space-3); font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); line-height: 1.2; letter-spacing: -0.02em; }
 .q2-label { margin: 0; font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-2); line-height: 1.3; }
 
-/* Decision card */
-.q2-decide { display: flex; flex-direction: column; gap: var(--space-3); box-shadow: var(--shadow-3); }
+/* Decision card: the total, the charger's name, three facts, then Accept. */
+.q2-decide { display: flex; flex-direction: column; gap: var(--space-3); box-shadow: var(--shadow-3); scroll-margin-top: var(--space-4); }
 .q2-decide__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.q2-decide__figure { min-width: 0; }
 .q2-total {
   margin: 4px 0 0; font-family: var(--font-display); font-weight: var(--fw-heavy);
   font-size: clamp(2.5rem, 12vw, 3.25rem); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
@@ -156,33 +206,54 @@
   flex: none; margin-top: 2px; padding: 2px 10px; border: 1.5px dashed var(--field-border); border-radius: var(--r-pill);
   color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); line-height: 1.5; text-transform: uppercase; white-space: nowrap;
 }
-.q2-decide__what { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: var(--fw-semibold); color: var(--text); overflow-wrap: anywhere; }
-.q2-decide__what svg { flex: none; color: var(--cta-text); }
+/* The charger's name (the brand the owner chose), one quiet line under the total. No picture and no spec of ours. */
+.q2-product { margin-top: 8px; min-width: 0; }
+.q2-product__name { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-semibold); line-height: 1.3; color: var(--text-2); overflow-wrap: anywhere; }
+.q2-product__spec { margin: 2px 0 0; font-size: var(--fs-14); line-height: 1.4; color: var(--text-3); }
+/* Three facts, each a green tick: all true of the document itself. */
+.q2-sum { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px 0 0; border-top: 1px solid var(--line); list-style: none; }
+.q2-sum li { display: flex; align-items: flex-start; gap: 10px; font-size: var(--fs-15); line-height: 1.4; color: var(--text); }
+.q2-sum svg { flex: none; margin-top: 3px; color: var(--ok-text); }
+.q2-sum__valid { font-weight: var(--fw-semibold); }
+.q2-sum__valid.is-urgent { padding: 8px 12px; border-radius: var(--r-md); background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
+.q2-sum__valid.is-urgent svg { margin-top: 2px; color: var(--status-on-the-way-fg); }
+.q2-valid__left { font-weight: var(--fw-medium); }
+.q2-seeall { align-self: flex-start; gap: 4px; margin-block: -8px; font-size: var(--fs-14); }
+.q2-seeall svg { flex: none; }
+/* An expired quote: the total is muted and smaller, the validity is a plain line, there are no ticks and no Accept. */
+.q2-decide.is-expired { box-shadow: var(--shadow-1); }
+.q2-decide.is-expired .q2-total { color: var(--text-3); font-size: clamp(1.9rem, 9vw, 2.4rem); }
+.q2-decide.is-expired .q2-product__name { color: var(--text-3); }
+/* "Not for me": small, grey and underlined, below the card (never a button in it). */
+.q2-notforme { margin: 0; text-align: center; }
+.q2-notforme__btn { justify-content: center; padding-inline: var(--space-3); font-size: var(--fs-14); font-weight: var(--fw-medium); }
 .q2-valid {
-  display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: var(--r-md);
+  display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: var(--r-md);
   background: var(--surface-2); color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.35;
 }
 .q2-valid svg { flex: none; }
 .q2-valid--soon, .q2-valid--last { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
 .q2-valid--expired { background: var(--danger-tint); color: var(--danger-text); }
+.q2-decide.is-expired .q2-valid--expired { padding: 0; background: none; color: var(--text-2); }
+/* A comfortable quote's validity is a quiet line at the foot of the card (an urgent one keeps its chip above Accept). */
+.q2-valid--quiet { justify-content: center; padding: 0; background: none; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-medium); }
+/* The reassurance that drives a yes, directly under Accept. */
+.q2-accept { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.q2-nopay { display: flex; align-items: flex-start; justify-content: center; gap: 8px; margin: 0; font-size: var(--fs-14); font-weight: var(--fw-medium); line-height: 1.4; color: var(--text-2); }
+.q2-nopay svg { flex: none; margin-top: 1px; color: var(--text-2); }
 .q2-actions { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .q2-row { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
 .q2-row > * { flex: 1 1 auto; min-width: 0; }
 .q2-row--even > * { flex: 1 1 200px; }
 .q2-fine { margin: 0; font-size: var(--fs-14); line-height: 1.5; color: var(--text-2); }
-.q2-expired {
-  display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
-  border: 1.5px solid var(--danger); border-radius: var(--r-md); background: var(--danger-tint); color: var(--danger-text);
-  font-size: var(--fs-15); line-height: 1.5;
-}
-.q2-expired svg { flex: none; margin-top: 1px; }
-.q2-expired p { margin: 0; }
 .q2-notice { margin: 0; }
 .q2-card .ui-btn--lg { padding-inline: var(--space-4); }
 .q2-card .ui-btn { min-width: 0; }
 .q2-row .ui-btn { padding-inline: var(--space-4); }
 
 /* Itemised lines */
+.q2-lines { scroll-margin-top: var(--space-4); }
+.q2-lines .q2-h2:focus, .q2-lines .q2-h2:focus-visible { outline: none; }
 .q2-lines__list { list-style: none; margin: 0; padding: 0; }
 .q2-line { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 14px 0; border-top: 1px solid var(--line); }
 .q2-line:first-child { border-top: 0; padding-top: 4px; }
@@ -202,19 +273,36 @@
 .q2-lines--compact .q2-h2 { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .q2-lines--compact .q2-line:first-child { padding-top: 14px; border-top: 0; }
 
+/* Possible extras: listed apart, quieter, never counted in the total. */
+.q2-extras { margin-top: var(--space-5); padding: var(--space-4); border: 1.5px dashed var(--field-border); border-radius: var(--r-md); background: var(--surface-2); }
+.q2-extras__h { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); line-height: 1.3; letter-spacing: -0.01em; }
+.q2-extras__note { margin: 2px 0 var(--space-2); font-size: var(--fs-14); line-height: 1.45; color: var(--text-2); }
+.q2-extras .q2-line { padding-block: 10px; }
+.q2-extras .q2-line:first-child { padding-top: 6px; border-top: 0; }
+.q2-line--extra .q2-line__label { font-weight: var(--fw-medium); }
+.q2-line--extra .q2-line__total { color: var(--text-2); font-weight: var(--fw-semibold); }
+
 /* Notes and facts */
 .q2-notes__text { margin: 0; color: var(--text-2); line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
-.q2-facts { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-4) 0 0; padding: var(--space-4) 0 0; border-top: 1px solid var(--line); list-style: none; }
+.q2-facts { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.q2-notes__text + .q2-facts { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--line); }
 .q2-facts li { display: flex; align-items: flex-start; gap: 12px; line-height: 1.5; }
-.q2-facts svg { flex: none; margin-top: 2px; color: var(--cta-text); }
+.q2-facts svg { flex: none; margin-top: 2px; color: var(--text-2); }
 .q2-facts strong { font-weight: var(--fw-bold); }
+
+/* Payment and certificate: sample wording, labelled as such. */
+.q2-terms__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.q2-terms__head .q2-h2 { margin: 0; }
+/* The "Idea from us" tag sits under the heading (an idea block: tagged, and hidden under "Only my content"). */
+.q2-terms__head { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.q2-terms__tag { display: inline-flex; max-width: 100%; }
 
 /* Trust badges */
 .q2-badges { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
 .q2-badge { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); }
 .q2-badge__mark {
   display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%;
-  background: var(--cta-soft); color: var(--cta-text); box-shadow: inset 0 0 0 1.5px var(--cta);
+  background: var(--ok-tint); color: var(--ok-text); box-shadow: inset 0 0 0 1.5px var(--ok);
 }
 .q2-badge__text { min-width: 0; font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
 
@@ -224,10 +312,13 @@
 .q2-step:not(:last-child)::before { content: ''; position: absolute; left: 15px; top: 36px; bottom: -14px; width: 2px; background: var(--line); }
 .q2-step__num {
   display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%;
-  background: var(--cta-soft); color: var(--cta-text); box-shadow: inset 0 0 0 1.5px var(--cta);
+  background: var(--surface); color: var(--text-2); box-shadow: inset 0 0 0 1.5px var(--field-border);
   font-size: var(--fs-14); font-weight: var(--fw-heavy);
 }
-.q2-step.is-done .q2-step__num { background: var(--cta); color: var(--cta-ink); }
+/* Done is green (the same as the enquiry confirmation); the one step waiting on Daniel is amber, like the "Pencilled in" pill. */
+.q2-step.is-done .q2-step__num { background: var(--ok); color: var(--bg); box-shadow: none; }
+.q2-step.is-done:not(:last-child)::before { background: var(--ok); }
+.q2-step.is-current .q2-step__num { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); box-shadow: inset 0 0 0 1.5px var(--status-on-the-way-fg); }
 .q2-step__title { margin: 4px 0 0; font-weight: var(--fw-bold); line-height: 1.3; }
 .q2-step__text { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.5; }
 
@@ -237,31 +328,37 @@
 /* Lists on the quiet pages */
 .q2-list { display: flex; flex-direction: column; gap: 14px; margin: 0 0 var(--space-4); padding: 0; list-style: none; }
 .q2-list li { display: flex; align-items: flex-start; gap: 12px; line-height: 1.5; color: var(--text-2); }
-.q2-list svg { flex: none; margin-top: 2px; color: var(--cta-text); }
+.q2-list svg { flex: none; margin-top: 2px; color: var(--text-2); }
 .q2-ref-line { margin: 0 0 var(--space-4); font-size: var(--fs-14); overflow-wrap: anywhere; }
 .q2-demo .q2-muted { margin: 0 0 var(--space-4); }
 .q2-reasonline { margin: 0; font-size: var(--fs-17); line-height: 1.5; overflow-wrap: anywhere; }
 
-/* ================= Footer: black panel with a brand rule, like the landing page ================= */
+/* ================= Footer: finished and quiet, like the landing's: his logo, phone, email, the area, his credentials, a small copyright line ================= */
 .q2-footer {
-  margin-top: var(--space-7); background: var(--panel); color: var(--panel-text); border-top: 3px solid var(--brand);
+  margin-top: var(--space-7); background: var(--panel); color: var(--panel-text); border-top: 1px solid var(--panel-2);
   padding-block: var(--space-6) calc(var(--space-6) + var(--safe-bottom));
 }
-.q2-footer__inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
-.q2-footer__name { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); }
-.q2-footer__area { margin: 2px 0 var(--space-3); color: var(--panel-muted); }
+.q2-footer__inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.q2-footer__logo { display: inline-flex; align-items: center; justify-self: start; min-height: var(--tap); border-radius: var(--r-md); text-decoration: none; }
+.q2-footer__logo .q2-logo { --logo-h: 52px; }
 .q2-footer__links { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.q2-footer__links a { display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); color: var(--panel-text); text-decoration: none; overflow-wrap: anywhere; }
+.q2-footer__links a, .q2-footer__line {
+  display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); overflow-wrap: anywhere;
+  color: var(--panel-text); font-size: var(--fs-15); text-decoration: none;
+}
+.q2-footer__line { color: var(--panel-muted); }
 .q2-footer__links a:hover span { text-decoration: underline; text-underline-offset: 3px; }
-.q2-footer__links svg { flex: none; color: var(--panel-accent); }
-.q2-footer .q2-label { color: var(--panel-muted); margin-bottom: var(--space-2); }
-.q2-footer__theme { max-width: 320px; }
-.q2-footer__legal { padding-top: var(--space-5); border-top: 1px solid var(--panel-2); }
-.q2-footer .ui-notice--footer { color: var(--panel-muted); }
+.q2-footer__links svg { flex: none; color: var(--panel-muted); }
+.q2-footer__base { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-4); border-top: 1px solid var(--panel-2); }
+.q2-footer__creds, .q2-footer__copy { margin: 0; font-size: var(--fs-14); line-height: 1.5; color: var(--panel-muted); }
+.q2-footer__copy { font-size: var(--fs-12); }
+.q2-footer__cred { white-space: nowrap; }
+@media (max-width: 479px) { .q2-footer__cred { display: block; } .q2-footer__sep { display: none; } }
 @media (min-width: 768px) {
-  .q2-footer { padding-block: var(--space-7); }
-  .q2-footer__inner { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-7); }
-  .q2-footer__legal { grid-column: 1 / -1; }
+  .q2-footer { padding-block: var(--space-7) var(--space-6); }
+  .q2-footer__inner { grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: var(--space-7); row-gap: var(--space-5); }
+  .q2-footer__links { grid-column: 2; grid-row: 1; }
+  .q2-footer__base { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: var(--space-5); padding-top: var(--space-5); }
 }
 /* On phones the open page ends with the sticky accept bar floating over its last pixels. */
 .q2-app[data-state="open"] .q2-footer { padding-bottom: calc(var(--h-stickybar) + var(--safe-bottom) + var(--space-6)); }
@@ -271,18 +368,16 @@
 .q2-sticky {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sticky);
   padding: 10px max(var(--gutter), var(--safe-right)) calc(10px + var(--safe-bottom)) max(var(--gutter), var(--safe-left));
-  background: var(--surface); border-top: 1px solid var(--line); box-shadow: var(--shadow-bar);
+  background: var(--surface);  /* OPAQUE: nothing of the page shows through (no translucency, no blur), so no line of copy ghosts behind it */
+  border-top: 1px solid var(--line); box-shadow: var(--shadow-bar);
   transform: translateY(110%); visibility: hidden;
   transition: transform var(--dur-base) var(--q2-ease), visibility 0s linear var(--dur-base);
-}
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .q2-sticky { background: color-mix(in srgb, var(--surface) 92%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); }
 }
 .q2-sticky.is-on { transform: none; visibility: visible; transition-delay: 0s; }
 .q2-sticky__inner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); max-width: 640px; margin-inline: auto; }
 .q2-sticky__total { display: flex; flex-direction: column; margin: 0; min-width: 0; line-height: 1.1; }
 .q2-sticky__total span { font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-2); }
-.q2-sticky__total strong { font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.q2-sticky__total strong { margin-top: 3px; font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: 1.25; }
 .q2-sticky .ui-btn { flex: none; padding-inline: var(--space-5); }
 @media (min-width: 960px) { .q2-sticky { display: none; } }
 
@@ -295,6 +390,7 @@
 .q2-sheet__sum { margin: 0; min-height: 1.4em; text-align: center; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.4; }
 .q2-sheet__actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); }
 .q2-sheet__actions--even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.q2-sheet__actions--stack { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 479px) { .q2-sheet__actions--even { grid-template-columns: minmax(0, 1fr); } }
 .q2-sheet__actions .ui-btn { min-width: 0; padding-inline: var(--space-4); }
 .q2-sheet__field { margin-bottom: var(--space-4); }
@@ -307,20 +403,93 @@
 .q2-alts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .q2-alt {
   display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 6px 14px;
-  border: 1.5px solid var(--cta); border-radius: var(--r-pill); background: var(--surface); color: var(--text);
+  border: 1.5px solid var(--field-border); border-radius: var(--r-pill); background: var(--surface); color: var(--text);
   font-size: var(--fs-15); font-weight: var(--fw-semibold); line-height: 1.25; text-align: left; cursor: pointer;
 }
-.q2-alt svg { flex: none; color: var(--cta-text); }
-.q2-alt:active { background: var(--cta-soft); }
+.q2-alt svg { flex: none; color: var(--text-2); }
+.q2-alt:active { background: var(--surface-2); }
 
-/* The day list: one radio group, grouped by day */
-.q2-slots { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; margin: 0; padding: 0; border: 0; }
-.q2-day { display: flex; flex-direction: column; gap: var(--space-2); }
-.q2-day__head { margin: 0; font-family: var(--font-body); font-size: var(--fs-14); font-weight: var(--fw-bold); letter-spacing: 0.01em; line-height: 1.3; color: var(--text-2); }
-.q2-day__opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-@media (max-width: 359px) { .q2-day__opts { grid-template-columns: minmax(0, 1fr); } }
+/* The install-day sheet: the list scrolls under a soft fade above the footer, and anything scrolled into view (a focused day) stops short of it. */
+[data-testid="q2-accept-sheet"] .ui-sheet__body { scroll-padding-bottom: 96px; padding-bottom: var(--space-6); }
+[data-testid="q2-accept-sheet"] .ui-sheet__footer { position: relative; }
+[data-testid="q2-accept-sheet"] .ui-sheet__footer::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; pointer-events: none;
+  background: linear-gradient(to top, var(--surface), transparent);
+}
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  [data-testid="q2-accept-sheet"] .ui-sheet__footer::before { background: linear-gradient(to top, var(--surface), color-mix(in srgb, var(--surface) 0%, transparent)); }
+}
+
+/* "Soonest available": one tap to choose the first free half-day. */
+.q2-soonest {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; margin: 0 0 var(--space-4); padding: 10px 14px;
+  border: 1.5px solid var(--field-border); border-radius: var(--r-lg); background: var(--surface); color: var(--text);
+  text-align: left; cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+.q2-soonest__icon { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); color: var(--text); }
+.q2-soonest__text { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.q2-soonest__k { font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--text-2); line-height: 1.3; }
+.q2-soonest__v { font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
+.q2-soonest__go { flex: none; font-size: var(--fs-15); font-weight: var(--fw-bold); color: var(--text); }
+.q2-soonest.is-selected { border-color: var(--cta); background: var(--cta-soft); box-shadow: inset 0 0 0 1px var(--cta); }
+.q2-soonest.is-selected .q2-soonest__icon { background: var(--cta); color: var(--cta-ink); }
+@media (hover: hover) { .q2-soonest:not(.is-selected):hover { background: var(--surface-2); } }
+
+/* The days: one horizontal strip of chips with the month written where it changes. It bleeds to the sheet's edges and fades out there. */
+.q2-strip {
+  position: relative; display: flex; align-items: stretch; gap: 8px;
+  margin: 0 calc(-1 * var(--space-5)) var(--space-3); padding: 4px var(--space-5) 8px;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 28px), transparent 100%);
+}
+.q2-strip::-webkit-scrollbar { display: none; }
+.q2-strip__month {
+  flex: none; align-self: center; writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-2);
+}
+.q2-chip {
+  position: relative; display: flex; flex: none; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: 64px; min-height: 88px; padding: 8px 4px;
+  border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+  cursor: pointer; scroll-snap-align: center;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.q2-chip:active { transform: translateY(1px); }
+.q2-chip__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.q2-chip__dow { font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); line-height: 1.2; }
+.q2-chip__num { font-family: var(--font-display); font-size: 1.5rem; font-weight: var(--fw-heavy); letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+/* AM and PM marks: a solid green mark is free, a crossed-out grey one is booked (words as well as colour). */
+.q2-chip__halves { display: flex; gap: 3px; margin-top: 4px; }
+.q2-chip__half {
+  display: block; min-width: 25px; padding: 1px 3px; border: 1px solid transparent; border-radius: 6px;
+  font-size: var(--fs-12); font-style: normal; font-weight: var(--fw-bold); line-height: 1.3; text-align: center;
+}
+.q2-chip__half.is-free { background: var(--ok-tint); color: var(--ok-text); border-color: var(--ok); }
+.q2-chip__half.is-booked { color: var(--text-3); text-decoration: line-through; text-decoration-thickness: 1.5px; border-style: dashed; border-color: var(--line); }
+.q2-chip.is-viewed { border-color: var(--cta); background: var(--cta-soft); box-shadow: inset 0 0 0 1px var(--cta); }
+.q2-chip.is-picked::after { content: ''; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--cta); }
+.q2-chip:has(.q2-chip__input:focus-visible) { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+@media (hover: hover) { .q2-chip:not(.is-viewed):hover { background: var(--surface-2); } }
+
+/* "1 Choose a day" / "2 Choose morning or afternoon": the two things to pick, in order, in neutral ink (red stays for what is chosen). */
+.q2-pickstep { display: flex; align-items: center; gap: 10px; margin: 0 0 var(--space-2); font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: 1.3; }
+.q2-pickstep__n {
+  display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--text); color: var(--bg); font-size: var(--fs-12); font-weight: var(--fw-heavy); line-height: 1;
+}
+.q2-slots__hint {
+  margin: var(--space-2) 0 0; padding: 14px 16px; border: 1.5px dashed var(--field-border); border-radius: var(--r-md);
+  color: var(--text-2); font-size: var(--fs-15); line-height: 1.45; text-align: center;
+}
+
+/* The two halves of the chosen day: full-width buttons, a taken half shown as "Booked" (never an empty gap). */
+.q2-slots { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.q2-day__head { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: -0.01em; line-height: 1.3; color: var(--text); }
+.q2-day__opts { display: flex; flex-direction: column; gap: var(--space-2); }
 .q2-slot {
-  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; padding: 10px 12px;
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; padding: 10px 16px;
   border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text); cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
@@ -337,6 +506,7 @@
 .q2-slot.is-selected { border-color: var(--cta); background: var(--cta-soft); box-shadow: inset 0 0 0 1px var(--cta); }
 .q2-slot.is-selected .q2-slot__tick { border-color: var(--cta); background: var(--cta); color: var(--cta-ink); }
 .q2-slot.is-taken { border-style: dashed; background: var(--surface-2); cursor: not-allowed; }
+.q2-slot.is-taken .q2-slot__arrive { font-weight: var(--fw-semibold); letter-spacing: 0.02em; }
 .q2-slot.is-taken .q2-slot__input { cursor: not-allowed; }
 .q2-slot.is-taken .q2-slot__tick { display: none; }
 .q2-slot.is-taken .q2-slot__part, .q2-slot.is-taken .q2-slot__arrive { color: var(--text-2); }
@@ -351,22 +521,26 @@
 .q2-empty__text { margin: 0 0 var(--space-3); max-width: 38ch !important; color: var(--text-2); }
 .q2-empty .q2-row { width: 100%; }
 
-/* Confirm step */
-.q2-confirm__slot { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1.5px solid var(--cta); border-radius: var(--r-lg); background: var(--cta-soft); }
+/* Confirm step: the day on one line, the window under it, Change below the text, then the figures, the agreement and Accept right under it. */
+.q2-confirm__slot { display: flex; align-items: flex-start; gap: 14px; padding: 14px; border: 1.5px solid var(--cta); border-radius: var(--r-lg); background: var(--cta-soft); }
 .q2-confirm__when { flex: 1 1 auto; min-width: 0; }
 .q2-confirm__day { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); line-height: 1.25; }
 .q2-confirm__part { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.4; }
-.q2-linkbtn {
-  flex: none; min-height: var(--tap); min-width: var(--tap); padding: 0 8px; border: 0; background: none;
-  color: var(--link); font-size: var(--fs-16); font-weight: var(--fw-bold); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+.q2-changebtn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); margin: 4px 0 -8px -10px; padding: 0 10px;
+  border: 0; border-radius: var(--r-pill); background: none; color: var(--text); font-size: var(--fs-15); font-weight: var(--fw-bold); cursor: pointer;
 }
-.q2-confirm__rows, .q2-kv { display: flex; flex-direction: column; margin: var(--space-4) 0 0; }
+.q2-changebtn svg { flex: none; color: var(--text-2); }
+.q2-changebtn span { text-decoration: underline; text-decoration-thickness: 1px; text-decoration-color: var(--text-3); text-underline-offset: 4px; }
+.q2-confirm__rows, .q2-kv { display: flex; flex-direction: column; margin: var(--space-3) 0 0; }
 .q2-kv { margin: 0; }
-.q2-confirm__rows > div, .q2-kv > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); padding: 12px 0; border-top: 1px solid var(--line); }
+.q2-confirm__rows > div, .q2-kv > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); padding: 10px 0; border-top: 1px solid var(--line); }
+.q2-kv > div { padding: 12px 0; }
 .q2-confirm__rows dt, .q2-kv dt { color: var(--text-2); }
 .q2-confirm__rows dd, .q2-kv dd { margin: 0; min-width: 0; font-weight: var(--fw-semibold); text-align: right; overflow-wrap: anywhere; }
 .q2-confirm__sum dd, .q2-kv__sum dd { font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
 .q2-confirm__fine { margin: var(--space-3) 0 var(--space-4); color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
+.q2-confirm__fine + .q2-sheet__actions, .q2-problem + .q2-sheet__actions { margin-top: var(--space-2); }
 
 /* Decline reasons */
 .q2-reasons { min-width: 0; margin: 0 0 var(--space-4); padding: 0; border: 0; }
@@ -387,7 +561,7 @@
   border: 1.5px solid var(--line); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-1);
   line-height: 1;
 }
-.q2-datebox__mon { width: 100%; padding: 4px 0; background: var(--cta); color: var(--cta-ink); font-size: var(--fs-12); font-weight: var(--fw-heavy); letter-spacing: 0.08em; text-align: center; text-transform: uppercase; }
+.q2-datebox__mon { width: 100%; padding: 4px 0; background: var(--text); color: var(--bg); font-size: var(--fs-12); font-weight: var(--fw-heavy); letter-spacing: 0.08em; text-align: center; text-transform: uppercase; }
 .q2-datebox__day { padding-top: 6px; font-family: var(--font-display); font-size: 1.75rem; font-weight: var(--fw-heavy); letter-spacing: -0.03em; }
 .q2-datebox__dow { padding: 3px 0 7px; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-semibold); letter-spacing: 0.04em; text-transform: uppercase; }
 .q2-status {
@@ -406,13 +580,15 @@
 }
 @supports (color: color-mix(in srgb, red 50%, blue)) {
   .q2-mark {
-    background: color-mix(in srgb, var(--brand) 18%, transparent);
-    box-shadow: 0 0 0 10px color-mix(in srgb, var(--brand) 8%, transparent), 0 0 48px color-mix(in srgb, var(--brand) 34%, transparent);
+    background: color-mix(in srgb, var(--q2-ok) 16%, transparent);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--q2-ok) 8%, transparent), 0 0 48px color-mix(in srgb, var(--q2-ok) 30%, transparent);
   }
 }
 .q2-mark svg { display: block; overflow: visible; }
-.q2-mark__ring { fill: none; stroke: var(--panel-accent); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 264; transform: rotate(-90deg); transform-origin: 48px 48px; animation: q2-draw 760ms var(--ease-in-out) both; }
-.q2-mark__check { fill: none; stroke: var(--panel-text); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; animation: q2-draw-check 440ms 520ms var(--ease-out) both; }
+/* Success is green, as on the enquiry confirmation: the ring, the tick and the "Quote accepted" line. */
+.q2-hero--done .q2-eyebrow { color: var(--q2-ok-text); }
+.q2-mark__ring { fill: none; stroke: var(--q2-ok); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 264; transform: rotate(-90deg); transform-origin: 48px 48px; animation: q2-draw 760ms var(--ease-in-out) both; }
+.q2-mark__check { fill: none; stroke: var(--q2-ok); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; animation: q2-draw-check 440ms 520ms var(--ease-out) both; }
 @keyframes q2-draw { from { stroke-dashoffset: 264; } to { stroke-dashoffset: 0; } }
 @keyframes q2-draw-check { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
 @keyframes q2-pop { from { transform: scale(0.72); } to { transform: none; } }
@@ -422,8 +598,11 @@
 .q2-install__when { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .q2-install__day { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); line-height: 1.2; letter-spacing: -0.02em; }
 .q2-install__part { margin: 3px 0 0; color: var(--text-2); line-height: 1.45; }
-.q2-install__note { margin: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-14); line-height: 1.5; }
 .q2-install__saved { margin: 0; color: var(--ok-text); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
+/* One filled button (Add to calendar); Call and WhatsApp as a compact pair with one-line labels; Done as a plain text button. */
+.q2-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); min-width: 0; }
+.q2-pair .ui-btn { min-width: 0; padding-inline: var(--space-3); white-space: nowrap; }
+.q2-done { align-self: center; min-width: 140px; }
 .q2-disclosure { margin: 0; }
 .q2-disclosure .ui-disclosure__body { padding-inline: var(--q2-pad); }
 .q2-simnote {
@@ -434,26 +613,76 @@
 .q2-simnote svg { flex: none; margin-top: 2px; }
 .q2-simnote strong { color: var(--text); }
 
+/* ================= Link mode (v4): the quote opened from a link on a phone that never held it ================= */
+/* Prototype: sample prices, one quiet line at the foot of the decision card (only where the link says its prices are samples). */
+.q2-protonote { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-medium); line-height: 1.4; }
+.q2-protonote svg { flex: none; }
+.q2-protonote strong { color: var(--text); font-weight: var(--fw-bold); }
+
+/* "Which days suit you?": the days as checkboxes and the time of day as radios, drawn as 48px chips. */
+.q2-prefgroup { min-width: 0; margin: 0 0 var(--space-4); padding: 0; border: 0; }
+.q2-prefgroup__legend { margin-bottom: var(--space-3); padding: 0; font-size: var(--fs-15); font-weight: var(--fw-bold); }
+.q2-prefs { display: grid; gap: 8px; }
+.q2-prefs--days { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.q2-prefs--parts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 359px) { .q2-prefs--days { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.q2-pref {
+  position: relative; display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 2px;
+  border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+  font-size: var(--fs-15); font-weight: var(--fw-semibold); line-height: 1.2; text-align: center; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.q2-pref:active { transform: translateY(1px); }
+.q2-pref__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.q2-pref.is-selected { background: var(--cta); border-color: var(--cta); color: var(--cta-ink); font-weight: var(--fw-bold); }
+.q2-pref:has(.q2-pref__input:focus-visible) { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+@media (hover: hover) { .q2-pref:not(.is-selected):hover { background: var(--surface-2); } }
+/* What the message will say, so the customer sees the effect of each tap. */
+.q2-prefsum { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-15); line-height: 1.45; }
+.q2-prefsum svg { flex: none; margin-top: 1px; color: var(--text-2); }
+.q2-prefsum strong { color: var(--text); font-weight: var(--fw-bold); }
+
+/* After the tap: the message that is ready in WhatsApp (never "sent": the customer taps send there). */
+.q2-hero--ready { --q2-ok: var(--panel-accent); --q2-ok-text: var(--panel-accent); }
+.q2-mark--ready { color: var(--panel-accent); }
+.q2-ready { display: flex; flex-direction: column; gap: var(--space-4); }
+.q2-ready__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px var(--space-3); }
+.q2-ready__quote { margin: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
+.q2-bubble { padding: 12px 14px 14px; border-radius: var(--r-md); border-top-right-radius: 4px; background: var(--bubble-out-bg); color: var(--bubble-out-fg); }
+.q2-bubble__text { margin: 0; font-size: var(--fs-16); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.q2-bubble__link { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; font-size: var(--fs-15); font-weight: var(--fw-semibold); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.q2-copynote { min-height: 0; margin: 0; color: var(--ok-text); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.45; text-align: center; }
+.q2-copynote:empty { display: none; }
+.q2-copynote.is-fail { color: var(--danger-text); }
+.q2-fulltextbox { margin: 0; }
+.q2-fulltext {
+  display: block; width: 100%; padding: 12px; border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+  font-family: var(--font-mono); font-size: var(--fs-14); line-height: 1.5; resize: none; overflow-wrap: anywhere; user-select: all;
+}
+.q2-fulltext:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+.q2-change .ui-btn { min-width: 0; }
+
 /* ================= Reduced motion: no entrance, no drawing, no slide ================= */
 @media (prefers-reduced-motion: reduce) {
   .q2-hero__body > *, .q2-mark, .q2-mark__ring, .q2-mark__check { animation: none; }
-  .q2-sticky, .q2-slot, .q2-slot__tick, .q2-reason { transition: none; }
+  .q2-sticky, .q2-slot, .q2-slot__tick, .q2-reason, .q2-chip, .q2-soonest, .q2-pref { transition: none; }
 }
 
 /* ================= Forced colours ================= */
 @media (forced-colors: active) {
-  .q2-card, .q2-slot, .q2-reason, .q2-pill, .q2-proto, .q2-datebox, .q2-badge { border: 1.5px solid CanvasText; }
-  .q2-slot.is-selected, .q2-reason.is-selected { outline: 3px solid Highlight; }
+  .q2-card, .q2-slot, .q2-reason, .q2-chip, .q2-soonest, .q2-pref, .q2-datebox, .q2-badge { border: 1.5px solid CanvasText; }
+  .q2-slot.is-selected, .q2-reason.is-selected, .q2-chip.is-viewed, .q2-soonest.is-selected, .q2-pref.is-selected { outline: 3px solid Highlight; }
 }
 
 /* ================= Print: the quote on paper, no buttons ================= */
 @media print {
-  .q2-sticky, .q2-skip, .q2-actions, .q2-contact, .q2-footer__theme, .q2-preview { display: none !important; }
+  .q2-sticky, .q2-skip, .q2-actions, .q2-contact, .ui-notice--public, .q2-expiredbar, .q2-preview, .q2-notforme, .q2-owner__call, .q2-seeall, .q2-nopay { display: none !important; }
   .q2-app, .q2-hero, .q2-footer { background: none !important; color: inherit !important; }
   .q2-hero, .q2-footer { border-radius: 0; }
   .q2-hero::before { display: none; }
-  .q2-title, .q2-lead, .q2-eyebrow, .q2-pill__v, .q2-pill__k, .q2-footer__name, .q2-footer__area, .q2-footer a { color: inherit !important; }
+  .q2-title, .q2-lead, .q2-eyebrow, .q2-meta__k, .q2-meta__v, .q2-meta strong, .q2-brand, .q2-for, .q2-footer__area, .q2-footer a { color: inherit !important; }
   .q2-card { box-shadow: none; break-inside: avoid; }
   .q2-grid { margin-top: var(--space-4); display: block; }
+  .q2-side { margin-top: 0; position: static; }
   .q2-body { padding-top: 0; }
 }

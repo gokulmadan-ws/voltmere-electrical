@@ -233,7 +233,7 @@ test('updateSettings: validation of the v3 fields is atomic with plain messages'
   const before = JSON.stringify(getState().settings);
   const bad = (patch) => updateSettings(patch);
   assert.ok(bad({ business: { address: 'x'.repeat(201) } }).errors.address);
-  for (const url of ['javascript:alert(1)', 'data:image/png;base64,AAAA', 'http://insecure.example/a.jpg', '//evil.example/a.jpg', 'ftp://x/y.jpg', 'file:///etc/passwd', 'C:\\pics\\a.jpg', 'has space.jpg', `https://x.example/${'a'.repeat(600)}`]) {
+  for (const url of ['javascript:alert(1)', 'data:text/html;base64,AAAA', 'data:image/svg+xml;base64,AAAA', 'http://insecure.example/a.jpg', '//evil.example/a.jpg', 'ftp://x/y.jpg', 'file:///etc/passwd', 'C:\\pics\\a.jpg', 'has space.jpg', `https://x.example/${'a'.repeat(600)}`]) {
     const r = bad({ business: { images: { hero: url } } });
     assert.equal(r.reason, 'invalid', url);
     assert.match(r.errors['images.hero'], /https:\/\/ or a file path/, url);

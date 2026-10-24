@@ -13,13 +13,15 @@
 @keyframes q1-in { from { opacity: 0; transform: translateY(6px); } }
 @keyframes q1-spin { to { transform: rotate(360deg); } }
 
-/* Status pill: icon plus word. Colours are the status tokens (blue, amber, green, plum, grey). */
+/* Status pill: icon plus word, one system everywhere (list, quote header, pipeline cards, booking detail):
+   draft neutral and dashed, sent blue, viewed amber, accepted green, declined and expired grey, overdue orange. Never the brand red. */
 .q1-pill--draft { background: transparent; color: var(--text-2); border-color: var(--field-border); border-style: dashed; }
 .q1-pill--sent { background: var(--status-new-bg); color: var(--status-new-fg); }
 .q1-pill--viewed { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
 .q1-pill--accepted { background: var(--status-confirmed-bg); color: var(--status-confirmed-fg); }
-.q1-pill--declined { background: var(--status-cancelled-bg); color: var(--status-cancelled-fg); }
-.q1-pill--expired { background: var(--status-done-bg); color: var(--status-done-fg); border-color: currentColor; border-style: dashed; }
+.q1-pill--declined { background: var(--status-done-bg); color: var(--status-done-fg); }
+.q1-pill--expired { background: transparent; color: var(--status-done-fg); border-color: currentColor; border-style: dashed; }
+.q1-pill--overdue { background: var(--danger-tint); color: var(--danger-text); border-color: var(--danger); }
 
 /* ================= list ================= */
 .q1-page .ui-page-header { margin-bottom: var(--space-4); }
@@ -28,13 +30,13 @@
 .q1-hero {
   position: relative; grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; min-width: 0;
   padding: var(--space-4) calc(var(--space-5) + 36px) var(--space-4) var(--space-5);
-  border: 1.5px solid var(--cta); border-radius: var(--r-lg); overflow: hidden;
-  background: linear-gradient(120deg, var(--cta-soft), transparent 75%), var(--card-bg);
+  border: 1.5px solid var(--line); border-left: 5px solid var(--dot-few); border-radius: var(--r-lg); overflow: hidden;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--dot-few) 9%, transparent), transparent 70%), var(--card-bg);
   box-shadow: var(--shadow-1); color: var(--text); text-decoration: none;
   transition: transform var(--dur-fast) var(--ease-out);
 }
 .q1-hero:active { transform: translateY(1px); }
-.q1-hero__label { color: var(--cta-text); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.q1-hero__label { color: var(--status-on-the-way-fg); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .q1-hero__value {
   font-family: var(--font-display); font-size: clamp(2.25rem, 11vw, 3rem); font-weight: var(--fw-heavy);
   letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums;
@@ -42,9 +44,9 @@
 .q1-hero__hint { color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
 .q1-hero__go {
   position: absolute; right: var(--space-4); top: 50%; display: grid; place-items: center; width: 40px; height: 40px; margin-top: -20px;
-  border-radius: 50%; background: var(--cta-soft); border: 1.5px solid var(--cta); color: var(--cta-text);
+  border-radius: 50%; background: var(--surface-2); border: 1.5px solid var(--field-border); color: var(--text-2);
 }
-@media (hover: hover) { .q1-hero:hover .q1-hero__go { background: var(--cta); color: var(--cta-ink); } }
+@media (hover: hover) { .q1-hero:hover .q1-hero__go { background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); border-color: var(--dot-few); } }
 .q1-stat {
   display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--space-3) var(--space-4);
   border: 1.5px solid var(--line); border-radius: var(--r-lg); background: var(--card-bg); box-shadow: var(--shadow-1);
@@ -78,9 +80,24 @@
 }
 .q1-group__sum { font-size: var(--fs-12); font-weight: var(--fw-semibold); letter-spacing: 0; text-transform: none; color: var(--text-3); text-align: right; }
 .q1-rows { animation: q1-in var(--dur-page) var(--ease-emphasis) both; }
-.q1-end { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
-.q1-end__age { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--fw-medium); line-height: 1.3; }
-.q1-hint { color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-semibold); }
+/* A quote row: avatar | name (ellipsis) and amount | the time under the name | status pill and where. Every row is the same height. */
+.q1-row { position: relative; container-type: inline-size; container-name: q1row; }
+.q1-row__link {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-areas: "av name amt" "av when when" "av state state";
+  column-gap: var(--space-3); row-gap: 2px; align-items: center; min-height: 0; padding: 12px var(--space-4);
+}
+.q1-row__avatar { grid-area: av; align-self: start; display: inline-flex; }
+.q1-row__name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; }
+.q1-row__amount { grid-area: amt; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums; line-height: 1.3; }
+.q1-row__when { grid-area: when; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
+.q1-row__state { grid-area: state; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: 28px; }
+.q1-row__sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-14); }
+.q1-row__brand { display: none; }
+@container q1row (min-width: 440px) { .q1-row__brand { display: inline; } }
+.q1-row.has-nudge .q1-row__when, .q1-row.has-nudge .q1-row__state { padding-right: 92px; }
+.q1-row__nudge { position: absolute; right: var(--space-3); bottom: 12px; z-index: 1; min-width: 0; padding-inline: var(--space-4); }
+.q1-hint { color: var(--text-2); font-weight: var(--fw-semibold); }
 .q1-hint.is-urgent { color: var(--danger-text); }
 .q1-foot { margin: var(--space-5) var(--space-1) 0; color: var(--text-3); font-size: var(--fs-12); line-height: 1.4; }
 .q1-pick__go { display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border-radius: var(--r-pill); background: var(--cta); color: var(--cta-ink); font-size: var(--fs-14); font-weight: var(--fw-bold); }
@@ -103,26 +120,70 @@
 .q1-sectitle-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .q1-lead { margin: 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.45; }
 
-/* Status card (once a quote is out) */
-.q1-status { --q1-accent: var(--field-border); border-left: 4px solid var(--q1-accent); }
-.q1-status--sent { --q1-accent: var(--status-new-fg); }
-.q1-status--viewed { --q1-accent: var(--dot-few); }
-.q1-status--accepted { --q1-accent: var(--ok); }
-.q1-status--declined { --q1-accent: var(--status-cancelled-fg); }
-.q1-status--expired { --q1-accent: var(--dot-full); }
+/* Status card (once a quote is out). No coloured stripe: the pill already says where it is, and a stripe is for urgency only. */
+.q1-status { gap: var(--space-3); }
+.q1-phonebtn { align-self: stretch; }
+.q1-validseg .ui-seg__opt { padding-inline: var(--space-2); }
 .q1-status__headline { margin: 0; font-size: var(--fs-20); letter-spacing: var(--tracking-tight); }
 .q1-status__sub { margin: 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.45; }
 .q1-status__actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); padding-top: var(--space-1); }
 .q1-status__actions .ui-btn { min-width: 0; padding-inline: var(--space-3); white-space: nowrap; }
 .q1-status__actions > :first-child:nth-last-child(3) { grid-column: 1 / -1; }
 
+/* "Heard back another way?": yes and no are two equal 48px buttons with room around the words. */
+.q1-decide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); padding-top: var(--space-2); }
+.q1-decide__cap { grid-column: 1 / -1; }
+.q1-decide .ui-btn { min-height: 48px; padding-inline: var(--space-4); white-space: nowrap; }
+
+/* The short, read-only version of a quote that is out */
+.q1-sum { gap: 6px; padding-block: var(--space-4); }
+.q1-sum__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.q1-sum__total { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 9.5vw, 2.5rem); font-weight: var(--fw-heavy); letter-spacing: -0.035em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.q1-sum__items { margin: var(--space-2) 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.q1-sum__items li { display: flex; justify-content: space-between; gap: var(--space-4); padding: 7px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-15); line-height: 1.35; }
+.q1-sum__items li:last-child { border-bottom: 0; }
+.q1-sum__items li { align-items: flex-start; }
+/* A line name wraps (two lines are fine): what he sent is never cut off with "...". */
+.q1-sum__label { min-width: 0; white-space: normal; overflow-wrap: break-word; line-height: 1.35; }
+.q1-sum__cap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); }
+.q1-sum__toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; min-height: 48px; margin: 0; padding: 0;
+  border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: var(--fs-15); font-weight: var(--fw-semibold); text-align: left; cursor: pointer;
+}
+.q1-sum__toggle svg { flex: none; color: var(--text-2); }
+.q1-sum__toggle:active { background: var(--surface-2); }
+.q1-sum__items + .q1-sum__toggle { margin-top: -1px; }
+.q1-sum__amt { flex: none; font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
+/* the bar of a quote that is out is just its one action: the total is already the biggest thing on the page */
+.q1-builder.is-summary .q1-bar__total { display: none; }
+.q1-builder.is-summary .q1-bar .ui-btn--primary { flex: 1 1 auto; }
+
+/* The full builder (or the full read-only quote) tucked under one line */
+.q1-edit { box-shadow: var(--shadow-1); }
+.q1-edit .ui-disclosure__body { color: var(--text); font-size: var(--fs-16); padding-top: var(--space-2); }
+.q1-edit__body { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.q1-edit__body > * { min-width: 0; }
+
 .q1-install__when { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); }
 
-/* Customer card */
+/* Customer card: one tappable line (first name, postcode, what they answered), the rest behind it. */
+.q1-customer { gap: 0; padding: 2px var(--space-3); }
+.q1-customer.is-open { padding-bottom: var(--space-3); }
 .q1-who { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.q1-who__main { flex: 1 1 0; min-width: 0; }
-.q1-who__name { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; }
-.q1-who__sub { margin: 0; color: var(--text-2); font-size: var(--fs-15); }
+.q1-who--toggle {
+  width: 100%; min-height: 60px; margin: 0; padding: 8px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.q1-who--toggle:focus-visible { outline-offset: 2px; border-radius: var(--r-md); }
+.q1-who__main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.q1-who__name { font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
+.q1-who__pc { color: var(--text-2); font-weight: var(--fw-semibold); }
+.q1-who__sub { color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; overflow-wrap: anywhere; }
+.q1-who__out { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; color: var(--danger-text); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
+.q1-who__chev { flex: none; color: var(--text-3); transition: transform var(--dur-base) var(--ease-out); }
+.q1-customer.is-open .q1-who__chev { transform: rotate(180deg); }
+.q1-customer__more { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.q1-who__phone { margin: 0; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; }
+.q1-who__addr { margin: 0; color: var(--text-2); font-size: var(--fs-15); }
 .q1-who__tools { display: flex; gap: var(--space-1); flex: none; }
 .q1-who__tools .ui-icon-btn { border-color: var(--line); background: var(--surface-2); }
 .q1-address { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; color: var(--text-2); font-size: var(--fs-15); line-height: 1.4; max-width: none; }
@@ -134,7 +195,7 @@
   border-left: 3px solid var(--field-border); color: var(--text); font-size: var(--fs-15); line-height: 1.45; overflow-wrap: anywhere;
 }
 .q1-link {
-  display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap); margin-top: var(--space-1); padding-top: var(--space-2);
+  display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap);
   border-top: 1px solid var(--line); color: var(--link); font-weight: var(--fw-semibold); text-decoration: none;
 }
 .q1-link span { flex: 1 1 auto; min-width: 0; }
@@ -170,12 +231,24 @@
 .q1-line__text { min-width: 0; flex: 1 1 0; }
 .q1-line__label { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
 .q1-line__detail { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; overflow-wrap: anywhere; }
+/* A possible extra: listed on the quote, never added into its total (a plain muted line, not a colour: the words carry it). */
+.q1-sum__label .q1-sum__extra { display: block; }
+.q1-line__extra { margin: 4px 0 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.35; overflow-wrap: anywhere; }
 .q1-line__total { flex: none; margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums; }
 .q1-line__total.is-discount { color: var(--ok-text); }
 .q1-line__edit {
   display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); margin: -10px 0; padding: 0; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer;
 }
 .q1-line__edit svg { flex: none; color: var(--text-3); }
+.q1-line--row { display: flex; align-items: center; gap: var(--space-2); min-height: 56px; padding: 6px 4px 6px var(--space-4); }
+.q1-line--row .q1-line__text { display: flex; flex-direction: column; justify-content: center; }
+.q1-line--row .q1-line__label { font-size: var(--fs-15); line-height: 1.3; }
+.q1-line--row .q1-line__edit { margin: -6px 0; }
+.q1-line--row .q1-line__total { padding-right: 2px; font-size: var(--fs-17); }
+/* The price is the thing you tap: a 44px field right in the row, no stepper for a one-off. */
+.q1-money--inline.ui-money { flex: none; width: 104px; min-height: var(--tap); padding: 0 10px; font-weight: var(--fw-bold); }
+.q1-money--inline .ui-money__input { font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
+.q1-line--row .q1-line__remove { margin: 0; }
 .q1-line__controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-top: var(--space-3); }
 .q1-line__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: none; }
 .q1-line__field--price { flex: 1 1 96px; }
@@ -192,18 +265,18 @@
 
 .q1-addrow { display: block; margin: 0; padding: 0; list-style: none; }
 .q1-add {
-  display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 64px; padding: 10px var(--space-4);
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 56px; padding: 6px var(--space-4);
   border: 1.5px dashed var(--field-border); border-radius: var(--r-lg); background: transparent; color: var(--text); text-align: left; cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .q1-add:active { transform: translateY(1px); background: var(--surface-2); }
 @media (hover: hover) { .q1-add:hover { background: var(--surface-2); } }
 .q1-add__plus {
-  display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%;
-  border: 1.5px solid var(--cta); background: var(--cta-soft); color: var(--cta-text);
+  display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%;
+  border: 1.5px solid var(--field-border); background: transparent; color: var(--text-2);
 }
 .q1-add__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; gap: 1px; }
-.q1-add__label { font-size: var(--fs-16); font-weight: var(--fw-semibold); line-height: 1.3; overflow-wrap: anywhere; }
+.q1-add__label { font-size: var(--fs-15); font-weight: var(--fw-semibold); line-height: 1.3; overflow-wrap: anywhere; }
 .q1-add__hint { color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; overflow-wrap: anywhere; }
 .q1-add__price { flex: none; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
 .q1-add--custom { border-color: var(--line); }
@@ -219,12 +292,18 @@
 .q1-ro__total { flex: none; margin: 0; font-family: var(--font-display); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
 .q1-notes-ro { margin: 0; padding: var(--space-3) var(--space-4); border-left: 3px solid var(--field-border); color: var(--text-2); font-size: var(--fs-15); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; max-width: none; }
 
+.q1-notes__foot .q1-muted { display: inline-flex; align-items: center; gap: 6px; }
+.q1-notes__foot:empty { display: none; }
+.q1-valid__day { margin: 0; }
+.q1-bfoot { display: flex; flex-direction: column; gap: var(--space-2); }
+.q1-bfoot:empty { display: none; }
 .q1-notes__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .q1-valid { display: flex; flex-direction: column; gap: var(--space-3); }
 .q1-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* Totals */
-.q1-totals { gap: var(--space-2); background: linear-gradient(180deg, var(--cta-soft), transparent 60%), var(--card-bg); border-color: var(--cta); }
+.q1-totals { gap: var(--space-2); }
+.q1-totals__cap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); }
 .q1-totals__sum { margin: 0; font-family: var(--font-display); font-size: clamp(2.5rem, 12vw, 3.25rem); font-weight: var(--fw-heavy); letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; }
 .q1-totals__note { margin: var(--space-1) 0 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
 .q1-totals__actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
@@ -248,7 +327,7 @@
 /* Sticky bar: the shell's db-sticky-actions with the live total on the left. The shell hides it while the keyboard is up, so the total then rides under the header instead. */
 .q1-bar { gap: var(--space-3); }
 .q1-bar__total { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; line-height: 1.1; }
-.q1-bar__cap { color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.q1-bar__cap { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .q1-bar__sum { font-family: var(--font-display); font-size: 1.625rem; font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums; }
 .q1-bar__save { flex: none; padding-inline: var(--space-3); }
 @media (max-width: 340px) { .q1-bar__sum { font-size: 1.375rem; } .q1-bar .ui-btn--primary { padding-inline: var(--space-4); } }
@@ -271,6 +350,14 @@ html.is-keyboard-open .q1-live {
 .q1-block { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .q1-note { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
 
+.q1-xdevice { display: flex; align-items: flex-start; gap: var(--space-2); }
+.q1-xdevice svg { flex: none; margin-top: 2px; color: var(--text-2); }
+.q1-phone { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); min-width: 0; text-align: center; }
+.q1-phone > * { min-width: 0; }
+.q1-phone__qr { display: block; padding: 10px; border-radius: var(--r-md); background: white; line-height: 0; }
+.q1-phone__total { margin: 0; max-width: none; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
+.q1-phone .q1-note { max-width: 38ch; }
+.q1-phone__link a { display: inline-flex; align-items: center; min-height: var(--tap); }
 .q1-send { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .q1-preview { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border-radius: var(--r-md); background: var(--chat-bg); }
 .q1-preview .q1-cap { color: var(--text-2); }
@@ -281,6 +368,7 @@ html.is-keyboard-open .q1-live {
   border: 1.5px solid var(--field-border); border-radius: var(--r-md); background: var(--surface); color: var(--text); text-align: left; cursor: pointer;
   transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
+.q1-opt { text-decoration: none; }
 .q1-opt:active { transform: translateY(1px); background: var(--surface-2); }
 .q1-opt:disabled { background: var(--surface-2); border-color: var(--line); color: var(--text-3); cursor: not-allowed; transform: none; }
 .q1-opt--primary { border-color: var(--cta); background: var(--cta-soft); }

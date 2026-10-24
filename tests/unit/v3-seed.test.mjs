@@ -7,7 +7,7 @@ import { setClock, now } from '../../js/core/clock.js';
 import { addDays, stampDay, toStamp } from '../../js/core/dates.js';
 import { buildSeed } from '../../js/core/seed.js';
 import {
-  quoteStatus, quoteTotal, selectCostPerLead, selectLeadSources, selectPipeline, selectQuoteStats, selectSla
+  quoteFixedLines, quoteStatus, quoteTotal, selectCostPerLead, selectLeadSources, selectPipeline, selectQuoteStats, selectSla
 } from '../../js/core/selectors.js';
 
 afterEach(() => setClock(null));
@@ -86,6 +86,9 @@ test('the quotes and bookings are consistent with each other', () => {
     assert.ok(['ZAPPI', 'OHME', 'SYNC'].includes(q.brand));
     assert.ok(q.lines[0].label.includes(q.brand));
     assert.equal(q.notes, makeDefaultSettings().quoteDefaults.notes);
+    assert.ok(q.lines.every((l) => typeof l.optional === 'boolean'), `${id}: every seeded line says whether it is a possible extra`);
+    assert.ok(quoteFixedLines(q).every((l) => !/consumer unit/i.test(l.label)), `${id}: no optional line inside a fixed total`);
+    assert.equal(quoteTotal(q), quoteFixedLines(q).reduce((t, l) => t + l.qty * l.unitPrice, 0));
     if (q.status === 'accepted') {
       const install = byId.get(q.installBookingId);
       assert.ok(install, `${id} has its install`);
@@ -106,6 +109,23 @@ test('the quotes and bookings are consistent with each other', () => {
   assert.ok(installs.every((b) => b.quoteId && seed.quotes[b.quoteId]), 'every seeded install has a quote');
   const money = installs.filter((b) => b.status === 'done');
   assert.deepEqual([money.length, money.filter((b) => b.paid).length, money.filter((b) => !b.paid).length], [6, 4, 2]);
+});
+
+test('two seeded quotes carry the consumer unit upgrade as a possible extra: it is listed, flagged and never in their totals', () => {
+  const { seed } = seedAt();
+  const withExtra = Object.values(seed.quotes).filter((q) => q.lines.some((l) => l.optional));
+  assert.deepEqual(withExtra.map((q) => q.customerName).sort(), ['Eimear Toner', 'Majella Quigg']);
+  for (const q of withExtra) {
+    const extra = q.lines.filter((l) => l.optional);
+    assert.deepEqual(extra.map((l) => [l.label, l.unitPrice]), [['Consumer unit upgrade (if required)', 420]]);
+    assert.equal(quoteTotal(q), q.lines.filter((l) => !l.optional).reduce((t, l) => t + l.qty * l.unitPrice, 0));
+  }
+  const sent = withExtra.find((q) => q.customerName === 'Majella Quigg');
+  assert.equal(sent.status, 'sent');
+  assert.equal(quoteTotal(sent), 799 + 450 + 180 + 85, 'charger, installation, circuit and testing: 1,514');
+  const padraig = Object.values(seed.quotes).find((q) => q.customerName === 'Padraig Quinn');
+  assert.ok(padraig.lines.every((l) => !l.optional), 'an install that is booked has a plain fixed quote');
+  assert.equal(quoteTotal(padraig), 1514);
 });
 
 test('chronology: every step of every journey happens after the one before, and nothing happens in the future', () => {
@@ -193,7 +213,7 @@ test('the seed messages include the v3 kinds, in both channels, all clean text, 
     assert.ok(m.seed === true && m.simulated === true, m.id);
     assert.ok(!/[{}]|!/.test(m.body) && !/\p{Extended_Pictographic}/u.test(m.body), m.id);
     assert.ok(!m.body.split('\n').some((l) => l.trim() === ''), m.id);
-    if (m.kind === 'customer_quote_sent') assert.match(m.body, /quote\.html#q=Q-EL-\d{4}/, m.id);
+    if (m.kind === 'customer_quote_sent') assert.match(m.body, /quote\.html#d=[A-Za-z0-9_-]{100,}/, m.id);
   }
   const tenDaysAgo = '2026-10-13T20:30';
   const sentMessages = seed.messages.filter((m) => m.kind === 'customer_quote_sent');

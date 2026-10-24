@@ -1,6 +1,6 @@
 // js/ui/wizard.js: Wizard, a stepper with progress, Back/Next, validation callbacks and focus management.
 // Owner: B3 (V3 UI kit; contract in docs/V3-UI.md)
-import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Icon } from './display.js';
 import { Button } from './button.js';
 import { cx, failureMessage } from './util.js';
@@ -26,7 +26,7 @@ function verdict(res) {
  */
 export function Wizard({
   title, steps = [], step, onStepChange, onFinish, finishLabel = 'Finish', onCancel,
-  backLabel = 'Back', cancelLabel = 'Cancel', busy, testid = 'wizard', class: cls, ...rest
+  backLabel = 'Back', cancelLabel = 'Cancel', busy, aside, testid = 'wizard', class: cls, ...rest
 }) {
   const count = steps.length;
   const controlled = step !== undefined && step !== null;
@@ -55,6 +55,37 @@ export function Wizard({
     }
     if (headingRef.current) { try { headingRef.current.focus({ preventScroll: true }); } catch (e) { headingRef.current.focus(); } }
   }, [index]);
+
+  // T11, phones: the page's own title block is folded away (css), so the single top row names the flow with the page title (read from the
+  // page's <h1>, which stays in the document for screen readers). Shown as a small caption; the <h1> remains the accessible name.
+  const [topic, setTopic] = useState('');
+  useEffect(() => {
+    const root = rootRef.current;
+    const page = root && root.closest ? root.closest('.db-page') : null;
+    const h1 = page ? page.querySelector('[data-testid="view-title"]') : null;
+    const text = h1 ? String(h1.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    setTopic((prev) => (prev === text ? prev : text));
+  });
+
+  // T11, phones: the step title is one line at 28px where it fits, and steps down a pixel at a time (to 20px) where it does not.
+  useLayoutEffect(() => {
+    const el = headingRef.current;
+    if (!el) return undefined;
+    const fit = () => {
+      el.style.fontSize = '';
+      let narrow = false;
+      try { narrow = window.matchMedia('(max-width: 767px)').matches; } catch (e) { narrow = false; }
+      if (!narrow) return;
+      let size = parseFloat(getComputedStyle(el).fontSize) || 28;
+      let guard = 0;
+      while (el.scrollWidth > el.clientWidth + 1 && size > 20 && guard < 12) { size -= 1; guard += 1; el.style.fontSize = `${size}px`; }
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    let alive = true;
+    try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (alive) fit(); }); } catch (e) { /* no font API */ }
+    return () => { alive = false; window.removeEventListener('resize', fit); };
+  }, [index, count]);
 
   if (!cur) return null;
   const isFirst = index === 0;
@@ -92,6 +123,8 @@ export function Wizard({
     let res = true;
     try { res = cur.validate ? await cur.validate(ctx) : true; } catch (e) { res = GENERIC; }
     if (!alive.current) return;
+    // { ok: false, inline: true }: the step already shows the problem next to its field, so the wizard only stops and moves the cursor there (no second message).
+    if (res && typeof res === 'object' && res.ok === false && res.inline) { setWorking(false); showError(''); return; }
     const message = verdict(res);
     if (message) { setWorking(false); showError(message); return; }
     if (!isLast) { setWorking(false); goTo(index + 1); return; }
@@ -125,8 +158,18 @@ export function Wizard({
   const showBack = !isFirst || !!onCancel;
 
   return html`<section class=${cx('ui-wizard', cls)} ref=${rootRef} aria-label=${title || 'Set-up steps'} data-testid=${testid} onKeyDown=${onKeyDown} ...${rest}>
-    <div class="ui-wizard__head">
-      <p class="ui-wizard__count" data-testid=${`${testid}-count`}>${title ? html`<span class="ui-wizard__title">${title}</span><span class="ui-wizard__dot" aria-hidden="true"> · </span>` : null}<span>${stepText}</span></p>
+    <div class=${cx('ui-wizard__head', aside && 'ui-wizard__head--aside')}>
+      <div class="ui-wizard__top">
+        ${showBack ? html`<button type="button" class="ui-icon-btn ui-wizard__topbtn ui-wizard__topback" aria-label=${isFirst ? cancelLabel : backLabel} onClick=${back} disabled=${loading} data-testid=${`${testid}-top-back`}><${Icon} name="arrow-left" size=${24} /></button>` : null}
+        <div class="ui-wizard__titles">
+          ${topic ? html`<p class="ui-wizard__topic" aria-hidden="true">${topic}</p>` : null}
+          <div class="ui-wizard__steprow">
+            <p class="ui-wizard__count" data-testid=${`${testid}-count`}>${title ? html`<span class="ui-wizard__title">${title}</span><span class="ui-wizard__dot" aria-hidden="true"> · </span>` : null}<span>${stepText}</span></p>
+            ${aside ? html`<div class="ui-wizard__aside">${aside}</div>` : null}
+          </div>
+        </div>
+        ${onCancel ? html`<button type="button" class="ui-icon-btn ui-wizard__topbtn ui-wizard__close" aria-label=${cancelLabel} onClick=${onCancel} disabled=${loading} data-testid=${`${testid}-close`}><${Icon} name="x" size=${24} /></button>` : null}
+      </div>
       <div class="ui-wizard__bar" role="progressbar" aria-label=${title ? `${title} progress` : 'Progress'} aria-valuemin="1" aria-valuemax=${count} aria-valuenow=${index + 1} aria-valuetext=${`${stepText}: ${cur.title}`} data-testid=${`${testid}-progress`}>
         <span class="ui-wizard__fill" style=${{ '--p': pct / 100 }}></span>
       </div>
@@ -145,7 +188,9 @@ export function Wizard({
     </div>
     <div class="ui-wizard__error" role="alert" aria-atomic="true">${error ? html`<p class="ui-wizard__error-text" tabindex="-1" ref=${errorRef} data-testid=${`${testid}-error`}><${Icon} name="circle-alert" size=${18} /><span>${error}</span></p>` : null}</div>
     <div class="ui-wizard__footer">
-      ${showBack ? html`<${Button} variant=${isFirst ? 'ghost' : 'secondary'} size="lg" icon=${isFirst ? undefined : 'arrow-left'} onClick=${back} disabled=${loading} data-testid=${`${testid}-back`}>${isFirst ? cancelLabel : backLabel}<//>` : null}
+      ${showBack ? (isFirst
+        ? html`<${Button} variant="ghost" size="lg" onClick=${back} disabled=${loading} data-testid=${`${testid}-back`}>${cancelLabel}<//>`
+        : html`<${Button} variant="secondary" size="lg" icon="arrow-left" class="ui-wizard__back" aria-label=${backLabel} onClick=${back} disabled=${loading} data-testid=${`${testid}-back`} />`) : null}
       <${Button} variant="primary" size="lg" class="ui-wizard__next" iconRight=${isLast ? 'check' : 'arrow-right'} onClick=${next} loading=${loading} disabled=${cur.canNext === false} data-testid=${`${testid}-next`}>${isLast ? (cur.nextLabel || finishLabel) : (cur.nextLabel || 'Next')}<//>
     </div>
   </section>`;

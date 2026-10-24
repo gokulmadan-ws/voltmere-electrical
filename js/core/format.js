@@ -1,12 +1,15 @@
 // js/core/format.js: money, phone, postcode, validators, ids and small text helpers
 // Owner: WP1
 
-/** '£195', '£12.50' when not a whole number, '-£5' when negative. */
+const GBP_WHOLE = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true });
+const GBP_PENCE = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+
+/** '£195', '£14,366' (thousands grouped), '£12.50' when not a whole number, '-£5' when negative, '£0' when not a number. */
 export function gbp(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return '£0';
   const abs = Math.abs(Math.round(num * 100) / 100);
-  const text = Number.isInteger(abs) ? String(abs) : abs.toFixed(2);
+  const text = Number.isInteger(abs) ? GBP_WHOLE.format(abs) : GBP_PENCE.format(abs);
   return `${num < 0 && abs !== 0 ? '-' : ''}£${text}`;
 }
 

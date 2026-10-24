@@ -2,10 +2,10 @@
 // Owner: E3
 import { html, useState } from '../../vendor/preact-htm.js';
 import {
-  Banner, Button, Card, Chip, CopyField, Field, Icon, Input, PageHeader, QrCode, Select, copyText, pageHref, pageTarget,
+  Banner, Button, Card, Chip, CopyField, Field, Icon, Input, ListRow, PageHeader, QrCode, Select, copyText, pageHref, pageTarget,
   qrSvgMarkup, saveFile, toast, useStore
 } from '../../ui/index.js';
-import { selectBrand, selectImageUrl } from '../../core/selectors.js';
+import { selectBrand, selectImageUrl, selectQuoteList } from '../../core/selectors.js';
 import { LEAD_SOURCE_LABELS, SITE_BASE_URL } from '../../core/config.js';
 import { normaliseLeadSource } from '../../core/utm.js';
 import { waShareLink } from '../../core/messages.js';
@@ -37,6 +37,7 @@ export function trackedLink({ source, medium, campaign }) {
   return parts.length ? `${SITE_URL}?${parts.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}` : SITE_URL;
 }
 
+/** A link as people say it out loud: no http(s):// in front. Display only; hrefs and Copy keep the full address. */
 const shortUrl = (url) => url.replace(/^https?:\/\//, '');
 
 async function copyLink(url, what) {
@@ -48,10 +49,13 @@ async function copyLink(url, what) {
 
 function LinkCard({ brand, domain }) {
   const text = `Get a home EV charger quote from ${brand.name}: ${SITE_URL}`;
+  const live = !!domain && domain.status === 'live' && !!domain.domain;
   return html`<${Card} as="section" class="sh-card" aria-labelledby="sh-link-title" data-testid="share-link-card">
     <h2 class="sh-card__title" id="sh-link-title">Your enquiry page</h2>
     <p class="sh-card__text">This is the page customers answer your six questions on. Every enquiry lands in your diary as a pencilled-in survey.</p>
-    <${CopyField} label="Page address" value=${SITE_URL} testid="share-url" hint="The prototype address. It changes when your own domain goes live." />
+    <${CopyField} label="Page address" value=${SITE_URL} display=${live ? domain.domain : shortUrl(SITE_URL)} testid="share-url"
+      onCopy=${(ok) => toast({ message: ok ? 'Page link copied' : 'Could not copy. Select the link and copy it by hand.', tone: ok ? 'default' : 'danger' })}
+      hint=${live ? 'Shown with your own address (simulated). Copy and Open still use the prototype link until a real domain points at the site.' : 'The prototype address. It changes when your own domain goes live.'} />
     <div class="sh-actions">
       <${Button} icon="external-link" href=${pageHref('index.html')} target=${pageTarget('index.html')} data-testid="share-open-site">Open the page<//>
       <${Button} icon="send" href=${waShareLink(text)} data-testid="share-send-whatsapp">Send on WhatsApp<//>
@@ -60,6 +64,42 @@ function LinkCard({ brand, domain }) {
       ? html`<p class="sh-card__note" data-testid="share-domain-note"><${Icon} name="globe" size=${16} /><span>${`${domain.domain} is connected (simulated). These links still use the prototype address until a real domain points at the site.`}</span></p>`
       : html`<p class="sh-card__note"><${Icon} name="globe" size=${16} /><span>Want your own address? <a class="ui-link ui-link--inline" href=${routeHref('connections-domain')}>Set up your domain</a>.</span></p>`}
   <//>`;
+}
+
+// ---------- 1b. see it as a customer sees it (the clean preview, js/ui/clean.js) ----------
+
+/**
+ * A page address that turns the clean preview on (`on`) or off, keeping the ?now= clock override and any #hash:
+ * 'index.html?now=...&clean=1', 'quote.html?clean=1#q=Q-EL-1043&preview=1'. The query string (not the hash) carries it,
+ * so the quote page's address tidy-up cannot drop it. The page saves the choice, so it carries across all three pages.
+ */
+export function cleanHref(file, on, hash = '') {
+  const base = pageHref(file);
+  return `${base}${base.includes('?') ? '&' : '?'}clean=${on ? 1 : 0}${hash}`;
+}
+
+function CustomerViewCard({ state }) {
+  // The newest quote a customer could actually open (a draft shows them a "not ready" page, so it is skipped).
+  const sample = selectQuoteList(state).find((r) => r.status !== 'draft') || null;
+  const first = sample ? String(sample.customerName || '').trim().split(/\s+/)[0] : '';
+  const quoteHash = sample ? `#q=${encodeURIComponent(sample.quote.id)}&preview=1` : '';
+  const external = (name) => html`<${Icon} name=${name} size=${20} class="ui-row__chev" />`;
+  return html`<section class="sh-seeit sh-noprint" aria-label="See your pages as a customer sees them" data-testid="share-clean-card">
+    <ul class="db-list sh-seeit__list" data-testid="share-clean-list">
+      <${ListRow} as="li" testid="share-clean-open" href=${cleanHref('index.html', true)} target=${pageTarget('index.html')}
+        leading=${html`<span class="sh-seeit__icon"><${Icon} name="eye" size=${22} /></span>`}
+        title="See it as a customer sees it"
+        subtitle="Your enquiry page, without the prototype labels"
+        chevron=${false} trailing=${external('external-link')} />
+      ${sample ? html`<${ListRow} as="li" testid="share-clean-quote" href=${cleanHref('quote.html', true, quoteHash)} target=${pageTarget('quote.html')}
+        leading=${html`<span class="sh-seeit__icon"><${Icon} name="file-text" size=${22} /></span>`}
+        title="See a quote the same way"
+        subtitle=${first ? `${sample.quote.id} for ${first}. A preview, so it is not counted as opened.` : `${sample.quote.id}. A preview, so it is not counted as opened.`}
+        chevron=${false} trailing=${external('external-link')} />` : null}
+    </ul>
+    <p class="sh-card__note sh-seeit__note" data-testid="share-clean-note"><${Icon} name="info" size=${16} /><span>Hides the prototype labels so you can judge the real feel. Nothing is sent.</span></p>
+    <a class="ui-link sh-seeit__back" href=${cleanHref('index.html', false)} target=${pageTarget('index.html')} data-testid="share-clean-off">Back to prototype labels</a>
+  </section>`;
 }
 
 // ---------- 2. campaign links (UTM builder) ----------
@@ -98,7 +138,8 @@ function Builder() {
         <${Input} id="utm-campaign" value=${fields.campaign} onInput=${set('campaign')} onBlur=${tidy('campaign')} maxlength="40" autocapitalize="none" spellcheck=${false} data-testid="share-utm-campaign" />
       <//>
     </div>
-    <${CopyField} label="Your tracked link" value=${link} multiline testid="utm-link" />
+    <${CopyField} label="Your tracked link" value=${link} display=${shortUrl(link)} multiline clamp=${2} testid="utm-link"
+      onCopy=${(ok) => toast({ message: ok ? 'Tracked link copied' : 'Could not copy. Select the link and copy it by hand.', tone: ok ? 'default' : 'danger' })} />
     <p class="sh-counts" data-testid="share-counts-as"><${Icon} name="tag" size=${16} /><span>${`Counts as ${counts} in your lead sources.`}</span></p>
     <div class="sh-actions">
       <${Button} icon="external-link" href=${link} target=${pageTarget('index.html')} data-testid="share-utm-open">Try the link<//>
@@ -112,9 +153,9 @@ function Builder() {
         return html`<li class="sh-ready__item" key=${p.id}>
           <span class="sh-ready__text">
             <span class="sh-ready__label"><${Icon} name=${p.icon} size=${16} />${p.label}</span>
-            <span class="sh-ready__url u-mono">${shortUrl(url)}</span>
+            <span class="sh-ready__url u-mono" title=${shortUrl(url)}>${[p.source, p.medium].join(' · ')}</span>
           </span>
-          <${Button} size="sm" icon="copy" onClick=${() => copyLink(url, `${p.label} link`)} aria-label=${`Copy the ${p.label} link`} data-testid=${`share-copy-${p.id}`}>Copy<//>
+          <${Button} size="sm" icon="copy" class="sh-ready__copy" onClick=${() => copyLink(url, `${p.label} link`)} aria-label=${`Copy the ${p.label} link`} data-testid=${`share-copy-${p.id}`}>Copy<//>
         </li>`;
       })}
     </ul>
@@ -188,6 +229,7 @@ export default function ShareView() {
     <${PageHeader} title="Share and promote" subtitle="Get your page in front of more people, and see which ads work." />
     <div class="sh-stack">
       <${LinkCard} brand=${brand} domain=${domain} />
+      <${CustomerViewCard} state=${state} />
       <${QrCard} state=${state} brand=${brand} />
       <${Builder} />
       <${Banner} tone="info" icon="trending-up" class="sh-noprint">Enquiries from these links show their source on each booking and in your lead sources.<//>

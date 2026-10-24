@@ -1,4 +1,4 @@
-// js/quote/install-ics.js: the calendar file for the install day, built on core's buildIcs and labelled provisional while it is only pencilled in.
+// js/quote/install-ics.js: the calendar file for the install day, built on core's buildIcs and labelled "To be confirmed" until Daniel has confirmed the day.
 // Owner: Q2 (customer quote page)
 import { buildIcs, icsFilename } from '../core/ics.js';
 import { WINDOWS } from '../core/config.js';
@@ -30,12 +30,12 @@ function fold(line) {
 
 const esc = (text) => String(text === null || text === undefined ? '' : text).replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 
-/** True while the day is only pencilled in (the owner has not confirmed it): its calendar entry must say so. */
+/** True while the owner has not confirmed the day: its calendar entry must say so. */
 export const isProvisionalInstall = (booking) => !!booking && booking.status === 'new';
 
 /**
- * The .ics text for the install day. A confirmed day is core's file with a clearer title; a pencilled-in one keeps core's
- * STATUS:TENTATIVE and carries "PROVISIONAL" in the title and the notes, so nobody plans around a day that has not been agreed.
+ * The .ics text for the install day. A confirmed day is core's file with a clearer title; a day still waiting for the owner keeps core's
+ * STATUS:TENTATIVE and carries "To be confirmed" in the title and the notes, so nobody plans around a day that has not been agreed.
  */
 export function installIcs(booking, settings, quote) {
   const base = buildIcs(booking, settings);
@@ -44,14 +44,14 @@ export function installIcs(booking, settings, quote) {
   const ids = bookingWindowIds(booking);
   const arrive = ids.length ? WINDOWS[ids[0]].arrive : '';
   const notes = [
-    provisional ? `PROVISIONAL: pencilled in, not confirmed until ${biz.ownerFirstName} confirms it.` : 'Confirmed.',
+    provisional ? `TO BE CONFIRMED: ${biz.ownerFirstName} has not confirmed this day yet.` : 'Confirmed.',
     arrive ? `Home EV charger installation, arriving ${arrive}.` : 'Home EV charger installation.',
     quote ? `Quote ${quote.id}.` : '',
     `Ref ${booking.ref}.`,
     `To change or cancel call ${biz.phone}.`
   ].filter(Boolean).join('\n');
   const lines = base.replace(/\r\n[ \t]/g, '').split('\r\n').map((line) => {
-    if (line.startsWith('SUMMARY:')) return `SUMMARY:${esc(`${provisional ? 'PROVISIONAL: ' : ''}EV charger installation, ${biz.name}`)}`;
+    if (line.startsWith('SUMMARY:')) return `SUMMARY:${esc(`${provisional ? 'To be confirmed: ' : ''}EV charger installation, ${biz.name}`)}`;
     if (line.startsWith('DESCRIPTION:')) return `DESCRIPTION:${esc(notes)}`;
     return line;
   });

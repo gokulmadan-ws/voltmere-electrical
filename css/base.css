@@ -117,6 +117,15 @@ h1[tabindex="-1"]:focus, h1[tabindex="-1"]:focus-visible,
 /* User-entered text can be any length: it must wrap, never push the page wider. */
 .u-wrap { overflow-wrap: anywhere; }
 
+/* ---- Clean preview (opt-in, ?clean=1; js/ui/clean.js sets <html data-clean="1">) ----
+   Hides the prototype-only furniture so the real feel can be judged. Honest "simulated" labelling is still the default:
+   nothing here touches the dashboard's own SimBanner / SampleTag labels or the Connections wizards. */
+[data-clean="1"] [data-proto] { display: none !important; }
+/* The landing's wrapper around the (now empty) strip must not leave an empty "Prototype notice" landmark behind. */
+[data-clean="1"] aside[aria-label="Prototype notice"]:empty { display: none; }
+/* The dashboard sizes its content area as 100dvh minus the strip: with no strip that is zero. */
+:root[data-clean="1"] { --h-strip: 0px; }
+
 /* ---- Reduced motion (4.3): exact rule from the contract ---- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

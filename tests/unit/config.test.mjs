@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ENQUIRY_ANSWER_HEADINGS, ENQUIRY_ANSWER_KEYS, ENQUIRY_STEPS, PROMISES, SCHEMA_VERSION, STORAGE_KEYS, answerLabel, answersLine,
-  makeDefaultSettings, normaliseAnswers
+  DEFAULT_TEMPLATES, DEFAULT_UNSCHEDULED_TEMPLATES, ENQUIRY_ANSWER_HEADINGS, ENQUIRY_ANSWER_KEYS, ENQUIRY_STEPS, PROMISES, SCHEMA_VERSION, STORAGE_KEYS, answerLabel, answersLine,
+  makeDefaultSettings, makeDefaultQuoteItems, normaliseAnswers
 } from '../../js/core/config.js';
 import { servicePriceLabel } from '../../js/core/selectors.js';
 
@@ -72,13 +72,13 @@ test('services: ev_quote first and the only one on the website; ev is quote-led;
   assert.ok(!/£|\d/.test(servicePriceLabel(ev)), 'no number is shown for the installation');
 });
 
-test('ENQUIRY_STEPS: the four choice questions, verbatim from his funnel, steps 2 to 5 in order', () => {
+test('ENQUIRY_STEPS: the four choice questions (his funnel, step 5 reworded for tenants), steps 2 to 5 in order', () => {
   assert.deepEqual(ENQUIRY_STEPS.map((s) => [s.key, s.step]), [['parking', 2], ['vehicle', 3], ['timing', 4], ['permission', 5]]);
   assert.deepEqual(ENQUIRY_STEPS.map((s) => s.title), [
     'Where would you normally park to charge?',
     'Do you already have your electric or plug-in hybrid car?',
     'When would you like your charger installed?',
-    'Can you authorise installation work at the property?'
+    "Do you own the property, or have the owner's permission?"
   ]);
   assert.equal(ENQUIRY_STEPS[0].note, 'Whatever you pick, we will check that a safe cable route and parking position can be arranged.');
   assert.equal(ENQUIRY_STEPS[1].note, '');
@@ -95,7 +95,7 @@ test('ENQUIRY_STEPS: the four choice questions, verbatim from his funnel, steps 
   assert.deepEqual(ENQUIRY_STEPS[2].options.map((o) => [o.value, o.label]), [
     ['asap', 'As soon as possible'], ['month', 'Within the next month'], ['one_to_three', 'Within 1 to 3 months'], ['researching', 'Just researching']
   ]);
-  assert.deepEqual(ENQUIRY_STEPS[3].options.map((o) => [o.value, o.label]), [['yes', 'Yes'], ['landlord', 'I need landlord or freeholder approval'], ['unsure', "I'm not sure"]]);
+  assert.deepEqual(ENQUIRY_STEPS[3].options.map((o) => [o.value, o.label]), [['yes', 'Yes'], ['landlord', 'I rent or lease and need permission'], ['unsure', 'Not sure']]);
   for (const step of ENQUIRY_STEPS) for (const o of step.options) assert.ok(!/^[A-E][.)]?\s/.test(o.label), 'no A/B/C letter in a label');
   assert.deepEqual(ENQUIRY_ANSWER_KEYS, ['postcode', 'parking', 'vehicle', 'timing', 'permission']);
   assert.deepEqual(Object.keys(ENQUIRY_ANSWER_HEADINGS), ENQUIRY_ANSWER_KEYS);
@@ -106,7 +106,7 @@ test('answerLabel: the verbatim label, the postcode itself, and an empty string 
   assert.equal(answerLabel('parking', 'other'), 'Other or not sure');
   assert.equal(answerLabel('vehicle', 'ordered'), "It's ordered or arriving soon");
   assert.equal(answerLabel('timing', 'one_to_three'), 'Within 1 to 3 months');
-  assert.equal(answerLabel('permission', 'landlord'), 'I need landlord or freeholder approval');
+  assert.equal(answerLabel('permission', 'landlord'), 'I rent or lease and need permission');
   assert.equal(answerLabel('postcode', 'BT9 6QP'), 'BT9 6QP');
   assert.equal(answerLabel('postcode', undefined), '');
   assert.equal(answerLabel('parking', 'moon'), '');
@@ -149,4 +149,24 @@ test('answersLine: one compact line for the owner alert', () => {
   assert.equal(answersLine(undefined), '');
   assert.equal(answersLine(null), '');
   assert.ok(!answersLine({ parking: 'driveway', vehicle: 'have', timing: 'asap', permission: 'yes' }).includes('!'));
+});
+
+test('the default content says only what he has said: the sample quote catalogue and terms carry no product, guarantee or payment wording', () => {
+  const settings = makeDefaultSettings();
+  assert.equal(settings.quoteDefaults.notes, 'Sample terms: Daniel sets his own.');
+  const claim = /guarantee|warranty|year|kw\b|smart|app\b|pay\b|payment|deposit|card|cash|transfer|invoice|interest|insured|certified|\bgrant\b|\bfree\b/i;
+  for (const item of makeDefaultQuoteItems()) {
+    assert.ok(!item.detail, `${item.id} has no detail text`);
+    assert.ok(!claim.test(item.label.replace(/Testing and certification/, '')), `${item.id}: "${item.label}" reads as a plain line item`);
+  }
+  assert.ok(!claim.test(settings.quoteDefaults.notes));
+  assert.deepEqual(makeDefaultQuoteItems().filter((i) => i.optional).map((i) => i.label), ['Consumer unit upgrade (if required)']);
+});
+
+test('the default messages a customer receives use his words: no pencilled or provisional status, no payment terms or methods he never wrote', () => {
+  const vocabulary = /pencil|provisional|pay after|payable|bank transfer|by card|cash\b|guarantee|free survey/i;
+  const customerKinds = Object.keys(DEFAULT_TEMPLATES).filter((k) => k.startsWith('customer_'));
+  assert.ok(customerKinds.length >= 15);
+  for (const kind of customerKinds) assert.ok(!vocabulary.test(DEFAULT_TEMPLATES[kind]), `${kind}: ${DEFAULT_TEMPLATES[kind]}`);
+  for (const kind of Object.keys(DEFAULT_UNSCHEDULED_TEMPLATES).filter((k) => k.startsWith('customer_'))) assert.ok(!vocabulary.test(DEFAULT_UNSCHEDULED_TEMPLATES[kind]), kind);
 });

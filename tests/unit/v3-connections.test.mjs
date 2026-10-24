@@ -11,7 +11,7 @@ import * as store from '../../js/core/store.js';
 
 const {
   initStore, getState, subscribe, undo, setConnection, connectWhatsApp, submitWhatsAppTemplates, connectGoogle, disconnect, startDomainSetup, checkDomain,
-  rotateWebhookSecret, sendTestEvent, settleConnections, updateSettings
+  rotateWebhookSecret, sendTestEvent, settleConnections, updateSettings, fastForwardWhatsAppTemplates
 } = store;
 
 const FIXTURE = new Date(2026, 9, 23, 20, 30, 0);
@@ -113,7 +113,7 @@ test('WhatsApp: the number is validated and can be connected straight from disco
   assert.equal(setConnection('whatsapp', { status: 'disconnected' }).connection.status, 'disconnected', 'cancelling a verification is allowed');
 });
 
-test('submitWhatsAppTemplates: needs a connected number; templates go pending, then approved by the clock', () => {
+test('submitWhatsAppTemplates: needs a connected number; templates go pending and stay pending for two days, as with Meta', () => {
   assert.equal(submitWhatsAppTemplates().reason, 'not_connected');
   connectWhatsApp({ number: '07885 496800', code: '482913' });
   const sub = submitWhatsAppTemplates();
@@ -122,11 +122,14 @@ test('submitWhatsAppTemplates: needs a connected number; templates go pending, t
   assert.ok(Object.values(sub.connection.templates).every((s) => s === 'pending'));
   assert.equal(sub.connection.templatesSubmittedAt, '2026-10-23T20:30:00');
   assert.equal(summary('whatsapp').label, 'Templates pending');
-  at(5);
-  assert.deepEqual(settleConnections(), { ok: true, changed: false }, 'one second short of 6');
+  at(30);
+  assert.deepEqual(settleConnections(), { ok: true, changed: false }, 'half a minute later they are still waiting');
   assert.ok(Object.values(conn('whatsapp').templates).every((s) => s === 'pending'));
   assert.equal(summary('whatsapp').label, 'Templates pending');
-  at(6);
+  const t0 = new Date(2026, 9, 23, 20, 30, 0).getTime(); // real elapsed time: the clocks change on 25 October
+  setClock(new Date(t0 + (2 * 24 * 3600 - 1) * 1000));
+  assert.deepEqual(settleConnections(), { ok: true, changed: false }, 'one second short of two days');
+  setClock(new Date(t0 + 2 * 24 * 3600 * 1000));
   assert.equal(summary('whatsapp').label, 'Connected', 'the summary already shows it settled');
   assert.ok(Object.values(conn('whatsapp').templates).every((s) => s === 'pending'), 'but nothing was written yet');
   const rev = getState().meta.rev;
@@ -139,18 +142,18 @@ test('submitWhatsAppTemplates: needs a connected number; templates go pending, t
   assert.ok(Object.values(conn('whatsapp').templates).every((s) => s === 'approved'));
 });
 
-test('submitWhatsAppTemplates arms a short real timer, so a view subscribed to the store updates itself even under a frozen clock', () => {
-  mock.timers.enable({ apis: ['setTimeout'] });
+test('fastForwardWhatsAppTemplates: the prototype button approves every pending template at once, and a subscribed view sees it', () => {
   connectWhatsApp({ number: '07885 496800', code: '482913' });
   const seen = [];
   const off = subscribe((s) => seen.push(Object.values(s.settings.connections.whatsapp.templates).filter((x) => x === 'approved').length));
   submitWhatsAppTemplates();
-  assert.deepEqual(seen, [0]);
-  mock.timers.tick(2999);
-  assert.deepEqual(seen, [0], 'not yet');
-  mock.timers.tick(1);
-  assert.deepEqual(seen, [0, WHATSAPP_TEMPLATE_KINDS.length], 'about 3 seconds of real time later every template is approved');
+  assert.deepEqual(seen, [0], 'submitting approves nothing, not even after a few seconds of clock time');
+  at(10);
+  assert.deepEqual(settleConnections(), { ok: true, changed: false });
+  assert.equal(fastForwardWhatsAppTemplates().ok, true);
+  assert.deepEqual(seen, [0, WHATSAPP_TEMPLATE_KINDS.length], 'every template is approved by the button');
   assert.equal(summary('whatsapp').label, 'Connected');
+  assert.deepEqual(fastForwardWhatsAppTemplates(), { ok: true, changed: false }, 'idempotent');
   off();
 });
 
@@ -413,17 +416,20 @@ test('sendTestEvent(whatsapp or email): needs the connection; logs a clearly sim
 
 test('the hub summary follows every step of the demo: off, pending, connected', () => {
   const states = () => selectConnectionsSummary(getState()).map((r) => r.status).join(',');
-  assert.equal(states(), 'off,connected,off,off,off,off');
+  assert.equal(states(), 'off,pending,off,off,off,off', 'the webhook is on but has not had an enquiry yet, so nothing counts as set up');
   startDomainSetup('www.180electrical.co.uk');
   connectWhatsApp({ number: '07885 496800', code: '482913' });
   connectGoogle('calendar', { account: 'daniel@gmail.example' });
   connectGoogle('email', { account: 'daniel@gmail.example' });
   setConnection('tracking', { metaPixelId: '1234567890' });
-  assert.equal(states(), 'pending,connected,connected,pending,connected,connected');
+  assert.equal(states(), 'pending,pending,connected,pending,connected,connected');
   checkDomain();
   checkDomain();
   submitWhatsAppTemplates();
   at(7);
+  assert.equal(states(), 'connected,pending,connected,pending,connected,connected', 'the templates wait for Meta and the webhook for its first enquiry');
+  fastForwardWhatsAppTemplates();
+  sendTestEvent('webhook');
   assert.equal(states(), 'connected,connected,connected,connected,connected,connected');
   for (const key of ['domain', 'webhook', 'tracking', 'whatsapp', 'calendar', 'email']) disconnect(key);
   assert.equal(states(), 'off,off,off,off,off,off');

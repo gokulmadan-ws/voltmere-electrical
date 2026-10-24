@@ -1,4 +1,4 @@
-// js/booking/visit-ics.js: the calendar file for a pencilled-in survey visit, labelled provisional (built on core's buildIcs).
+// js/booking/visit-ics.js: the calendar file for a visit, labelled as a suggestion until Daniel confirms it (built on core's buildIcs).
 // Owner: D3
 import { buildIcs, icsFilename } from '../core/ics.js';
 import { WINDOWS } from '../core/config.js';
@@ -30,12 +30,12 @@ function fold(line) {
 
 const esc = (text) => String(text === null || text === undefined ? '' : text).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 
-/** True while the visit is only pencilled in (the owner has not confirmed it): its calendar entry must say so. */
+/** True while the visit is only a suggested time (the owner has not confirmed it): its calendar entry must say so. */
 export const isProvisionalVisit = (booking) => !!booking && booking.status === 'new';
 
 /**
- * The .ics text for the survey visit. A confirmed visit is core's file as it is (STATUS:CONFIRMED). A pencilled-in one keeps core's
- * STATUS:TENTATIVE and gets "PROVISIONAL" in the title and the notes, so nobody plans around a time that has not been agreed.
+ * The .ics text for the visit. A confirmed visit is core's file as it is (STATUS:CONFIRMED). A suggested one keeps core's
+ * STATUS:TENTATIVE and says "Suggested time, not confirmed" in the title and the notes, so nobody plans around a time that has not been agreed.
  */
 export function visitIcs(booking, settings) {
   const base = buildIcs(booking, settings);
@@ -44,13 +44,13 @@ export function visitIcs(booking, settings) {
   const ids = bookingWindowIds(booking);
   const arrive = ids.length ? WINDOWS[ids[0]].arrive : '';
   const notes = [
-    `PROVISIONAL: pencilled in, not confirmed until ${biz.ownerFirstName} confirms it.`,
-    arrive ? `Free survey visit, arriving ${arrive}.` : 'Free survey visit.',
+    `Suggested time, not confirmed until ${biz.ownerFirstName} confirms it.`,
+    arrive ? `Visit from ${biz.ownerFirstName}, arriving ${arrive}.` : `Visit from ${biz.ownerFirstName}.`,
     `Ref ${booking.ref}.`,
     `To change or cancel call ${biz.phone}.`
   ].join('\n');
   const lines = base.replace(/\r\n[ \t]/g, '').split('\r\n').map((line) => {
-    if (line.startsWith('SUMMARY:')) return `SUMMARY:${esc(`PROVISIONAL: free survey visit, ${biz.name}`)}`;
+    if (line.startsWith('SUMMARY:')) return `SUMMARY:${esc(`Suggested visit (not confirmed), ${biz.name}`)}`;
     if (line.startsWith('DESCRIPTION:')) return `DESCRIPTION:${esc(notes)}`;
     return line;
   });

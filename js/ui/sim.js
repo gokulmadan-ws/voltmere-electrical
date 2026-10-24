@@ -5,18 +5,20 @@ import { Icon } from './display.js';
 import { cx } from './util.js';
 
 /**
- * The honesty banner every simulated connection screen shows. Exact wording (the first three sentences) is part of the
- * contract; children add a fourth. `compact` is the one-line version for headers and cards.
+ * The honesty label every simulated connection screen shows: ONE "Practice mode" style (a neutral dashed outline, no hazard stripes) on the hub,
+ * the wizards' end states and the More row. The full version adds one plain sentence; `compact` is the one-line pill for headers and cards;
+ * children add a further sentence to the full version.
  */
 export function SimBanner({ compact, class: cls, children, ...rest }) {
   if (compact) {
     return h('p', { class: cx('ui-sim ui-sim--compact', cls), 'data-testid': 'sim-banner', ...rest },
-      h(Icon, { name: 'unplug', size: 16 }), h('span', null, 'Simulated in this prototype'));
+      // The tail is its own span so a tight row (the wizard's step row, T11) can show just "Practice mode"; every word is still in the DOM.
+      h(Icon, { name: 'circle-dashed', size: 16 }), h('span', null, 'Practice mode', h('span', { class: 'ui-sim__more' }, ' · simulated in this prototype')));
   }
   return h('div', { class: cx('ui-sim', cls), role: 'note', 'data-testid': 'sim-banner', ...rest },
-    h('span', { class: 'ui-sim__icon', 'aria-hidden': 'true' }, h(Icon, { name: 'unplug', size: 22 })),
+    h('span', { class: 'ui-sim__icon', 'aria-hidden': 'true' }, h(Icon, { name: 'circle-dashed', size: 22 })),
     h('p', { class: 'ui-sim__text' },
-      h('strong', null, 'Simulated in this prototype.'), ' Nothing is really connected. Saved on this device only.',
+      h('strong', null, 'Practice mode.'), ' Simulated in this prototype: nothing is really connected, and what you set up is saved on this device only.',
       children ? h('span', { class: 'ui-sim__extra' }, ' ', children) : null));
 }
 

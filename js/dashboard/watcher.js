@@ -6,7 +6,7 @@ import { selectUnseenBookings } from '../core/selectors.js';
 import { firstName } from '../core/format.js';
 import { bookingWhen } from '../core/availability.js';
 import { toast, useStore } from '../ui/index.js';
-import { navigate, routeHref } from './router.js';
+import { navigate, parseHash, routeHref } from './router.js';
 
 // The shell owns the page title text and the watcher owns the "(n) " prefix, so both go through here
 // and never overwrite each other.
@@ -51,7 +51,16 @@ function replyPromise() {
   }
 }
 
+// The Needs-you cards on Today already show every new enquiry, so a toast there would repeat them and sit over the buttons.
+const onToday = () => {
+  try { return parseHash(location.hash).name === 'today'; } catch (e) { return false; }
+};
+
+// Arrival toasts are brief: the booking is one tap away on the Bookings tab.
+const ARRIVAL_MS = 4000;
+
 function announceSummary(list) {
+  if (onToday()) return;
   const n = list.length;
   const word = list.every(isEnquiry) ? 'enquir' : 'booking';
   const noun = word === 'booking' ? (n === 1 ? 'booking' : 'bookings') : (n === 1 ? 'enquiry' : 'enquiries');
@@ -59,15 +68,18 @@ function announceSummary(list) {
     message: `${n} new ${noun} since you last looked`,
     icon: 'inbox',
     actionLabel: 'View',
-    duration: 8000,
+    duration: ARRIVAL_MS,
     onAction: n === 1 ? viewBooking(list[0].id) : () => navigate(routeHref('bookings', {}, { f: 'new' }))
   });
 }
 
 function announceArrival(booking) {
+  const urgent = !!booking.urgent;
+  // An URGENT request still gets its toast on Today: a missed emergency is the one thing this app must not allow.
+  if (!urgent && onToday()) return;
   const name = firstName((booking.customer && booking.customer.name) || '') || 'a customer';
-  if (booking.urgent) {
-    toast({ message: `URGENT request: ${name}`, icon: 'siren', tone: 'danger', actionLabel: 'View', onAction: viewBooking(booking.id) });
+  if (urgent) {
+    toast({ message: `URGENT request: ${name}`, icon: 'siren', tone: 'danger', actionLabel: 'View', duration: 6000, onAction: viewBooking(booking.id) });
     return;
   }
   if (isEnquiry(booking)) {
@@ -75,19 +87,20 @@ function announceArrival(booking) {
     const detail = [sourceOf(booking), replyPromise()].filter(Boolean).join(' · ');
     toast({
       message: postcode ? `New enquiry: ${name}, ${postcode}` : `New enquiry: ${name}`,
-      detail: detail || undefined, icon: 'bell-ring', duration: 9000,
+      detail: detail || undefined, icon: 'bell-ring', duration: ARRIVAL_MS,
       actionLabel: 'View', onAction: viewBooking(booking.id)
     });
     return;
   }
   let when = '';
   try { when = bookingWhen(booking); } catch (e) { /* keep the toast even if the time cannot be described */ }
-  toast({ message: when ? `New booking: ${name}, ${when}` : `New booking: ${name}`, icon: 'calendar-check', actionLabel: 'View', onAction: viewBooking(booking.id) });
+  toast({ message: when ? `New booking: ${name}, ${when}` : `New booking: ${name}`, icon: 'calendar-check', actionLabel: 'View', duration: ARRIVAL_MS, onAction: viewBooking(booking.id) });
 }
 
 /**
  * Renders nothing. On mount: one summary toast when unseen bookings exist. Later: one toast per newly
- * arrived unseen booking (a booking is announced once per page session). No sound, no vibration (WON'T).
+ * arrived unseen booking (a booking is announced once per page session). Nothing on #/today (its cards are the announcement,
+ * except for an URGENT request). No sound, no vibration (WON'T).
  */
 export function Watcher() {
   const key = useStore(selectUnseenKey);

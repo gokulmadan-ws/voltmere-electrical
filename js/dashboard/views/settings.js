@@ -1,9 +1,9 @@
-// js/dashboard/views/settings.js: Settings (business and brand, website photos, services, quote price list and terms, reply promise, hours, rules, theme). Saves as you go.
-// Owner: E3 (v1 by WP8, website switches, credentials and brands by E2)
+// js/dashboard/views/settings.js: Settings as a single-open accordion (business and brand, website photos, services, quote price list and terms, reply promise, hours, rules, theme). Saves as you go.
+// Owner: E3 (v1 by WP8, website switches, credentials and brands by E2); accordion, photo upload and availability matrix by DASH
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import {
-  BrandMark, Button, Card, Chip, ConfirmDialog, Field, Icon, IconButton, Disclosure, Input, PageHeader, SampleTag, Select, Switch, Textarea, ThemeToggle,
-  showUndoToast, toast, useStore
+  BrandMark, Button, Card, ConfirmDialog, Field, Icon, IconButton, Disclosure, Input, PageHeader, SampleTag, Select, Switch, Textarea, ThemeToggle,
+  cx, showUndoToast, toast, useStore
 } from '../../ui/index.js';
 import {
   addDaysOff, getState, removeDayOff, updateService, updateSettings
@@ -11,7 +11,8 @@ import {
 import { gbp, normalisePhone, plural } from '../../core/format.js';
 import { selectImageUrl, selectServices, servicePriceLabel } from '../../core/selectors.js';
 import { DEFAULT_IMAGES, IMAGE_KEYS, IMAGE_META, WINDOWS } from '../../core/config.js';
-import { DAY_LONG, addDays, fmtDayShort, isDayKey, weekStart } from '../../core/dates.js';
+import { DAY_LONG, DAY_SHORT, addDays, fmtDayShort, isDayKey, weekStart } from '../../core/dates.js';
+import { fileToWebsitePhoto } from '../shared/photos.js';
 import { todayKey } from '../../core/clock.js';
 
 export const title = 'Settings';
@@ -135,9 +136,7 @@ function BusinessSection({ onSaved }) {
     return FAIL_TEXT;
   };
 
-  return html`<section class="db-section" aria-labelledby="st-biz-title">
-    <h2 class="db-section__title" id="st-biz-title">Business and brand</h2>
-    <${Card} class="st-fields">
+  return html`<${Card} class="st-fields" data-testid="settings-panel-business">
       <div class="st-fields st-fields--2">
         <${EditField} id="setting-business-name" label="Business name" value=${biz.name} check=${requiredCheck} commit=${saveBiz('name')} onDraft=${track('name')} inputProps=${{ autocomplete: 'organization' }} />
         <${EditField} id="setting-short-name" label="Short name" hint="Shown next to the logo" value=${biz.shortName} check=${requiredCheck} commit=${saveBiz('shortName')} onDraft=${track('shortName')} />
@@ -165,8 +164,7 @@ function BusinessSection({ onSaved }) {
         <span class="ui-btn ui-btn--primary st-preview__btn" aria-hidden="true">Get my installation quote</span>
       </div>
       <p class="st-note">Your website shows no reviews, so none are added. Credentials and charger brands appear on the website as typed.</p>
-    <//>
-  </section>`;
+    <//>`;
 }
 
 // ---------- B. Services and prices ----------
@@ -219,15 +217,14 @@ function ServicesSection({ onSaved }) {
   const services = useStore(selectAllServices);
   const main = services.filter((s) => s.id === 'ev_quote' || s.id === 'ev');
   const other = services.filter((s) => s.id !== 'ev_quote' && s.id !== 'ev');
-  return html`<section class="db-section" aria-labelledby="st-svc-title">
-    <h2 class="db-section__title" id="st-svc-title">Services and prices</h2>
+  return html`<div class="st-panel" data-testid="settings-panel-services">
     <p class="st-intro">Your website offers the free survey visit and a quote for each home. Switch a service on to show it there. Whole pounds only.</p>
     <div class="st-services">${main.map((s) => html`<${ServiceRow} key=${s.id} service=${s} onSaved=${onSaved} />`)}</div>
     ${other.length > 0 ? html`<div class="st-other"><${Disclosure} title="Other jobs" summary=${`${other.length} you can still book by phone`} testid="settings-other-services">
       <p class="st-intro">Your website only sells EV charger quotes. These older job types stay here for work you take by phone, with their own prices.</p>
       <div class="st-services">${other.map((s) => html`<${ServiceRow} key=${s.id} service=${s} onSaved=${onSaved} />`)}</div>
     <//></div>` : null}
-  </section>`;
+  </div>`;
 }
 
 // ---------- C. Availability ----------
@@ -239,6 +236,10 @@ const LEAD_OPTIONS = [
 ];
 const AHEAD_OPTIONS = [7, 14, 21, 28].map((n) => ({ value: String(n), label: `${n} days` }));
 
+/**
+ * The week as a small matrix: Monday to Sunday down the side, the four arrival windows across. A tap on a cell opens or closes that window;
+ * an open window is a neutral cell with a check (the colour never carries the meaning, and nothing here is brand red).
+ */
 function HoursGrid({ onSaved }) {
   const hours = useStore(selectHours);
   const toggle = (weekday, windowId) => {
@@ -249,17 +250,24 @@ function HoursGrid({ onSaved }) {
     const res = updateSettings({ hours: next });
     if (res.ok) onSaved(); else failToast();
   };
-  return html`<div class="st-hours">${WEEK_ORDER.map((wd) => {
-    const open = hours[wd] || [];
-    return html`<div class="st-hours__day" role="group" aria-label=${DAY_LONG[wd]} key=${wd}>
-      <div class="st-hours__head">
-        <span class="st-hours__name">${DAY_LONG[wd]}</span>
-        ${open.length === 0 ? html`<span class="st-hours__closed">Closed</span>` : null}
-      </div>
-      <div class="st-hours__chips">${WINDOWS.map((w) => html`<${Chip} key=${w.id} selected=${open.includes(w.id)}
-        onClick=${() => toggle(wd, w.id)} data-testid=${`hours-${wd}-${w.id}`}>${w.label}<//>`)}</div>
-    </div>`;
-  })}</div>`;
+  return html`<div class="st-matrix" role="group" aria-label="Which windows you work" data-testid="settings-hours">
+    <div class="st-matrix__row st-matrix__row--head" aria-hidden="true">
+      <span></span>${WINDOWS.map((w) => html`<span class="st-matrix__win" key=${w.id}>${w.short}</span>`)}
+    </div>
+    ${WEEK_ORDER.map((wd) => {
+      const open = hours[wd] || [];
+      return html`<div class="st-matrix__row" role="group" aria-label=${DAY_LONG[wd]} key=${wd}>
+        <span class="st-matrix__day">${DAY_SHORT[wd]}${open.length === 0 ? html`<span class="st-matrix__closed">Closed</span>` : null}</span>
+        ${WINDOWS.map((w) => {
+          const on = open.includes(w.id);
+          return html`<button type="button" key=${w.id} class=${cx('st-cell', on && 'is-on')} aria-pressed=${on ? 'true' : 'false'}
+            aria-label=${`${DAY_LONG[wd]} ${w.label}`} onClick=${() => toggle(wd, w.id)} data-testid=${`hours-${wd}-${w.id}`}>
+            ${on ? html`<${Icon} name="check" size=${18} />` : null}
+          </button>`;
+        })}
+      </div>`;
+    })}
+  </div>`;
 }
 
 function DaysOff({ onSaved }) {
@@ -314,10 +322,13 @@ function DaysOff({ onSaved }) {
       <${Button} size="sm" onClick=${nextWeek} data-testid="dayoff-next-week">Take next week off<//>
     </div>
     <div class="st-dayoff-add">
-      <${Field} label="Date" id="dayoff-date" error=${error}>
-        <${Input} id="dayoff-date" type="date" min=${todayKey()} value=${date} onInput=${(e) => { setDate(e.target.value); setError(''); }} data-testid="dayoff-date" />
+      <${Field} label="Pick a date" id="dayoff-date" error=${error}>
+        <div class=${cx('st-date', !date && 'is-empty')}>
+          <${Input} id="dayoff-date" type="date" min=${todayKey()} value=${date} onInput=${(e) => { setDate(e.target.value); setError(''); }} data-testid="dayoff-date" />
+          ${!date ? html`<span class="st-date__ph" aria-hidden="true">Tap to choose the day</span>` : null}
+        </div>
       <//>
-      <${Field} label="Label" id="dayoff-label">
+      <${Field} label="Reason (optional)" id="dayoff-label">
         <${Input} id="dayoff-label" value=${label} maxlength="40" onInput=${(e) => setLabel(e.target.value)} data-testid="dayoff-label" />
       <//>
       <${Button} variant="primary" icon="calendar-x" onClick=${addOne} data-testid="dayoff-add">Add day off<//>
@@ -331,10 +342,9 @@ function AvailabilitySection({ onSaved }) {
     const res = updateSettings({ [key]: Number(e.target.value) });
     if (res.ok) onSaved(); else failToast();
   };
-  return html`<section class="db-section" aria-labelledby="st-avail-title">
-    <h2 class="db-section__title" id="st-avail-title">Availability</h2>
+  return html`<div class="st-panel" data-testid="settings-panel-availability">
     <${Card} class="db-stack">
-      <p class="st-note">Tap the windows you work. The website calendar changes straight away.</p>
+      <p class="st-note">Tap the windows you work. The calendar on this prototype's page changes straight away.</p>
       <${HoursGrid} onSaved=${onSaved} />
       <div class="st-pair">
         <${Field} label="Minimum notice" id="setting-lead" hint="Customers cannot book a window that starts sooner than this.">
@@ -347,7 +357,7 @@ function AvailabilitySection({ onSaved }) {
     <//>
     <h3 class="db-section__title st-sub">Days off</h3>
     <${Card}><${DaysOff} onSaved=${onSaved} /><//>
-  </section>`;
+  </div>`;
 }
 
 // ---------- D. Rules and look ----------
@@ -355,8 +365,7 @@ function AvailabilitySection({ onSaved }) {
 function RulesSection({ onSaved }) {
   const rules = useStore(selectRules);
   const set = (patch) => { const res = updateSettings(patch); if (res.ok) onSaved(); else failToast(); };
-  return html`<section class="db-section" aria-labelledby="st-rules-title">
-    <h2 class="db-section__title" id="st-rules-title">Rules and look</h2>
+  return html`<div class="st-panel" data-testid="settings-panel-rules">
     <${Card} class="st-rules">
       <${Switch} id="rule-auto" checked=${rules.autoConfirm} label="Confirm other bookings instantly"
         description="Website enquiries (free survey visits) always wait for you to confirm, whatever this says."
@@ -369,25 +378,49 @@ function RulesSection({ onSaved }) {
     <//>
     <h3 class="db-section__title st-sub">Appearance</h3>
     <${ThemeToggle} variant="segmented" />
-  </section>`;
+  </div>`;
 }
 
 // ---------- Website photos ----------
 
 const urlCheck = (text) => (!text || /^https:\/\/\S+$/.test(text) || /^[\w./-]+$/.test(text) ? '' : 'Use a web address that starts with https://');
 
+/**
+ * One of his photos: a thumbnail and "Change photo" (a picture from the phone, shrunk to about 1200px and saved with the settings, so the website
+ * shows it after a reload). The raw web address is a developer thing, so it sits under "Advanced".
+ */
 function ImageTile({ imgKey, onSaved }) {
   const meta = IMAGE_META[imgKey];
   const stored = useStore((state) => state.settings.business.images[imgKey]);
   const src = useStore((state) => selectImageUrl(state, imgKey, { width: 240 }));
   const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
   useEffect(() => { setFailed(false); }, [src]);
   const isOriginal = stored === DEFAULT_IMAGES[imgKey];
+  const isUpload = typeof stored === 'string' && stored.startsWith('data:');
   const commit = (text) => {
     const res = updateSettings({ business: { images: { [imgKey]: text } } });
     if (res.ok) { onSaved(); return ''; }
+    if (res.reason === 'storage_full') return FULL_TEXT;
     return (res.errors && res.errors[`images.${imgKey}`]) || FAIL_TEXT;
   };
+  const onFile = async (e) => {
+    const file = (e.target.files || [])[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try {
+      const url = await fileToWebsitePhoto(file, { maxSide: 1200 });
+      const problem = commit(url);
+      if (problem) toast({ message: problem, tone: 'danger' });
+      else toast({ message: `${meta.label} changed. It shows on your website straight away.` });
+    } catch (err) {
+      toast({ message: 'That photo could not be read. Try another one.', tone: 'danger' });
+    }
+    setBusy(false);
+  };
+  const hint = isOriginal ? 'The photo from your current website' : isUpload ? 'A photo from your phone' : 'Your own photo address';
   return html`<${Card} as="div" class="st-img" role="group" aria-label=${meta.label} data-testid=${`image-tile-${imgKey}`}>
     <div class=${`st-img__preview${imgKey === 'logo' ? ' is-logo' : ''}`} data-testid=${`setting-image-preview-${imgKey}`}>
       ${failed
@@ -395,19 +428,30 @@ function ImageTile({ imgKey, onSaved }) {
         : html`<img src=${src} alt=${`Preview: ${meta.alt}`} loading="lazy" decoding="async" referrerpolicy="no-referrer" onError=${() => setFailed(true)} />`}
     </div>
     <div class="st-img__fields">
-      <${EditField} id=${`setting-image-${imgKey}`} label=${meta.label} value=${stored} check=${urlCheck} commit=${commit}
-        hint=${isOriginal ? 'The photo from your current website' : 'Your own photo address'} inputProps=${{ type: 'url', inputmode: 'url', autocapitalize: 'none', autocomplete: 'off' }} />
-      ${isOriginal ? null : html`<${Button} size="sm" variant="ghost" icon="rotate-ccw" onClick=${() => commit('')} data-testid=${`setting-image-reset-${imgKey}`}>Back to the original<//>`}
+      <div class="st-img__title">
+        <p class="st-img__name">${meta.label}</p>
+        <p class="st-img__hint">${hint}</p>
+      </div>
+      <div class="st-img__btns">
+        <${Button} size="sm" icon="camera" disabled=${busy} onClick=${() => fileRef.current && fileRef.current.click()} data-testid=${`setting-image-change-${imgKey}`}>${busy ? 'Saving' : 'Change photo'}<//>
+        ${isOriginal ? null : html`<${Button} size="sm" variant="ghost" icon="rotate-ccw" onClick=${() => { const p = commit(''); if (p) toast({ message: p, tone: 'danger' }); }} data-testid=${`setting-image-reset-${imgKey}`}>Back to the original<//>`}
+        <input ref=${fileRef} type="file" accept="image/*" hidden onChange=${onFile} data-testid=${`setting-image-file-${imgKey}`} />
+      </div>
     </div>
+    <${Disclosure} class="st-img__adv" title="Advanced" summary="Web address" testid=${`image-advanced-${imgKey}`}>
+      ${isUpload
+        ? html`<p class="st-note">This photo is saved from your phone. Paste a web address here to use a hosted photo instead, or clear it to go back to the original.</p>` : null}
+      <${EditField} id=${`setting-image-${imgKey}`} label=${`${meta.label} web address`} value=${isUpload ? '' : stored} check=${urlCheck} commit=${commit}
+        hint="Paste a link that starts with https://" inputProps=${{ type: 'url', inputmode: 'url', autocapitalize: 'none', autocomplete: 'off', placeholder: 'https://' }} />
+    <//>
   <//>`;
 }
 
 function ImagesSection({ onSaved }) {
-  return html`<section class="db-section" id="st-images" aria-labelledby="st-img-title" data-testid="settings-images">
-    <h2 class="db-section__title" id="st-img-title">Website photos</h2>
-    <p class="st-intro">These are your own photos, linked from your current website. Paste a new web address to swap one, or clear it to go back. A real build stores your photos on its own hosting.</p>
+  return html`<div class="st-panel" data-testid="settings-images">
+    <p class="st-intro">These are the photos on your website. Tap Change photo to pick one from your phone. A real build stores your photos on its own hosting.</p>
     <div class="st-imgs">${IMAGE_KEYS.map((k) => html`<${ImageTile} key=${k} imgKey=${k} onSaved=${onSaved} />`)}</div>
-  </section>`;
+  </div>`;
 }
 
 // ---------- Quote price list, terms and reply promise ----------
@@ -429,7 +473,7 @@ function QuoteItemRow({ item, open, onSaved, onRemove }) {
     <summary class="st-item__sum">
       <span class="st-item__text">
         <span class="st-item__label">${item.label}</span>
-        <span class="st-item__sub u-tabular">${`${gbp(item.unitPrice)} ${per} · sample price${item.suggested ? ' · in new quotes' : ''}`}</span>
+        <span class="st-item__sub u-tabular">${`${gbp(item.unitPrice)} ${per} · sample price${item.suggested ? ' · in new quotes' : ''}${item.optional === true ? ' · possible extra' : ''}`}</span>
       </span>
       <${Icon} name="chevron-down" size=${20} class="st-item__chev" />
     </summary>
@@ -452,6 +496,9 @@ function QuoteItemRow({ item, open, onSaved, onRemove }) {
       <${Switch} id=${`quote-item-suggested-${item.id}`} checked=${!!item.suggested} label="Include in every new quote"
         description="Switched off, it is still in the list when you build a quote."
         onChange=${(c) => { if (patchItem(item.id, { suggested: c }, onSaved)) failToast(); }} data-testid=${`quote-item-suggested-${item.id}`} />
+      <${Switch} id=${`quote-item-optional-${item.id}`} checked=${item.optional === true} label="Possible extra"
+        description="Listed on the quote, but not added into the total. For work that may or may not be needed."
+        onChange=${(c) => { if (patchItem(item.id, { optional: c }, onSaved)) failToast(); }} data-testid=${`quote-item-optional-${item.id}`} />
       <${Button} variant="ghost" icon="trash-2" class="st-item__remove" onClick=${() => onRemove(item)} data-testid=${`quote-item-remove-${item.id}`}>Remove from the list<//>
     </div>
   </details>`;
@@ -509,8 +556,7 @@ function QuotesSection({ onSaved }) {
   if (!hours.includes(replyHours)) hours.push(replyHours);
   hours.sort((a, b) => a - b);
 
-  return html`<section class="db-section" id="st-quotes" aria-labelledby="st-quote-title" data-testid="settings-quotes">
-    <h2 class="db-section__title" id="st-quote-title">Quotes and replies</h2>
+  return html`<div class="st-panel" id="st-quotes" data-testid="settings-quotes">
     <${Card} class="db-stack">
       <h3 class="st-card-title">Quote price list</h3>
       <p class="st-note"><${SampleTag} /> These prices are examples, not yours. Replace them with your own before you send a real quote. The quote builder starts from this list.</p>
@@ -545,52 +591,121 @@ function QuotesSection({ onSaved }) {
     <${ConfirmDialog} open=${!!removing} title="Remove this item?" confirmLabel="Remove" tone="danger"
       body=${removing ? `${removing.label} leaves your price list. Quotes you have already written keep their own lines.` : ''}
       onConfirm=${remove} onCancel=${() => setRemoving(null)} />
-  </section>`;
+  </div>`;
 }
 
-// ---------- jump links ----------
+// ---------- the accordion ----------
 
-const JUMPS = [
-  { id: 'st-biz-title', label: 'Business' },
-  { id: 'st-img-title', label: 'Photos' },
-  { id: 'st-svc-title', label: 'Services' },
-  { id: 'st-quote-title', label: 'Quotes' },
-  { id: 'st-avail-title', label: 'Hours' },
-  { id: 'st-rules-title', label: 'Rules' }
+const SECTIONS = [
+  { id: 'business', label: 'Business and brand', icon: 'house' },
+  { id: 'photos', label: 'Website photos', icon: 'image' },
+  { id: 'services', label: 'Services and prices', icon: 'wrench' },
+  { id: 'quotes', label: 'Quotes and replies', icon: 'file-text' },
+  { id: 'availability', label: 'Availability', icon: 'calendar-days' },
+  { id: 'rules', label: 'Rules and look', icon: 'settings' }
 ];
+const SECTION_IDS = SECTIONS.map((x) => x.id);
 
-function jumpTo(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+/** 'Mon–Sat 8–5': the days that have any window open, and the earliest start to the latest finish. */
+function hoursLine(hours, daysOff) {
+  const open = WEEK_ORDER.filter((wd) => (hours[wd] || []).length > 0);
+  if (open.length === 0) return 'Closed every day';
+  const ids = open.flatMap((wd) => hours[wd]);
+  const h12 = (hhmm) => Number(hhmm.slice(0, 2)) % 12 || 12;
+  const from = WINDOWS[Math.min(...ids)].start;
+  const to = WINDOWS[Math.max(...ids)].end;
+  const contiguous = open.length === WEEK_ORDER.indexOf(open[open.length - 1]) - WEEK_ORDER.indexOf(open[0]) + 1;
+  const days = contiguous ? (open.length === 1 ? DAY_SHORT[open[0]] : `${DAY_SHORT[open[0]]}–${DAY_SHORT[open[open.length - 1]]}`) : open.map((wd) => DAY_SHORT[wd]).join(', ');
+  const off = daysOff.length > 0 ? ` · ${plural(daysOff.length, 'day')} off` : '';
+  return `${days} ${h12(from)}–${h12(to)}${off}`;
+}
+
+// One line per section, read from the store (plain strings, so useStore's shallow compare holds between saves).
+const selectSummaries = (state) => {
+  const s = state.settings;
+  const b = s.business;
+  const changed = IMAGE_KEYS.filter((k) => b.images[k] !== DEFAULT_IMAGES[k]).length;
+  const shown = (s.services || []).filter((x) => (x.showOnWebsite !== undefined ? x.showOnWebsite : x.active) && x.id !== 'emergency').length;
+  const items = (s.quoteItems || []).length;
+  return {
+    business: [b.name, b.phone].filter(Boolean).join(' · '),
+    photos: changed === 0 ? 'All original' : `${changed} of ${IMAGE_KEYS.length} changed`,
+    services: `${shown} on your website`,
+    quotes: `${plural(items, 'price-list item')} · reply in ${s.sla ? s.sla.replyHours : 24} h`,
+    availability: hoursLine(s.hours, s.daysOff),
+    rules: `Instant confirm ${s.autoConfirm ? 'on' : 'off'} · Emergencies ${s.takingEmergencies ? 'on' : 'off'}`
+  };
+};
+
+function Panel({ id, onSaved }) {
+  switch (id) {
+    case 'business': return html`<${BusinessSection} onSaved=${onSaved} />`;
+    case 'photos': return html`<${ImagesSection} onSaved=${onSaved} />`;
+    case 'services': return html`<${ServicesSection} onSaved=${onSaved} />`;
+    case 'quotes': return html`<${QuotesSection} onSaved=${onSaved} />`;
+    case 'availability': return html`<${AvailabilitySection} onSaved=${onSaved} />`;
+    default: return html`<${RulesSection} onSaved=${onSaved} />`;
+  }
 }
 
 // ---------- the page ----------
 
-export default function SettingsView() {
+export default function SettingsView({ route }) {
   const [saved, setSaved] = useState(false);
+  const asked = route && route.query ? route.query.open : '';
+  const [open, setOpen] = useState(SECTION_IDS.includes(asked) ? asked : '');
   const timer = useRef(null);
+  const itemRefs = useRef({});
+  const summaries = useStore(selectSummaries);
   const flash = () => {
     setSaved(true);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setSaved(false), 2000);
   };
   useEffect(() => () => clearTimeout(timer.current), []);
+  // A link that asks for a section (#/settings?open=photos) lands with it open and at the top.
+  useEffect(() => {
+    const el = open ? itemRefs.current[open] : null;
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+  }, []);
+
+  // One section open at a time: opening one closes the last, and the opened one is brought to the top so its fields are on screen.
+  const toggle = (id) => {
+    const next = open === id ? '' : id;
+    setOpen(next);
+    if (!next) return;
+    const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => {
+      const el = itemRefs.current[id];
+      if (el) el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    });
+  };
 
   return html`<div class="db-page">
     <div class="st-saved-wrap">
       <span class=${`st-saved${saved ? ' is-visible' : ''}`} role="status" data-testid="setting-saved">${saved ? html`<${Icon} name="check" size=${18} /><span>Saved</span>` : null}</span>
     </div>
-    <${PageHeader} title="Settings" subtitle="Changes save as you go and show on your website straight away." />
-    <div class="st-jump" role="group" aria-label="Jump to a section" data-testid="settings-jump">
-      ${JUMPS.map((j) => html`<${Chip} key=${j.id} onClick=${() => jumpTo(j.id)}>${j.label}<//>`)}
+    <${PageHeader} title="Settings" subtitle="Changes save as you go and show on this prototype's page straight away." />
+    <div class="st-acc" data-testid="settings-accordion">
+      ${SECTIONS.map((sec) => {
+        const isOpen = open === sec.id;
+        return html`<section class=${cx('st-acc__item', isOpen && 'is-open')} key=${sec.id} ref=${(el) => { itemRefs.current[sec.id] = el; }}>
+          <h2 class="st-acc__h">
+            <button type="button" class="st-acc__btn" id=${`st-h-${sec.id}`} aria-expanded=${isOpen ? 'true' : 'false'} aria-controls=${`st-p-${sec.id}`}
+              onClick=${() => toggle(sec.id)} data-testid=${`settings-section-${sec.id}`}>
+              <span class="st-acc__icon"><${Icon} name=${sec.icon} size=${20} /></span>
+              <span class="st-acc__text">
+                <span class="st-acc__label">${sec.label}</span>
+                <span class="st-acc__sum" data-testid=${`settings-summary-${sec.id}`}>${summaries[sec.id]}</span>
+              </span>
+              <${Icon} name="chevron-down" size=${20} class="st-acc__chev" />
+            </button>
+          </h2>
+          ${isOpen ? html`<div class="st-acc__panel" id=${`st-p-${sec.id}`} role="region" aria-labelledby=${`st-h-${sec.id}`}>
+            <${Panel} id=${sec.id} onSaved=${flash} />
+          </div>` : null}
+        </section>`;
+      })}
     </div>
-    <${BusinessSection} onSaved=${flash} />
-    <${ImagesSection} onSaved=${flash} />
-    <${ServicesSection} onSaved=${flash} />
-    <${QuotesSection} onSaved=${flash} />
-    <${AvailabilitySection} onSaved=${flash} />
-    <${RulesSection} onSaved=${flash} />
   </div>`;
 }

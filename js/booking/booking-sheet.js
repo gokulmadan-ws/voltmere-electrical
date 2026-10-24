@@ -13,12 +13,12 @@ import {
   funnelHistoryStep, isUnwinding
 } from './nav.js';
 import { loadDraft, saveDraft } from './draft.js';
-import { HelpLine } from './bk-shared.js';
+import { HelpLine, BrandLogo, PrototypeStrip } from './bk-shared.js';
 import { ServiceStep } from './service-step.js';
 import { WhenStep, WhenFooter } from './when-step.js';
 import { DetailsStep, DetailsFooter } from './details-step.js';
 import { EmergencyStep, EmergencyFooter } from './emergency-step.js';
-import { FunnelBody, FunnelFooter, FUNNEL_TOTAL, FUNNEL_SERVICE_ID, funnelAllowedStep } from './funnel.js';
+import { FunnelBody, FunnelFooter, FUNNEL_TOTAL, FUNNEL_SERVICE_ID, FUNNEL_STEP1, funnelAllowedStepFor } from './funnel.js';
 import { Confirmation } from './confirmation.js';
 import { Manage } from './manage.js';
 
@@ -100,15 +100,24 @@ function initialForm(ownerMode, intent, route, draft) {
   return f;
 }
 
-/** The funnel header: Back (steps 2 to 6), "Step N of 6", Close, and a six-segment progress bar that fills as the steps go by. */
-function FunnelHeader({ step, onBack, onClose }) {
-  return html`<div class="bk-header bk-header--fn">
+/**
+ * The funnel header: Back (steps 2 to 6), HIS logo and Close on one row, then "Step N of 6" (with "About 1 minute" on step 1) and a six-segment
+ * progress bar. No prototype strip in here: the sheet is full screen and the page's own strip sits behind it (a quiet note closes each step instead).
+ * The bar is near-black in both themes (like the landing header) so his logo picture sits on its own colour. Segment N is fully filled on step N,
+ * the same on every step, including the sixth.
+ */
+function FunnelHeader({ step, brand, onBack, onClose }) {
+  return html`<div class="bk-header bk-header--fn bk-header--dark">
     <div class="bk-header__row bk-header__row--fn">
       ${step > 1
     ? html`<button type="button" class="bk-fn-back" onClick=${onBack} data-testid="booking-back"><${Icon} name="chevron-left" size=${20} /><span>Back</span></button>`
     : html`<span class="bk-header__spacer" aria-hidden="true"></span>`}
-      <p class="bk-header__step" data-testid="funnel-step-label">Step <span class="bk-header__num" key=${step}>${step}</span> of ${FUNNEL_TOTAL}</p>
+      <${BrandLogo} brand=${brand} />
       <${IconButton} icon="x" label="Close" size="lg" onClick=${onClose} data-testid="booking-close" />
+    </div>
+    <div class="bk-header__meta">
+      <p class="bk-header__step" data-testid="funnel-step-label">Step <span class="bk-header__num" key=${step}>${step}</span> of ${FUNNEL_TOTAL}</p>
+      ${step === 1 ? html`<p class="bk-header__time" data-testid="funnel-time"><${Icon} name="clock" size=${14} /><span>${FUNNEL_STEP1.time}</span></p>` : null}
     </div>
     <div class="bk-fn-progress" data-testid="booking-progress" role="progressbar" aria-label="Quote progress" aria-valuemin="1" aria-valuemax=${FUNNEL_TOTAL}
       aria-valuenow=${step} aria-valuetext=${`Step ${step} of ${FUNNEL_TOTAL}`}>
@@ -117,10 +126,22 @@ function FunnelHeader({ step, onBack, onClose }) {
   </div>`;
 }
 
-function StepHeader({ step, page, enquiry, onBack, onClose }) {
+function StepHeader({ step, page, enquiry, brand, onBack, onClose }) {
   const idx = step === 'when' ? 1 : step === 'details' ? 2 : 0;
   const showProgress = step === 'service' || step === 'when' || step === 'details';
   const showBack = step !== 'service' && step !== 'confirmation';
+  // The customer's enquiry screens (thank-you, Manage) carry the same strip and name as the funnel itself.
+  if (enquiry && !page) {
+    return html`<div class="bk-header bk-header--fn bk-header--enquiry bk-header--dark">
+      <div class="bk-header__row bk-header__row--fn">
+        ${showBack
+    ? html`<button type="button" class="bk-fn-back" onClick=${onBack} data-testid="booking-back"><${Icon} name="chevron-left" size=${20} /><span>Back</span></button>`
+    : html`<span class="bk-header__spacer" aria-hidden="true"></span>`}
+        <${BrandLogo} brand=${brand} />
+        <${IconButton} icon="x" label="Close" size="lg" onClick=${onClose} data-testid="booking-close" />
+      </div>
+    </div>`;
+  }
   return html`<div class=${cx('bk-header', step === 'confirmation' && !enquiry && 'bk-header--ok', enquiry && 'bk-header--fn', page && 'bk-header--page')}>
     ${page && !showBack ? null : html`<div class="bk-header__row">
       ${showBack
@@ -192,8 +213,12 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
   const setForm = (patch) => setFormState((prev) => ({ ...prev, ...patch }));
   const setPick = (patch) => setPickState((prev) => ({ ...prev, ...patch }));
 
-  // The funnel never lets the customer past a step whose answer is missing (a stale draft, a hand-edited URL).
-  const fstep = Math.max(1, Math.min(fstepRaw, funnelAllowedStep(form.postcode, answers)));
+  // The funnel never lets the customer past a step whose answer is missing (a stale draft, a hand-edited URL). The postcode counts only
+  // as it stood when step 1 was left (or restored): fixing a typo in it on step 6 must never throw the customer back to step 1, because
+  // every keystroke would re-judge it. While step 1 itself is on screen the ref follows the box, so Continue and Forward still agree with it.
+  const postcodeOk = useRef(null);
+  if (postcodeOk.current === null || fstepRaw <= 1) postcodeOk.current = isValidPostcode(form.postcode);
+  const fstep = Math.max(1, Math.min(fstepRaw, funnelAllowedStepFor(postcodeOk.current, answers)));
   const fstepRef = useRef(fstep);
   fstepRef.current = fstep;
   const inFunnel = funnel && !ownerMode;
@@ -365,12 +390,21 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
   else body = html`<${Manage} ctx=${ctx} refId=${effRoute.ref} />`;
 
   const showFill = (step === 'details' || (step === 'emergency' && state.settings.takingEmergencies) || (step === 'funnel' && (fstep === 1 || fstep === 6) && svc && svc.active));
+  // The funnel and the enquiry screens have no prototype strip of their own (the sheet is full screen). The demo shortcut sits BELOW the answers
+  // there (a 12px grey text link, marked data-proto so clean mode can hide it), never above the question.
+  const strip = !page && (step === 'funnel' || enquiry);
   const fillBtn = showFill
-    ? html`<button type="button" class="bk-demofill" onClick=${fillDemo} data-testid="demo-fill">Demo: fill sample details</button>` : null;
+    ? html`<button type="button" class=${cx('bk-demofill', strip && 'bk-demofill--quiet')} data-proto="true" onClick=${fillDemo} data-testid="demo-fill">Demo: fill sample details</button>` : null;
   const ribbon = page
     ? (fillBtn ? html`<div class="bk-ribbon bk-ribbon--page">${fillBtn}</div>` : null)
-    : html`<div class="bk-ribbon"><span class="bk-ribbon__tag">Prototype</span>${fillBtn || html`<span class="bk-ribbon__text">Sample data, nothing is really sent</span>`}</div>`;
-  const showHelp = step === 'funnel' ? fstep === 1 : (!ownerMode && step !== 'confirmation' && step !== 'manage');
+    : strip
+      ? null
+      : html`<div class="bk-ribbon"><span class="bk-ribbon__tag">Prototype</span>${fillBtn || html`<span class="bk-ribbon__text">Sample data, nothing is really sent</span>`}</div>`;
+  // The quiet prototype line closes every funnel step (it used to be a strip in the header); the demo shortcut sits just above it on steps 1 and 6.
+  const belowFill = strip && (fillBtn || step === 'funnel')
+    ? html`<div class="bk-demofill-row">${fillBtn}${step === 'funnel' ? html`<${PrototypeStrip} />` : null}</div>` : null;
+  // The funnel's steps carry their own reassurance row (free quote, credentials, tap to call), so it has no separate help line.
+  const showHelp = step === 'funnel' ? false : (!ownerMode && step !== 'confirmation' && step !== 'manage');
 
   // Screen readers hear "Step 3 of 6" on every step change (focus moves to the new heading as well).
   const announce = step === 'funnel' && svc && svc.active ? `Step ${fstep} of ${FUNNEL_TOTAL}` : '';
@@ -378,11 +412,12 @@ function Flow({ mode, presentation, intent, customerRoute, onClose, onBooked }) 
     <div class="u-sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="funnel-announce">${announce}</div>
     ${ribbon}
     ${body}
+    ${belowFill}
     ${showHelp ? html`<${HelpLine} brand=${brand} />` : null}
   </div>`;
   const header = step === 'funnel'
-    ? html`<${FunnelHeader} step=${fstep} onBack=${onBack} onClose=${close} />`
-    : html`<${StepHeader} step=${step} page=${page} enquiry=${enquiry} onBack=${onBack} onClose=${close} />`;
+    ? html`<${FunnelHeader} step=${fstep} brand=${brand} onBack=${onBack} onClose=${close} />`
+    : html`<${StepHeader} step=${step} page=${page} enquiry=${enquiry} brand=${brand} onBack=${onBack} onClose=${close} />`;
   const dialogTitle = enquiry && step === 'confirmation' ? 'Enquiry received' : enquiry ? 'Manage enquiry' : DIALOG_TITLES[step];
 
   if (page) {

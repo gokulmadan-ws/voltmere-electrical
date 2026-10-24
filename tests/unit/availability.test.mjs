@@ -2,11 +2,11 @@
 // Owner: WP1
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeDefaultSettings } from '../../js/core/config.js';
+import { SURVEY_MIN_LEAD_HOURS, makeDefaultSettings } from '../../js/core/config.js';
 import { setClock } from '../../js/core/clock.js';
 import {
   getDaySlots, getDayStatus, getDayLoad, getBookableDays, nextFreeSlot, nextFreeSlots, isSlotFree, occupiedBy,
-  bookingWindowIds, bookingEndStamp, bookingWindowLabel, bookingWhen, windowIdFromStart, slotHuman, describeHours, isUnscheduled
+  bookingWindowIds, bookingEndStamp, bookingWindowLabel, bookingWhen, bookingWhenArrival, windowIdFromStart, slotHuman, describeHours, isUnscheduled, withServiceLead
 } from '../../js/core/availability.js';
 
 // A bare state is enough for the engine: settings, bookings and blocks.
@@ -382,12 +382,18 @@ test('booking helpers: window ids, end stamp, labels and when', () => {
   assert.equal(bookingEndStamp(urgent), '2026-10-23T20:30');
   assert.equal(bookingWindowLabel(single), '8–10am');
   assert.equal(bookingWindowLabel(second), '10am–12');
-  assert.equal(bookingWindowLabel(morning), 'Morning · arrive 8–10am');
-  assert.equal(bookingWindowLabel(afternoon), 'Afternoon · arrive 1–3pm');
+  // a half day prints its WHOLE span (T10): the rest of the half day must not look free in the owner's diary
+  assert.equal(bookingWindowLabel(morning), '8am–12');
+  assert.equal(bookingWindowLabel(afternoon), '1–5pm');
   assert.equal(bookingWindowLabel(urgent), 'ASAP');
   assert.equal(bookingWhen(single), 'Sat 24 Oct, 8–10am');
-  assert.equal(bookingWhen(morning), 'Mon 26 Oct, morning, 8–10am');
-  assert.equal(bookingWhen(afternoon), 'Mon 26 Oct, afternoon, 1–3pm');
+  assert.equal(bookingWhen(morning), 'Mon 26 Oct, 8am–12');
+  assert.equal(bookingWhen(afternoon), 'Mon 26 Oct, 1–5pm');
+  // what the CUSTOMER is told keeps the part of the day and the arrival window
+  assert.equal(bookingWhenArrival(single), 'Sat 24 Oct, 8–10am');
+  assert.equal(bookingWhenArrival(morning), 'Mon 26 Oct, morning, 8–10am');
+  assert.equal(bookingWhenArrival(afternoon), 'Mon 26 Oct, afternoon, 1–3pm');
+  assert.equal(bookingWhenArrival(urgent), 'ASAP');
   assert.equal(bookingWhen(urgent), 'ASAP');
 });
 
@@ -431,7 +437,8 @@ test('a pencilled-in survey holds its window; an enquiry with no window holds no
   const state = makeState({ bookings: [pencilled], settings });
   assert.equal(occupiedBy(state, '2026-10-24', 0), 'bk_p', 'a pending, tentative booking still blocks the diary and the website');
   assert.equal(isSlotFree(state, { date: '2026-10-24', windowId: 0 }), false);
-  assert.equal(nextFreeSlot(state, 'ev_quote').human, 'Tomorrow, 10am–12');
+  assert.equal(nextFreeSlot(state, 'ev_quote').human, 'Mon 26 Oct, 8–10am', 'the free survey is only offered 24 hours or more ahead, and Sunday is closed');
+  assert.equal(nextFreeSlot(state, 'fault').human, 'Tomorrow, 10am–12', 'every other service keeps the 90 minute lead');
   assert.equal(isUnscheduled(pencilled), false);
   const none = { id: 'bk_u', status: 'new', urgent: false, serviceId: 'ev_quote', start: '2026-10-23T20:30', durationMin: 0 };
   assert.equal(isUnscheduled(none), true);
@@ -442,4 +449,27 @@ test('a pencilled-in survey holds its window; an enquiry with no window holds no
   assert.equal(bookingWhen(none), 'To be arranged');
   assert.equal(occupiedBy(makeState({ bookings: [none], settings }), '2026-10-23', 3), null, 'holds no window');
   setClock(null);
+});
+
+test('the free survey (ev_quote) is never offered within SURVEY_MIN_LEAD_HOURS; other services and the owner keep their own lead', () => {
+  assert.equal(SURVEY_MIN_LEAD_HOURS, 24);
+  const now = at(2026, 10, 23, 20, 30); // Friday evening
+  const state = makeState();
+  const stamps = nextFreeSlots(state, 'ev_quote', 3, { now }).map((s) => s.startsAt);
+  assert.deepEqual(stamps, ['2026-10-26T08:00', '2026-10-26T10:00', '2026-10-26T13:00'], 'Saturday is under 24 h away and Sunday is closed, so Monday');
+  for (const stamp of stamps) assert.ok(stamp >= '2026-10-24T20:30', 'every offered visit starts at least 24 hours from now');
+  assert.equal(nextFreeSlot(state, 'fault', { now }).human, 'Tomorrow, 8–10am', 'other services keep the 90 minute lead');
+  assert.equal(nextFreeSlot(state, 'ev', { now }).human, 'Tomorrow, morning, arrive 8–10am', 'the install is a half-day job and is not a survey');
+  assert.equal(nextFreeSlot(state, 'ev_quote', { now, ownerMode: true }).human, 'Tomorrow, 8–10am', 'the owner sees his whole diary');
+  assert.equal(nextFreeSlot(state, 'ev_quote', { now, minLeadMinutes: 0 }).human, 'Tomorrow, 8–10am', 'a caller can ask for a different lead');
+  // a longer settings.leadMinutes still wins when it is longer than the survey lead
+  const slow = makeDefaultSettings();
+  slow.leadMinutes = 48 * 60;
+  assert.equal(nextFreeSlot(makeState({ settings: slow }), 'ev_quote', { now }).human, 'Mon 26 Oct, 8–10am');
+  assert.equal(nextFreeSlot(makeState({ settings: slow }), 'ev_quote', { now: at(2026, 10, 21, 8, 0) }).human, 'Fri 23 Oct, 8–10am', 'exactly 48 h ahead is allowed');
+  // a Monday 8am enquiry: the first window at least 24 h later is Tuesday 8am
+  assert.equal(nextFreeSlot(state, 'ev_quote', { now: at(2026, 10, 26, 8, 0) }).human, 'Tomorrow, 8–10am', 'exactly 24 h ahead is allowed');
+  assert.equal(nextFreeSlot(state, 'ev_quote', { now: at(2026, 10, 26, 8, 1) }).human, 'Tomorrow, 10am–12', 'one minute short of 24 h is not');
+  assert.deepEqual(withServiceLead('fault', {}), {});
+  assert.equal(withServiceLead('ev_quote', {}).minLeadMinutes, 24 * 60);
 });

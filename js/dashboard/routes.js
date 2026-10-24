@@ -9,7 +9,7 @@ export const ROUTES = [
   { name: 'calendar',  pattern: '/calendar/:date?',   module: './views/calendar.js',  title: 'Calendar',    tab: 'calendar' },
   { name: 'bookings',  pattern: '/bookings/:id?',     module: './views/bookings.js',  title: 'Bookings',    tab: 'bookings', immersive: 'id' },
   { name: 'customers', pattern: '/customers/:key?',   module: './views/customers.js', title: 'Customers',   tab: 'bookings', immersive: 'key' },
-  { name: 'insights',  pattern: '/insights',          module: './views/insights.js',  title: 'Insights',    tab: 'insights' },
+  { name: 'insights',  pattern: '/insights',          module: './views/insights.js',  title: 'Money',       tab: 'insights' },
   { name: 'messages',  pattern: '/messages',          module: './views/messages.js',  title: 'Messages',    tab: 'more' },
   { name: 'new',       pattern: '/new',               module: './views/new.js',       title: 'New booking', tab: null, immersive: true },
   { name: 'more',      pattern: '/more',              module: './views/more.js',      title: 'More',        tab: 'more' },
@@ -27,9 +27,35 @@ export const ROUTES = [
   { name: 'connections-whatsapp', pattern: '/connections/whatsapp', module: './views/connections-whatsapp.js', title: 'WhatsApp',          tab: 'more', immersive: true },
   { name: 'connections-calendar', pattern: '/connections/calendar', module: './views/connections-calendar.js', title: 'Google Calendar',   tab: 'more', immersive: true },
   { name: 'connections-email',    pattern: '/connections/email',    module: './views/connections-email.js',    title: 'Gmail',             tab: 'more', immersive: true },
-  { name: 'share',                pattern: '/share',                module: './views/share.js',                title: 'Share and promote', tab: 'more' }
+  { name: 'share',                pattern: '/share',                module: './views/share.js',                title: 'Share and promote', tab: 'more' },
+  // ---- V4: what the customer sends through WhatsApp (dashboard.html#import=<payload>, see importRouteHash below) ----
+  { name: 'import',               pattern: '/import',               module: './views/import.js',               title: 'Import',            tab: 'bookings', immersive: true }
 ];
 export const DEFAULT_ROUTE = '#/today';
+
+/**
+ * V4 (F4): a link texted from the customer's phone arrives as `dashboard.html#import=<payload>`. The router only knows `#/route` hashes, so that form is
+ * rewritten to the canonical `#/import?d=<payload>` (a `#/import?d=` link is already canonical). Returns the canonical hash, or '' when `hash` is not an import link.
+ */
+export function importRouteHash(hash) {
+  const m = /^#import(?:=([^&]*)(?:&.*)?)?$/.exec(String(hash || ''));
+  if (!m) return '';
+  const token = m[1] || '';
+  return token ? `#/import?d=${encodeURIComponent(token)}` : '#/import';
+}
+
+// The rewrite runs while this module loads (before the shell reads the hash) and on every later hash change. A fragment navigation fires popstate
+// BEFORE hashchange, and the router listens to both, so both are covered. It must be registered HERE and not in app.js: router.js imports this
+// file, so these listeners are added before the router's own and the router always sees the canonical hash.
+if (typeof window !== 'undefined' && window.location && window.history && typeof window.addEventListener === 'function') {
+  const rewriteImportLink = () => {
+    const to = importRouteHash(window.location.hash);
+    if (to) window.history.replaceState(null, '', window.location.pathname + window.location.search + to);
+  };
+  rewriteImportLink();
+  window.addEventListener('popstate', rewriteImportLink);
+  window.addEventListener('hashchange', rewriteImportLink);
+}
 
 /** The table entry for a route name (the first entry, today, when the name is unknown). */
 export function routeMeta(name) {

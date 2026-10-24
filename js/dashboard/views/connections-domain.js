@@ -121,7 +121,7 @@ function RecordsStep({ domain }) {
   return html`<div class="k1-stack">
     <div class="k1-records-meta">
       <p class="k1-small">For <strong class="k1-mono">${domain}</strong></p>
-      <span class="k1-tag k1-tag--sample">Example values</span>
+      <span class="k1-tag k1-tag--sample">Examples</span>
     </div>
     <${RecordsTable} domain=${domain} />
     <div class="k1-actions">
@@ -151,7 +151,7 @@ function checkItems(dom, lastCheck) {
     live
       ? { id: 'found', title: 'Records found', detail: 'We can see the records pointing at us (simulated).', tone: 'done', testid: 'k1-tl-found' }
       : looked
-        ? { id: 'found', title: 'We cannot see your records yet', detail: (lastCheck && lastCheck.message) || 'DNS changes can take a while, so try again in a minute. We also keep looking by ourselves.', tone: 'warn', testid: 'k1-tl-found' }
+        ? { id: 'found', title: 'We cannot see your records yet', detail: `We looked at ${dom.domain} and found nothing pointing at us so far. If you saved them a moment ago, give it a few minutes.`, tone: 'warn', testid: 'k1-tl-found' }
         : { id: 'found', title: 'We look for your records', detail: 'Press Check my DNS. The prototype pretends to look.', tone: 'current', testid: 'k1-tl-found' },
     { id: 'ssl', title: live ? 'Security certificate issued' : 'Security certificate', detail: live ? 'The padlock is ready (simulated).' : 'Issued automatically once the records are found.', tone: live ? 'done' : 'upcoming', testid: 'k1-tl-ssl' },
     { id: 'live', title: live ? 'Your address is live' : 'Your address goes live', detail: live ? (dom.verifiedAt ? `Verified ${whenText(dom.verifiedAt)}.` : undefined) : undefined, tone: live ? 'done' : 'upcoming', testid: 'k1-tl-live' }
@@ -177,9 +177,9 @@ function CheckStep({ dom, lastCheck, wentLive }) {
     ${verifying && !live ? html`<div class="k1-wait">
       <${Meter} label="Looking again by ourselves" value=${Math.min(elapsed, DOMAIN_VERIFY_SECONDS)} max=${DOMAIN_VERIFY_SECONDS}
         valueText=${left > 0 ? `About ${left} seconds` : 'Any moment now'} showValue size="sm" data-testid="k1-check-meter" />
-      <p class="k1-small">In real life this wait is DNS spreading across the internet. Here it takes about ${DOMAIN_VERIFY_SECONDS} seconds, or press the button again.</p>
+      <p class="k1-small">Prototype: we look again by ourselves in about ${DOMAIN_VERIFY_SECONDS} seconds. A real address can take up to 48 hours.</p>
     </div>` : null}
-    ${!live ? html`<p class="k1-note"><${Icon} name="clock" size=${18} /><span>Real DNS changes can take up to 48 hours. You can leave this page and come back: your progress is saved on this device.</span></p>` : null}
+    ${!live ? html`<p class="k1-note"><${Icon} name="info" size=${18} /><span>You can leave this page and come back. Your progress is saved on this device.</span></p>` : null}
   </div>`;
 }
 
@@ -272,16 +272,16 @@ export default function DomainView() {
   const validateAddress = () => {
     const text = hostFor();
     const problem = friendlyHostError(text);
-    if (problem) { setAddrError(problem); return problem; }
+    // The problem is written once, next to the address field; the wizard only stops and puts the cursor there.
+    if (problem) { setAddrError(problem); return { ok: false, inline: true }; }
     const check = validateHostname(text);
     setAddrError('');
     quiet.current = false;
     if (status !== 'none' && dom.domain === check.host) return true; // nothing changed: keep any progress
     const res = startDomainSetup(check.host);
     if (!res || !res.ok) {
-      const message = failureMessage(res, 'We could not save that address. Please try again.');
-      setAddrError(message);
-      return message;
+      setAddrError(failureMessage(res, 'We could not save that address. Please try again.'));
+      return { ok: false, inline: true };
     }
     undoToast({ message: `Address saved: ${check.host}`, detail: 'Simulated. Saved on this device only.', icon: 'globe', token: res.undoToken });
     return true;
@@ -317,7 +317,7 @@ export default function DomainView() {
     undoToast({ message: 'Address removed', detail: dom.domain, icon: 'trash-2', token: res.undoToken });
   };
 
-  // The wizard footer shares one row with Back, so on the very narrowest phones the labels are the shortest that still make sense.
+  // The wizard footer shares one row with Back, so the labels are short and stay on one line.
   const tiny = useMediaQuery('(max-width: 359px)');
   const checkLabel = status === 'live' ? 'Done' : (dom.checks > 0 ? 'Check again' : 'Check my DNS');
   const steps = [
@@ -328,7 +328,7 @@ export default function DomainView() {
     },
     {
       id: 'records', title: 'Add these records', hint: 'You add them once, where you manage your web address.',
-      nextLabel: tiny ? 'Next' : "I've added them", canNext: status !== 'none',
+      nextLabel: 'Added them', canNext: status !== 'none',
       content: html`<${RecordsStep} domain=${dom.domain || hostFor()} />`
     },
     {
@@ -337,15 +337,17 @@ export default function DomainView() {
     }
   ];
 
-  const subtitle = view === 'live' ? 'Your quote page has its own address.' : 'Three short steps. Takes about five minutes, plus the wait for DNS.';
+  // In the wizard the page header is just the title, so the stepper sits directly under it; the "simulated" chip rides on the stepper row.
+  const live = view === 'live';
   return html`<div class="db-page k1-page k1-page--narrow" data-testid="k1-domain">
-    <${PageHeader} back=${{ href: routeHref('connections'), label: 'Back to Connections' }} eyebrow="Connections" title="Your website address" subtitle=${subtitle} />
-    <${SimBanner}>The records and the check are examples. Nothing is looked up for real.<//>
+    <${PageHeader} back=${{ href: routeHref('connections'), label: 'Back to Connections' }} eyebrow=${live ? 'Connections' : undefined} title="Your website address"
+      subtitle=${live ? 'Your quote page has its own address.' : undefined} />
+    ${live ? html`<${SimBanner} compact />` : null}
     <${StorageNote} />
-    ${view === 'live'
+    ${live
       ? html`<${LiveView} dom=${dom} justWentLive=${wentLive} onRemove=${() => setConfirmRemove(true)} />`
       : html`<${Wizard} title="Your website address" testid="k1-domain-wizard" steps=${steps} step=${step} onStepChange=${(id) => setStep(id)}
-          onFinish=${runCheck} finishLabel=${checkLabel} onCancel=${() => goBack(routeHref('connections'))} />`}
+          aside=${html`<${SimBanner} compact />`} onFinish=${runCheck} finishLabel=${checkLabel} onCancel=${() => goBack(routeHref('connections'))} />`}
     <${ConfirmDialog} open=${confirmRemove} tone="danger" title="Remove this address?"
       body=${`Your quote page will stop answering at ${dom.domain} (simulated). You can set it up again whenever you like.`}
       confirmLabel="Remove address" cancelLabel="Keep it" onConfirm=${remove} onCancel=${() => setConfirmRemove(false)} />

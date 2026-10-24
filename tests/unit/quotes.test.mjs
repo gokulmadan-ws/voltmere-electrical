@@ -2,11 +2,11 @@
 // Owner: A3 core
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { SITE_BASE_URL, makeChargerItem, makeDefaultQuoteItems, makeDefaultSettings, chargerItemId } from '../../js/core/config.js';
+import { DEFAULT_QUOTE_NOTES, LEGACY_QUOTE_NOTES, SITE_BASE_URL, makeChargerItem, makeDefaultQuoteItems, makeDefaultSettings, chargerItemId } from '../../js/core/config.js';
 import { setClock } from '../../js/core/clock.js';
 import {
-  buildQuoteDraft, defaultQuoteLines, latestQuoteFor, normaliseQuoteItems, normaliseQuoteLines, quoteExpiresInDays, quoteLineTotal, quoteStatus,
-  quoteTotal, quoteUrl, quotesFor
+  buildQuoteDraft, defaultQuoteLines, isOptionalLine, latestQuoteFor, legacyQuoteShareUrl, normaliseQuoteItems, normaliseQuoteLines, parseQuotePayload, quoteDetailFromLink,
+  quoteExpiresInDays, quoteExtraLines, quoteExtrasTotal, quoteFixedLines, quoteLineTotal, quoteStatus, quoteTotal, quoteUrl, quotesFor, splitLines
 } from '../../js/core/quotes.js';
 import * as selectors from '../../js/core/selectors.js';
 import { quoteUrl as quoteUrlFromMessages } from '../../js/core/messages.js';
@@ -32,6 +32,74 @@ test('quoteLineTotal and quoteTotal: whole pounds, discounts are negative lines,
   assert.equal(quoteTotal({}), 0);
   assert.equal(quoteLineTotal(null), 0);
   assert.equal(selectors.quoteTotal, quoteTotal, 'the pinned helper is exported from selectors.js too');
+});
+
+test('optional lines (possible extras): listed on the quote, never counted in quoteTotal', () => {
+  const extra = line({ id: 'ln_x', label: 'Consumer unit upgrade (if required)', unitPrice: 420, optional: true });
+  const q = quote({ lines: [line(), line({ id: 'ln_2', label: 'Extra cable (per metre)', qty: 6, unitPrice: 12 }), extra] });
+  assert.equal(quoteTotal(q), 799 + 72, 'the optional line is left out of the fixed total');
+  assert.equal(quoteLineTotal(extra), 420, 'but it still has a value of its own to show');
+  assert.equal(quoteExtrasTotal(q), 420);
+  assert.deepEqual(quoteFixedLines(q).map((l) => l.id), ['ln_1', 'ln_2']);
+  assert.deepEqual(quoteExtraLines(q).map((l) => l.id), ['ln_x']);
+  assert.equal(isOptionalLine(extra), true);
+  assert.equal(isOptionalLine(line()), false, 'a v3 line has no flag and counts');
+  assert.equal(isOptionalLine(line({ optional: 'yes' })), false, 'only the boolean true makes a line optional');
+  assert.equal(isOptionalLine(null), false);
+  assert.equal(quoteTotal(quote({ lines: [extra] })), 0, 'a quote of only extras has no total');
+  assert.deepEqual([quoteFixedLines(null), quoteExtraLines(undefined)], [[], []]);
+  const split = splitLines(q);
+  assert.deepEqual(split.lines.map((l) => [l.id, l.lineTotal, l.optional]), [['ln_1', 799, false], ['ln_2', 72, false]]);
+  assert.deepEqual(split.extras.map((l) => [l.id, l.lineTotal, l.optional]), [['ln_x', 420, true]]);
+  assert.deepEqual(split.allLines.map((l) => l.id), ['ln_1', 'ln_2', 'ln_x'], 'every line, in the order written');
+  assert.equal(selectors.quoteExtrasTotal, quoteExtrasTotal, 'the helpers are exported from selectors.js too');
+  assert.equal(selectors.isOptionalLine, isOptionalLine);
+  assert.equal(selectors.quoteFixedLines, quoteFixedLines);
+  assert.equal(selectors.quoteExtraLines, quoteExtraLines);
+});
+
+test('optional lines: the catalogue flags only the consumer unit upgrade, new lines carry it, and the v3 share link leaves extras out', () => {
+  const items = makeDefaultQuoteItems();
+  assert.deepEqual(items.filter((i) => i.optional).map((i) => i.id), ['consumer_unit']);
+  assert.ok(items.every((i) => typeof i.optional === 'boolean'), 'every item has the flag');
+  assert.equal(makeChargerItem('KEBA').optional, false);
+  const settings = makeDefaultSettings();
+  settings.quoteItems.find((i) => i.id === 'consumer_unit').suggested = true;
+  const lines = defaultQuoteLines(settings, { brand: 'ZAPPI' });
+  assert.deepEqual(lines.map((l) => [l.label, l.optional]).slice(-2), [['Consumer unit upgrade (if required)', true], ['Testing and certification', false]]);
+  assert.equal(quoteTotal({ lines }), 799 + 450 + 180 + 85, 'a suggested optional item arrives as an extra and adds nothing to the total');
+  const checked = normaliseQuoteLines([{ label: 'A', qty: 1, unitPrice: 10, optional: true }, { label: 'B', qty: 1, unitPrice: 10, optional: 'true' }, { label: 'C', qty: 1, unitPrice: 10 }]);
+  assert.deepEqual(checked.lines.map((l) => l.optional), [true, false, false], 'only a real boolean true is kept');
+  const itemsOut = normaliseQuoteItems([{ label: 'Extra', unitPrice: 5, optional: true }, { label: 'Normal', unitPrice: 5 }]).items;
+  assert.deepEqual(itemsOut.map((i) => i.optional), [true, false]);
+  // the v3 link format cannot mark a line optional, so it carries the fixed lines only and its total still matches
+  const q = quote({ lines: [line(), line({ id: 'ln_x', label: 'Consumer unit upgrade (if required)', unitPrice: 420, optional: true })] });
+  const parsed = parseQuotePayload(legacyQuoteShareUrl(q, { ownerFirst: 'Daniel' }).split('&d=')[1]);
+  assert.deepEqual(parsed.lines.map((l) => l.label), ['Supply of ZAPPI home charger']);
+  assert.equal(parsed.total, 799);
+});
+
+test('quoteDetailFromLink keeps the extras apart from the lines the total adds up', () => {
+  const link = {
+    kind: 'quo', id: 'Q-EL-1043', ref: 'EL-1043', customerFirst: 'Aoife', postcode: 'BT9 6QP', brand: 'ZAPPI', total: 799, notes: '', validUntil: '2026-11-22', sentAt: '2026-10-23T09:30', sample: true,
+    lines: [
+      { id: 'ln_1', label: 'Supply of ZAPPI home charger', detail: '', qty: 1, unitPrice: 799, optional: false },
+      { id: 'ln_2', label: 'Consumer unit upgrade (if required)', detail: '', qty: 1, unitPrice: 420, optional: true }
+    ]
+  };
+  const d = quoteDetailFromLink(link, '2026-10-23T20:30');
+  assert.equal(d.total, 799);
+  assert.deepEqual(d.lines.map((l) => l.label), ['Supply of ZAPPI home charger']);
+  assert.deepEqual(d.extras.map((l) => [l.label, l.lineTotal]), [['Consumer unit upgrade (if required)', 420]]);
+  assert.equal(d.allLines.length, 2);
+});
+
+test('the default quote notes are one short, neutral, labelled sample line: no guarantee, payment or product wording', () => {
+  assert.equal(DEFAULT_QUOTE_NOTES, 'Sample terms: Daniel sets his own.');
+  assert.equal(makeDefaultSettings().quoteDefaults.notes, DEFAULT_QUOTE_NOTES);
+  assert.ok(DEFAULT_QUOTE_NOTES.length < 60);
+  assert.ok(!/guarantee|warranty|pay|deposit|card|cash|transfer|supplied and fitted|agreed with you|\d/i.test(DEFAULT_QUOTE_NOTES));
+  assert.ok(LEGACY_QUOTE_NOTES.every((t) => t !== DEFAULT_QUOTE_NOTES), 'the old text is recognised so a saved state can be brought up to date');
 });
 
 test('quoteStatus: sent and viewed expire the day AFTER validUntil; every other status is as stored', () => {
@@ -76,6 +144,8 @@ test('the default catalogue: a sample charger line per brand, then the seven ins
   assert.deepEqual(items.filter((i) => i.unit === 'metre').map((i) => i.id), ['cable_extra', 'groundwork']);
   assert.ok(items.every((i) => Number.isInteger(i.unitPrice) && i.unitPrice > 0 && i.defaultQty === 1), 'whole-pound sample prices');
   assert.deepEqual(items.filter((i) => i.suggested).map((i) => i.id), ['charger_zappi', 'install_standard', 'circuit', 'testing']);
+  assert.deepEqual(items.filter((i) => i.optional).map((i) => i.id), ['consumer_unit'], 'the consumer unit upgrade is a possible extra, never part of a fixed total');
+  assert.ok(items.every((i) => !i.detail), 'no product, spec or guarantee wording in the sample catalogue');
   assert.deepEqual(makeDefaultQuoteItems(['KEBA']).map((i) => i.id).slice(0, 2), ['charger_keba', 'install_standard']);
   assert.deepEqual(makeDefaultQuoteItems([]).map((i) => i.kind), ['install', 'extra', 'install', 'extra', 'extra', 'extra', 'install']);
   assert.equal(makeChargerItem('Fox ESS').unitPrice, 700, 'a brand the owner adds starts at a sample 700');
@@ -140,7 +210,7 @@ test('normaliseQuoteLines: clean lines or one plain sentence about the first pro
 test('normaliseQuoteItems: the catalogue editor input, validated', () => {
   const ok = normaliseQuoteItems([{ label: 'Smart meter link', unitPrice: 60 }, { id: 'charger_zappi', kind: 'charger', brand: ' ZAPPI ', label: 'Supply of ZAPPI home charger', unit: 'each', unitPrice: 810, defaultQty: 1, suggested: true }]);
   assert.equal(ok.error, '');
-  assert.deepEqual(ok.items[0], { id: ok.items[0].id, kind: 'extra', brand: '', label: 'Smart meter link', detail: '', unit: 'each', unitPrice: 60, defaultQty: 1, suggested: false });
+  assert.deepEqual(ok.items[0], { id: ok.items[0].id, kind: 'extra', brand: '', label: 'Smart meter link', detail: '', unit: 'each', unitPrice: 60, defaultQty: 1, suggested: false, optional: false });
   assert.match(ok.items[0].id, /^item_[0-9a-z]{8}$/);
   assert.deepEqual([ok.items[1].brand, ok.items[1].suggested, ok.items[1].unitPrice], ['ZAPPI', true, 810]);
   assert.equal(normaliseQuoteItems([{ kind: 'extra', brand: 'ignored', label: 'x', unitPrice: 1 }]).items[0].brand, '', 'only chargers carry a brand');

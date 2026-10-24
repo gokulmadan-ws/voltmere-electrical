@@ -1,8 +1,8 @@
-// js/dashboard/views/connections.js: Connections hub (#/connections): progress ring, six simulated connection cards, plus helpers shared by the K1 screens.
-// Owner: K1 (connections hub, domain, webhook, tracking)
+// js/dashboard/views/connections.js: Connections hub (#/connections): "tried out" ring, six practice-mode connection cards, plus helpers shared by the K1 screens.
+// Owner: K1 (connections hub, domain, webhook, tracking); round 2 (T13): honest wording (practice mode, "tried out"), the webhook first, buttons on one baseline
 import { html, useMemo } from '../../vendor/preact-htm.js';
 import {
-  Banner, Button, ConnectionBadge, Icon, PageHeader, ProgressRing, RealBuildNote, SimBanner, toast, useNow, useStore
+  Banner, Button, ConnectionBadge, Icon, PageHeader, ProgressRing, RealBuildNote, SimBanner, cx, toast, useNow, useStore
 } from '../../ui/index.js';
 import { selectConnectionsSummary } from '../../core/selectors.js';
 import { getStorageStatus, undo } from '../../core/store.js';
@@ -13,7 +13,15 @@ export const css = ['css/connections.css'];
 
 // ---------- shared with connections-domain.js, connections-webhook.js and connections-tracking.js ----------
 
-/** Card copy per connection: icon, the one-line value proposition, the route, and the button wording per state. */
+/**
+ * The one "Practice mode" look for something that is done in this demo but is not real: a neutral dashed outline with a tick, never a green
+ * "Connected". Used on the hub cards, and on the end states of the wizards.
+ */
+export function PracticeBadge({ label = 'Tried out', tag, class: cls, ...rest }) {
+  return html`<span class=${cx('k1-practice', cls)} ...${rest}><${Icon} name="check" size=${14} /><span>${label}${tag ? html`<span class="k1-practice__tag">${tag}</span>` : null}</span></span>`;
+}
+
+/** Card copy per connection: icon, the one-line value proposition, the route, and the button wording per state. `title` replaces the plain name where a card needs plainer words. */
 export const CARD_META = {
   domain: {
     icon: 'globe', route: 'connections-domain',
@@ -21,8 +29,8 @@ export const CARD_META = {
     cta: { off: 'Set up my address', pending: 'Check my DNS', connected: 'Manage address' }
   },
   whatsapp: {
-    icon: 'message-circle', route: 'connections-whatsapp',
-    value: 'Get messages on WhatsApp the second an enquiry lands',
+    icon: 'message-circle', route: 'connections-whatsapp', title: 'WhatsApp alert to my phone',
+    value: 'Get a WhatsApp message on your own phone the second an enquiry lands',
     cta: { off: 'Connect WhatsApp', pending: 'Finish setup', connected: 'Manage WhatsApp' }
   },
   calendar: {
@@ -36,9 +44,9 @@ export const CARD_META = {
     cta: { off: 'Connect Gmail', pending: 'Finish setup', connected: 'Manage Gmail' }
   },
   webhook: {
-    icon: 'webhook', route: 'connections-webhook',
-    value: 'Keep the funnel you have now and let every enquiry land here too',
-    cta: { off: 'Turn it back on', pending: 'Finish setup', connected: 'Manage webhook' }
+    icon: 'webhook', route: 'connections-webhook', title: 'Keep your Facebook funnel',
+    value: 'Keep the funnel your agency runs now, and let every enquiry land here too',
+    cta: { off: 'Turn it back on', pending: 'Set it up', connected: 'Manage it' }
   },
   tracking: {
     icon: 'megaphone', route: 'connections-tracking',
@@ -47,11 +55,11 @@ export const CARD_META = {
   }
 };
 
-/** Card order on the hub. */
-export const HUB_ORDER = ['domain', 'whatsapp', 'calendar', 'email', 'webhook', 'tracking'];
+/** Card order on the hub: the one that fits how he works today first (keep the agency's funnel, bring its leads in), then what saves him most time. */
+export const HUB_ORDER = ['webhook', 'whatsapp', 'domain', 'calendar', 'email', 'tracking'];
 
-// Which unfinished connection to suggest first: the one that saves him the most time.
-const NEXT_PRIORITY = ['whatsapp', 'domain', 'calendar', 'email', 'tracking', 'webhook'];
+// Which unfinished connection to suggest first: the same order.
+const NEXT_PRIORITY = ['webhook', 'whatsapp', 'domain', 'calendar', 'email', 'tracking'];
 
 /** A toast with an Undo button that reverses one store change (falls back to a plain toast without a token). */
 export function undoToast({ message, detail, icon, token }) {
@@ -85,9 +93,11 @@ function ConnectionCard({ item, index, isNext }) {
     <div class="k1-card__top">
       <span class="k1-card__icon" aria-hidden="true"><${Icon} name=${meta.icon} size=${24} /></span>
       <div class="k1-card__head">
-        <h3 class="k1-card__title">${item.title}</h3>
+        <h3 class="k1-card__title">${meta.title || item.title}</h3>
         <div class="k1-card__badges">
-          <${ConnectionBadge} status=${item.status} label=${item.label} data-testid=${`k1-badge-${item.key}`} />
+          ${item.status === 'connected'
+            ? html`<${PracticeBadge} data-testid=${`k1-badge-${item.key}`} />`
+            : html`<${ConnectionBadge} status=${item.status} label=${item.label} data-testid=${`k1-badge-${item.key}`} />`}
           ${isNext ? html`<span class="k1-tag">Up next</span>` : null}
         </div>
       </div>
@@ -122,15 +132,15 @@ export default function ConnectionsView() {
     <${StorageNote} />
 
     <section class=${`k1-hero${complete ? ' k1-hero--done' : ''}`} aria-label="Set-up progress" data-testid="k1-hero">
-      <${ProgressRing} class="k1-hero__ring" size=${92} stroke=${8} value=${done} max=${total} tone=${complete ? 'ok' : 'accent'}
-        label="Connections set up" valueText=${`${done} of ${total} set up`} data-testid="k1-progress">
+      <${ProgressRing} class="k1-hero__ring" size=${92} stroke=${8} value=${done} max=${total} tone="accent"
+        label="Connections tried out" valueText=${`${done} of ${total} tried out`} data-testid="k1-progress">
         <span class="k1-hero__ring-num">${done}</span><span class="k1-hero__ring-of">of ${total}</span>
       <//>
       <div class="k1-hero__text">
-        <p class="k1-hero__title" data-testid="k1-progress-text">${done} of ${total} set up</p>
+        <p class="k1-hero__title" data-testid="k1-progress-text">${done} of ${total} tried out</p>
         ${complete
-          ? html`<p class="k1-hero__sub">Everything is switched on. In this prototype it is all simulated, so nothing is really connected yet.</p>`
-          : html`<p class="k1-hero__sub" data-testid="k1-next-text"><strong>Up next: ${next.title}.</strong> ${nextMeta.value}.</p>`}
+          ? html`<p class="k1-hero__sub">All ${total} set up in this demo. Nothing is really connected yet.</p>`
+          : html`<p class="k1-hero__sub" data-testid="k1-next-text"><strong>Up next: ${nextMeta.title || next.title}.</strong> ${nextMeta.value}.</p>`}
       </div>
       ${complete ? null : html`<${Button} class="k1-hero__cta" variant="primary" size="lg" iconRight="arrow-right" href=${routeHref(nextMeta.route)} data-testid="k1-hero-cta">${nextMeta.cta[next.status] || 'Open'}<//>`}
     </section>

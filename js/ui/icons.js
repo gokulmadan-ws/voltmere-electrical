@@ -131,7 +131,12 @@ export const ICONS = {
   'calendar-clock': [['path', { d: 'M16 14v2.2l1.6 1' }], ['path', { d: 'M16 2v3' }], ['path', { d: 'M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338' }], ['path', { d: 'M3 9h5.859' }], ['path', { d: 'M8 2v3' }], ['circle', { cx: '16', cy: '16', r: '6' }]],
   'calendar-plus': [['path', { d: 'M16 18h6' }], ['path', { d: 'M16 2v3' }], ['path', { d: 'M19 15v6' }], ['path', { d: 'M21 11.5V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h8.3' }], ['path', { d: 'M3 9h18' }], ['path', { d: 'M8 2v3' }]],
   'phone-call': [['path', { d: 'M13 2a9 9 0 0 1 9 9' }], ['path', { d: 'M13 6a5 5 0 0 1 5 5' }], ['path', { d: 'M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384' }]],
-  'mail-check': [['path', { d: 'M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8' }], ['path', { d: 'm22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7' }], ['path', { d: 'm16 19 2 2 4-4' }]]
+  'mail-check': [['path', { d: 'M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8' }], ['path', { d: 'm22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7' }], ['path', { d: 'm16 19 2 2 4-4' }]],
+  // T11 additions. 'message-square-text' is lucide's glyph (same source and format as above): a square speech bubble with three text lines,
+  // the Messages icon, so Messages no longer shares the round bubble with WhatsApp and Reply. 'whatsapp' is drawn here, not a lucide icon: the
+  // round bubble of 'message-circle' with a small handset inside it. display.js shows it wherever 'message-circle' is asked for (WhatsApp and Reply).
+  'message-square-text': [['path', { d: 'M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z' }], ['path', { d: 'M7 11h10' }], ['path', { d: 'M7 15h6' }], ['path', { d: 'M7 7h8' }]],
+  'whatsapp': [['path', { d: 'M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719' }], ['path', { d: 'M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384', transform: 'translate(7.05 6.7) scale(0.4)', 'stroke-width': '4' }]]
 };
 
 export const ICON_NAMES = Object.keys(ICONS);

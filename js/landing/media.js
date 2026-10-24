@@ -36,7 +36,7 @@ const srcsetFor = (key, widths) => widths.map((w) => `${photoSrc(key, w)} ${w}w`
  * for the first-screen photo only (and asks for high priority). `as` is the box's tag ('span' inside a button). While loading a soft shimmer shows; if the file is
  * missing or blocked, the box keeps its shape and shows the on-brand placeholder instead.
  */
-export function Photo({ img, ratio = '4 / 3', widths = [480, 800, 1200], sizes = '100vw', eager = false, as: Tag = 'div', class: cls, children, ...rest }) {
+export function Photo({ img, ratio = '4 / 3', widths = [480, 800, 1200], sizes = '100vw', eager = false, as: Tag = 'div', fallback = PLACEHOLDER_SRC, class: cls, children, ...rest }) {
   useStore(selectImages);
   const [state, setState] = useState('loading'); // loading | loaded | failed
   const src = photoSrc(img.key, widths[1] || widths[0]);
@@ -53,7 +53,7 @@ export function Photo({ img, ratio = '4 / 3', widths = [480, 800, 1200], sizes =
   return html`
     <${Tag} class=${cx('lp-photo', failed ? 'is-failed' : state === 'loaded' ? 'is-loaded' : 'is-loading', img.zoom && 'has-zoom', cls)} style=${style} ...${rest}>
       ${failed
-        ? html`<img class="lp-photo__img lp-photo__img--ph" src=${PLACEHOLDER_SRC} width=${img.w} height=${img.h}
+        ? html`<img class="lp-photo__img lp-photo__img--ph" src=${fallback} width=${img.w} height=${img.h}
             alt=${`${img.alt} (photo not available right now)`} decoding="async" />`
         : html`<img class="lp-photo__img" ref=${settle}
             src=${src} srcset=${srcsetFor(img.key, widths)} sizes=${sizes}
@@ -67,8 +67,10 @@ export function Photo({ img, ratio = '4 / 3', widths = [480, 800, 1200], sizes =
 }
 
 /**
- * His logo. It is a picture on a near-black card, so it always sits in a black chip (.lp-logo, black in both themes)
- * and is blended with `lighten` so the card colour disappears into the chip. Falls back to the earlier local crop.
+ * His logo. The picture (1119x743, near-black card, "180 ELECTRICAL" lockup in the middle, corner stripes) is shown through a
+ * crop window (.lp-logo in landing.css: only the lockup is visible, so the red ELECTRICAL wordmark stays readable at header
+ * size) and blended with `lighten`, so the card colour disappears into the near-black header or footer: no chip, no box.
+ * Falls back to the earlier local crop (img/logo-180.png, same layout, so the same window fits).
  * `decorative` gives it an empty alt (when the business name is printed right beside it).
  */
 export function LogoImg({ name, eager = false, decorative = false, class: cls }) {

@@ -8,6 +8,8 @@
 .k2-page { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .k2-page > * { min-width: 0; }
 .k2-page > .ui-page-header { margin-bottom: 0; }
+/* a page that is in a wizard keeps the header, the stepper and the step title tight so they all sit in the first screen */
+.db-main:has(.ui-wizard) > .db-view > .db-page.k2-page { gap: var(--space-3); }
 .k2-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .k2-stack > * { min-width: 0; }
 .k2-nowrap { white-space: nowrap; }
@@ -135,9 +137,13 @@
 .k2-tpls__sum { display: flex; flex-direction: column; gap: var(--space-3); }
 .k2-tpls__line { margin: 0; max-width: none; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
 .k2-tpls__sum .ui-btn { align-self: flex-start; }
+/* "Prototype: fast-forward": clearly a stand-in for the one to two day wait, kept apart from the real buttons by a dashed rule */
+.k2-ff { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding-top: var(--space-3); border-top: 1.5px dashed var(--field-border); }
+.k2-ff__note { margin: 0; max-width: none; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
 @media (max-width: 479px) { .k2-tpls__sum .ui-btn { align-self: stretch; } }
 .k2-tplgroup { min-width: 0; }
-.k2-tplgroup__sum { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap); padding: 4px 2px; list-style: none; cursor: pointer; border-radius: var(--r-sm); }
+.k2-tplgroup__sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); min-height: var(--tap); padding: 4px 2px; list-style: none; cursor: pointer; border-radius: var(--r-sm); }
+.k2-tplgroup__sum .ui-conn { flex: none; }
 .k2-tplgroup__sum::-webkit-details-marker { display: none; }
 .k2-tplgroup[open] > .k2-tplgroup__sum { margin-bottom: var(--space-2); }
 .k2-tplgroup__title { color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
@@ -159,9 +165,14 @@
 .k2-tpl__name { grid-column: 1; min-width: 0; font-size: var(--fs-16); font-weight: var(--fw-semibold); line-height: 1.3; overflow-wrap: anywhere; }
 .k2-tpl__sum .ui-conn { grid-column: 1; justify-self: start; }
 .k2-tpl__chev { grid-column: 2; grid-row: 1 / span 2; color: var(--text-2); transition: transform var(--dur-base) var(--ease-out); }
+/* A row whose status is the same as its group's shows no pill: one line, name and chevron. The status is inside once it is opened. */
+.k2-tpl__sum--plain { min-height: 56px; row-gap: 0; }
+.k2-tpl__sum--plain .k2-tpl__chev { grid-row: 1; }
+.k2-tpl__state { margin: 0; }
 .k2-tpl[open] .k2-tpl__chev { transform: rotate(180deg); }
 @media (min-width: 560px) {
   .k2-tpl__sum { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .k2-tpl__sum--plain .k2-tpl__chev { grid-column: 3; }
   .k2-tpl__sum .ui-conn { grid-column: 2; }
   .k2-tpl__chev { grid-column: 3; grid-row: 1; }
 }
@@ -300,3 +311,19 @@
   .k2-page .ui-wizard__footer { gap: var(--space-2); }
   .k2-page .ui-wizard__footer .ui-btn { padding-inline: 14px; }
 }
+
+/* The one "Practice mode" look (also in connections.css, which these screens do not load): a neutral dashed outline with a tick. */
+.k1-practice {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 12px 0 9px; max-width: 100%;
+  border: 1.5px dashed var(--field-border); border-radius: var(--r-pill); background: transparent; color: var(--text-2);
+  font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.3;
+}
+.k1-practice svg { flex: none; }
+.k1-practice__tag { font-weight: var(--fw-regular); }
+
+/* ONE 2px focus ring on a field: the border takes the ring colour (the danger colour when the field is invalid) and the 3px outline steps aside,
+   so a focused field never wears a border AND an outline. */
+.k2-page .ui-input:focus-visible, .k2-page .ui-select:focus-visible, .k2-page .ui-textarea:focus-visible,
+.k2-page .ui-input:focus, .k2-page .ui-select:focus, .k2-page .ui-textarea:focus { outline: none; border-width: 2px; border-color: var(--focus); }
+.k2-page .ui-input.is-invalid:focus, .k2-page .ui-select.is-invalid:focus, .k2-page .ui-textarea.is-invalid:focus,
+.k2-page .ui-input.is-invalid:focus-visible, .k2-page .ui-select.is-invalid:focus-visible, .k2-page .ui-textarea.is-invalid:focus-visible { border-color: var(--danger); }

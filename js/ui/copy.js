@@ -21,16 +21,24 @@ function useCopyFeedback() {
 /**
  * Read-only value, a copy button, and an optional mask. `secret` shows dots until "Show". Copy always copies the real value.
  * If the clipboard is blocked the value is revealed and selected so it can be copied by hand.
+ * Additive props: `display` is a friendlier text to show (a link without its https://) while Copy still copies `value`;
+ * `clamp` (a number of lines, with `multiline`) shows the text clamped with an ellipsis and a "Show full link" toggle that
+ * opens the whole value. Every field carries the real value in `data-full`.
  */
-export function CopyField({ label, value, secret, mono = true, hint, id, onCopy, testid, multiline, class: cls, ...rest }) {
+export function CopyField({ label, value, secret, mono = true, hint, id, onCopy, testid, multiline, display, clamp, expandLabel = 'Show full link', class: cls, ...rest }) {
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = id || uid('copy');
   const fid = idRef.current;
   const inputRef = useRef(null);
   const [revealed, setRevealed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [state, flash] = useCopyFeedback();
   const text = String(value === undefined || value === null ? '' : value);
   const masked = !!secret && !revealed;
+  // A friendlier `display` text stands in for the value until the whole value is asked for (or a failed copy selects it by hand).
+  const shown = !secret && !revealed && display !== undefined && display !== null ? String(display) : text;
+  const canClamp = !!multiline && Number(clamp) > 0 && !revealed;
+  const clamped = canClamp && !expanded;
 
   const copy = async () => {
     const ok = await copyText(text);
@@ -43,21 +51,32 @@ export function CopyField({ label, value, secret, mono = true, hint, id, onCopy,
   };
 
   const common = {
-    id: fid, class: cx('ui-copy__input', mono && 'ui-copy__input--mono'), readonly: true, value: text, ref: inputRef,
-    spellcheck: false, autocomplete: 'off', 'data-testid': testid ? `${testid}-value` : undefined,
+    id: fid, class: cx('ui-copy__input', mono && 'ui-copy__input--mono'), readonly: true, value: multiline ? text : shown, ref: inputRef,
+    spellcheck: false, autocomplete: 'off', 'data-testid': testid ? `${testid}-value` : undefined, 'data-full': text,
     'aria-describedby': hint ? `${fid}-hint` : undefined,
     onFocus: (e) => { const el = e.target; setTimeout(() => { try { el.select(); } catch (err) { /* ok */ } }, 0); }
   };
-  const control = multiline
-    ? h('textarea', { ...common, rows: 3 })
-    : h('input', { ...common, type: masked ? 'password' : 'text', 'data-lpignore': 'true', 'data-1p-ignore': 'true' });
+  let control;
+  if (clamped) {
+    // Clamped: a few lines with an ellipsis (a textarea cannot draw one). It is selectable, and the toggle below opens the whole value.
+    control = h('div', {
+      class: cx('ui-copy__input', 'ui-copy__clamp', mono && 'ui-copy__input--mono'), id: fid, role: 'textbox', 'aria-readonly': 'true', tabindex: 0,
+      'aria-labelledby': `${fid}-label`, 'aria-describedby': hint ? `${fid}-hint` : undefined,
+      'data-testid': testid ? `${testid}-value` : undefined, 'data-full': text, style: { '--lines': Number(clamp) }
+    }, h('span', { class: 'ui-copy__clamp-text' }, multiline && display !== undefined && display !== null ? String(display) : text));
+  } else if (multiline) control = h('textarea', { ...common, rows: expanded ? 4 : 3 });
+  else control = h('input', { ...common, type: masked ? 'password' : 'text', 'data-lpignore': 'true', 'data-1p-ignore': 'true' });
 
   const copyLabel = state === 'copied' ? 'Copied' : state === 'failed' ? 'Select and copy' : 'Copy';
 
-  return h('div', { class: cx('ui-copy', state === 'copied' && 'is-copied', cls), 'data-testid': testid, ...rest },
-    h('label', { class: 'ui-field__label', for: fid }, label),
+  return h('div', { class: cx('ui-copy', state === 'copied' && 'is-copied', multiline && Number(clamp) > 0 && 'ui-copy--clamp', cls), 'data-testid': testid, ...rest },
+    h('label', { class: 'ui-field__label', for: fid, id: `${fid}-label` }, label),
     h('div', { class: 'ui-copy__row' },
-      control,
+      canClamp
+        ? h('div', { class: 'ui-copy__stack' }, control,
+          h('button', { type: 'button', class: 'ui-copy__more', 'aria-expanded': expanded ? 'true' : 'false', onClick: () => setExpanded(!expanded), 'data-testid': testid ? `${testid}-more` : undefined },
+            expanded ? 'Show less' : expandLabel, h(Icon, { name: expanded ? 'chevron-up' : 'chevron-down', size: 18 })))
+        : control,
       secret ? h(Button, {
         variant: 'secondary', size: 'sm', class: 'ui-copy__btn', icon: revealed ? 'eye-off' : 'eye',
         'aria-pressed': revealed ? 'true' : 'false', 'aria-label': `${revealed ? 'Hide' : 'Show'} ${label}`,

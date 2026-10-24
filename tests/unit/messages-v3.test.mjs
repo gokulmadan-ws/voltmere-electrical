@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { DEFAULT_TEMPLATES, KIND_LABELS, PLACEHOLDERS, SITE_BASE_URL, TEMPLATE_KINDS, makeDefaultSettings } from '../../js/core/config.js';
 import { setClock } from '../../js/core/clock.js';
 import { bubbleActions, buildContext, buildMessage, buildSystemMessage } from '../../js/core/messages.js';
+import { parseQuoteLink } from '../../js/core/handoff.js';
 
 beforeEach(() => setClock(new Date(2026, 9, 23, 20, 30)));
 afterEach(() => setClock(null));
@@ -46,15 +47,17 @@ test('buildContext: the five quote placeholders are always present, empty withou
   for (const k of ['quoteId', 'quoteLink', 'quoteTotal', 'quoteValidUntil', 'installWhen']) assert.equal(ctx[k], '', k);
   const withQuote = buildContext(enquiry(), stateOf(), { quote: quote() });
   assert.equal(withQuote.quoteId, 'Q-EL-1043');
-  assert.equal(withQuote.quoteLink, `${SITE_BASE_URL}quote.html#q=Q-EL-1043`);
-  assert.equal(withQuote.quoteTotal, '£1514');
+  // the link a customer is sent carries the quote itself (quote.html#d=<payload>, v4), so it opens on any phone
+  assert.ok(withQuote.quoteLink.startsWith(`${SITE_BASE_URL}quote.html#d=`), withQuote.quoteLink);
+  assert.equal(parseQuoteLink(withQuote.quoteLink).data.id, 'Q-EL-1043', 'and the payload is the quote');
+  assert.equal(withQuote.quoteTotal, '£1,514');
   assert.equal(withQuote.quoteValidUntil, 'Sat 21 Nov');
   assert.equal(withQuote.installWhen, '');
   // found from the state when not passed in: the enquiry's latest quote
   const q2 = quote({ id: 'Q-EL-1043-2', createdAt: '2026-10-23T09:00', lines: [{ id: 'a', label: 'Charger', detail: '', qty: 2, unitPrice: 800 }] });
   const found = buildContext(enquiry(), stateOf({ quotes: { 'Q-EL-1043': quote(), [q2.id]: q2 } }));
   assert.equal(found.quoteId, 'Q-EL-1043-2');
-  assert.equal(found.quoteTotal, '£1600');
+  assert.equal(found.quoteTotal, '£1,600');
   // an install booking finds its quote by quoteId and its own day for installWhen
   const inst = install();
   const fromInstall = buildContext(inst, stateOf({ quotes: { 'Q-EL-1043': quote({ installBookingId: 'bk_inst' }) }, bookings: [inst] }));
@@ -79,7 +82,9 @@ test('contactHours follows settings.sla.replyHours (the promise in the customer 
 test('customer_quote_sent: the quote, the total, the valid date and the link; channel email carries the address', () => {
   const state = stateOf();
   const m = buildMessage('customer_quote_sent', enquiry(), state, { quote: quote(), at: '2026-10-23T20:30' });
-  assert.equal(m.body, `Hi Aoife, it's Daniel from 180 Electrical. Your written quote for the home charger installation is ready: £1514, valid until Sat 21 Nov. You can read it and choose an install day here: ${SITE_BASE_URL}quote.html#q=Q-EL-1043 Questions? Reply here or call 07885 496800. Ref EL-1043`);
+  // the link is the self-contained one (quote.html#d=<payload>), so it opens on any phone
+  assert.match(m.body, /^Hi Aoife, it's Daniel from 180 Electrical\. Your written quote for the home charger installation is ready: £1,514, valid until Sat 21 Nov\. You can read it and choose an install day here: \S+quote\.html#d=[A-Za-z0-9_-]+ Questions\? Reply here or call 07885 496800\. Ref EL-1043$/);
+  assert.ok(m.body.includes(`${SITE_BASE_URL}quote.html#d=`));
   assert.deepEqual([m.to, m.channel, m.bookingId, m.toName, m.toPhone, m.simulated, m.seed], ['customer', 'whatsapp', 'bk_enq', 'Aoife Magee', '07700 900231', true, false]);
   assert.equal('toEmail' in m, false);
   const em = buildMessage('customer_quote_sent', enquiry(), state, { quote: quote(), channel: 'email' });
@@ -92,23 +97,23 @@ test('customer_quote_sent: the quote, the total, the valid date and the link; ch
   assert.ok(buildMessage('customer_quote_sent', enquiry(), state, { quote: quote() }).body.startsWith("Hi Aoife, it's Lee from Ashby Sparks."));
 });
 
-test('customer_quote_accepted and owner_quote_accepted are about the pencilled install', () => {
+test('customer_quote_accepted names the chosen install day (no pencilled or provisional wording) and owner_quote_accepted is about the pencilled install', () => {
   const inst = install();
   const state = stateOf({ quotes: { 'Q-EL-1043': quote({ status: 'accepted', installBookingId: 'bk_inst' }) }, bookings: [inst] });
   const toCustomer = buildMessage('customer_quote_accepted', inst, state, { quote: state.quotes['Q-EL-1043'], installBooking: inst });
-  assert.equal(toCustomer.body, 'Hi Aoife, thanks for accepting your quote (£1514). I have pencilled in your installation for Thu 29 Oct, afternoon, arriving between 1 and 3pm. I will be in touch to confirm it. Quote Q-EL-1043');
+  assert.equal(toCustomer.body, 'Hi Aoife, thanks for accepting your quote (£1,514). The install day you chose is Thu 29 Oct, afternoon, arriving between 1 and 3pm. I will be in touch to confirm it. Quote Q-EL-1043');
   assert.equal(toCustomer.to, 'customer');
   const toOwner = buildMessage('owner_quote_accepted', inst, state, { quote: state.quotes['Q-EL-1043'], installBooking: inst });
-  assert.equal(toOwner.body, `*Quote accepted Q-EL-1043*\nAoife Magee accepted your quote (£1514).\nInstall pencilled in: Thu 29 Oct, afternoon, arriving between 1 and 3pm (provisional)\n14 Larkfield Gardens, BT9 6QP\nOpen: ${SITE_BASE_URL}dashboard.html#/bookings/bk_inst`);
+  assert.equal(toOwner.body, `*Quote accepted Q-EL-1043*\nAoife Magee accepted your quote (£1,514).\nInstall pencilled in: Thu 29 Oct, afternoon, arriving between 1 and 3pm (provisional)\n14 Larkfield Gardens, BT9 6QP\nOpen: ${SITE_BASE_URL}dashboard.html#/bookings/bk_inst`);
   assert.deepEqual([toOwner.to, toOwner.toName, toOwner.toPhone], ['owner', 'Daniel', '07885 496800']);
 });
 
 test('owner_quote_declined: the reason line is dropped when there is none', () => {
   const state = stateOf({ quotes: { 'Q-EL-1043': quote({ status: 'declined' }) } });
   const withReason = buildMessage('owner_quote_declined', enquiry(), state, { quote: state.quotes['Q-EL-1043'], reason: 'Too dear' });
-  assert.equal(withReason.body, `*Quote declined Q-EL-1043*\nAoife Magee declined your quote (£1514).\nReason: Too dear.\nOpen: ${SITE_BASE_URL}dashboard.html#/bookings/bk_enq`);
+  assert.equal(withReason.body, `*Quote declined Q-EL-1043*\nAoife Magee declined your quote (£1,514).\nReason: Too dear.\nOpen: ${SITE_BASE_URL}dashboard.html#/bookings/bk_enq`);
   const without = buildMessage('owner_quote_declined', enquiry(), state, { quote: state.quotes['Q-EL-1043'], reason: '' });
-  assert.equal(without.body, `*Quote declined Q-EL-1043*\nAoife Magee declined your quote (£1514).\nOpen: ${SITE_BASE_URL}dashboard.html#/bookings/bk_enq`);
+  assert.equal(without.body, `*Quote declined Q-EL-1043*\nAoife Magee declined your quote (£1,514).\nOpen: ${SITE_BASE_URL}dashboard.html#/bookings/bk_enq`);
 });
 
 test('customer_photos_request asks for the consumer unit and the charger position, in his voice', () => {

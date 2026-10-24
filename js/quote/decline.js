@@ -1,9 +1,9 @@
-// js/quote/decline.js: the "Not for me" flow: an optional reason chip and note, then declineQuote.
+// js/quote/decline.js: the "Not for me" flow: an optional reason chip and note, then declineQuote (same-browser mode; link mode is js/quote/reply.js).
 // Owner: Q2 (customer quote page)
-import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Banner, Button, Field, Sheet, Textarea, cx } from '../ui/index.js';
-import { declineQuote } from '../core/store.js';
 import { StepFocus } from './parts.js';
+import { declineQuote } from '../core/store.js';
 
 export const DECLINE_REASONS = [
   { id: 'price', label: 'Too expensive' },
@@ -38,7 +38,7 @@ export function DeclineFlow({ open, d, brand, onClose, onDeclined }) {
   const [error, setError] = useState('');
   const working = useRef(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) { setReasonId(''); setNote(''); setError(''); working.current = false; }
   }, [open]);
 
@@ -67,7 +67,7 @@ export function DeclineFlow({ open, d, brand, onClose, onDeclined }) {
 
   return html`<${Sheet} open=${open} size="auto" title="Not for you?" onClose=${onClose} footer=${footer}
     initialFocus="[data-q2-focus]" testid="q2-decline-sheet">
-    <${StepFocus} class="q2-sheet__lead">No problem. If you tell ${brand.ownerFirst} why, it helps him. You can also skip this.<//>
+    <${StepFocus} class="q2-sheet__lead">No problem. If you tell ${brand.ownerFirst} why, it helps. You can also skip this.<//>
     <fieldset class="q2-reasons" data-testid="q2-reasons">
       <legend class="q2-reasons__legend">Why? <span class="q2-muted">(optional)</span></legend>
       <div class="q2-reasons__list">

@@ -4,20 +4,63 @@ import { h } from '../vendor/preact-htm.js';
 import { Icon } from './display.js';
 import { cx } from './util.js';
 
-/** Turn `*bold*` into <strong> children. Everything else stays text, so nothing can inject markup. */
+const URL_RE = /https?:\/\/[^\s<>"]+/g;
+const URL_TAIL_RE = /[.,;:!?)\]]+$/; // sentence punctuation that is not part of a link
+
+/**
+ * The short label a link shows in a bubble, chosen from its path, so a message never prints an origin, a host or a raw id.
+ * The stored message body and the wa.me text keep the full URL; this is display only.
+ */
+export function linkLabel(href) {
+  let file = '';
+  let hash = '';
+  try {
+    const u = new URL(String(href));
+    file = u.pathname.slice(u.pathname.lastIndexOf('/') + 1).toLowerCase();
+    hash = u.hash;
+  } catch (e) {
+    return 'Link';
+  }
+  if (file === 'dashboard.html') return /^#\/bookings\//.test(hash) ? 'Job link' : 'Dashboard link';
+  if (file === 'quote.html') return 'Quote link';
+  if (file === 'index.html' || file === '') return /^#manage/.test(hash) ? 'Manage link' : 'Booking page';
+  return 'Link';
+}
+
+/** Split plain text into strings and short tappable <a> labels (each keeps the real href). Nothing can inject markup. */
+function linkify(text, nextKey) {
+  const out = [];
+  let last = 0;
+  let m;
+  URL_RE.lastIndex = 0;
+  while ((m = URL_RE.exec(text))) {
+    const href = m[0].replace(URL_TAIL_RE, '');
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(h('a', {
+      key: nextKey(), class: 'ui-bubble__link ui-link--inline', href, target: '_blank', rel: 'noopener noreferrer' // inline in a sentence, so exempt from the 44px rule
+    }, linkLabel(href)));
+    last = m.index + href.length;
+    URL_RE.lastIndex = last;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+/** Turn `*bold*` into <strong> children and any http(s) URL into a short link label. Everything else stays text. */
 function withBold(body) {
   const text = String(body === undefined || body === null ? '' : body);
   const out = [];
   const re = /\*([^*\n]+)\*/g;
   let last = 0;
   let key = 0;
+  const nextKey = () => key++;
   let m;
   while ((m = re.exec(text))) {
-    if (m.index > last) out.push(text.slice(last, m.index));
-    out.push(h('strong', { key: key++ }, m[1]));
+    if (m.index > last) out.push(...linkify(text.slice(last, m.index), nextKey));
+    out.push(h('strong', { key: nextKey() }, ...linkify(m[1], nextKey)));
     last = m.index + m[0].length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) out.push(...linkify(text.slice(last), nextKey));
   return out;
 }
 

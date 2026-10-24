@@ -78,6 +78,31 @@ export async function fileToJpegDataUrl(file) {
   throw new Error('too_big');
 }
 
+/**
+ * A chosen image file as a downscaled JPEG data URL for his website photos (Settings): about 1200px on the long side, shrunk further until it
+ * is under `maxChars` so the store accepts it and localStorage keeps room for all seven. Rejects when it cannot be made small enough.
+ */
+export async function fileToWebsitePhoto(file, { maxSide = 1200, maxChars = 260000 } = {}) {
+  const bmp = await loadBitmap(file);
+  const w0 = bmp.width || bmp.naturalWidth;
+  const h0 = bmp.height || bmp.naturalHeight;
+  for (const side of [maxSide, 1000, 800, 640, 480]) {
+    const scale = Math.min(1, side / Math.max(w0, h0));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(w0 * scale));
+    canvas.height = Math.max(1, Math.round(h0 * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    for (const q of [0.78, 0.66, 0.54, 0.42]) {
+      const url = canvas.toDataURL('image/jpeg', q);
+      if (url.length <= maxChars) return url;
+    }
+  }
+  throw new Error('too_big');
+}
+
 /** Generated stand-ins for a customer's photos (a consumer unit, a wall and drive). Plain drawings, labelled as samples by their names. */
 export function makeSamplePhotos(count = 2) {
   const draw = (kind) => {

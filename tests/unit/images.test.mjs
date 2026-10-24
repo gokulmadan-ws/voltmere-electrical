@@ -42,11 +42,11 @@ test('IMAGE_META has an alt text and the intrinsic size for every key', () => {
   assert.deepEqual([IMAGE_META.work2.width, IMAGE_META.work2.height], [739, 1600]);
 });
 
-test('perspective.imgix.net: the query is replaced by ?w=<width>&auto=compress,format&q=70', () => {
-  assert.equal(imageUrl('work1', { width: 640 }), 'https://perspective.imgix.net/6ac64c7dfd2652fd454c9753.jpeg?w=640&auto=compress,format&q=70');
-  assert.equal(imageUrl('about', { width: 800 }), 'https://perspective.imgix.net/6ac64bf1b8d25e3fced53c3e.jpeg?w=800&auto=compress,format&q=70', 'the old crop and dpr are gone');
-  assert.equal(imageUrl('work4', { width: 480 }), 'https://perspective.imgix.net/6abb7d69173b2b4f1bfd30e9.jpeg?w=480&auto=compress,format&q=70');
-  assert.equal(imageUrl('logo', { width: 300 }), 'https://perspective.imgix.net/6ac64662b8d25e3fced4de9e.jpeg?w=300&auto=compress,format&q=70');
+test('perspective.imgix.net: the query is replaced by ?w=<width>&q=70 (no auto=compress: it measured bigger)', () => {
+  assert.equal(imageUrl('work1', { width: 640 }), 'https://perspective.imgix.net/6ac64c7dfd2652fd454c9753.jpeg?w=640&q=70');
+  assert.equal(imageUrl('about', { width: 800 }), 'https://perspective.imgix.net/6ac64bf1b8d25e3fced53c3e.jpeg?w=800&q=70', 'the old crop and dpr are gone');
+  assert.equal(imageUrl('work4', { width: 480 }), 'https://perspective.imgix.net/6abb7d69173b2b4f1bfd30e9.jpeg?w=480&q=70');
+  assert.equal(imageUrl('logo', { width: 300 }), 'https://perspective.imgix.net/6ac64662b8d25e3fced4de9e.jpeg?w=300&q=70');
 });
 
 test('images.unsplash.com: w is set to the width and every other parameter is kept', () => {
@@ -97,7 +97,7 @@ test('selectBrand carries address and merged images; selectImageUrl follows the 
   assert.equal(brand.images.hero, 'img/hero-local.jpg');
   assert.equal(brand.images.logo, DEFAULT_IMAGES.logo);
   assert.equal(selectImageUrl(state, 'hero', { width: 900 }), 'img/hero-local.jpg');
-  assert.ok(selectImageUrl(state, 'work1', { width: 320 }).includes('?w=320&auto=compress,format&q=70'));
+  assert.ok(selectImageUrl(state, 'work1', { width: 320 }).includes('?w=320&q=70'));
   // an older saved business with no images still gets the defaults
   const legacy = { settings: { ...settings, business: { ...settings.business } } };
   delete legacy.settings.business.images;

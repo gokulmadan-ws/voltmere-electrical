@@ -26,12 +26,14 @@ const PREP_STEPS = [
   'On the phone, in a normal browser tab (not an installed home-screen app), open the customer site and tap Owner login (demo) in the footer. Both pages share one store.',
   'Here in Demo tools, type your own mobile under Try on your phone and tap Save. Every Open in WhatsApp link then opens your WhatsApp.',
   'Optional: open Settings and check the business details, photos and the sample price list.',
-  'Tap Reset diary and messages for a fresh diary, then switch to the customer site tab.'
+  'Tap Reset diary and messages for a fresh diary, then switch to the customer site tab.',
+  'Two phones? Open the customer site on one and this dashboard on the other. On the customer phone the enquiry goes to the business WhatsApp number, or to the demo mobile saved there: save the owner\'s number in Demo tools on the customer phone to send it to the owner\'s phone.'
 ];
 const SCRIPT_STEPS = [
   'Customer site: show the hero, the credentials and the "Get my installation quote" button. Say: this is your funnel, now connected to your diary.',
   'Tap the button and answer the six steps: a BT postcode such as BT9 6QP, Private driveway, "It\'s ordered or arriving soon", As soon as possible, Yes, then a name and mobile. No price is shown and nothing is charged.',
   'The confirmation says the survey visit is pencilled in and that he will be in touch within 24 hours. Say: the customer is never left waiting.',
+  'Two phones: on the confirmation the customer taps Send my enquiry to Daniel on WhatsApp, then presses send. On Daniel\'s phone, tap the link in that WhatsApp message: the Import screen shows exactly what they typed. Tap Add to my dashboard. In a live build this happens by itself through the website webhook.',
   'Open the dashboard. Today shows the enquiry under Needs you, with a countdown against your reply promise and where it came from. Tap Confirm survey visit.',
   'Open the job: their answers, photos, the quote card and the story from enquiry to install. Tap Request photos, then Build quote, add a charger, and send it by WhatsApp (simulated).',
   'Here in Demo tools tap A customer opens a quote, then A customer accepts a quote. Today now shows the accepted quote under Needs you, with an install day pencilled in. Confirm it.',
@@ -147,7 +149,7 @@ export default function DemoView() {
     <section class="db-section" aria-labelledby="dm-phone-title">
       <h2 class="db-section__title" id="dm-phone-title">Try on your phone</h2>
       <${Card} class="dm-phone">
-        <p class="dm-explain">These sample customers use fictional numbers, which WhatsApp cannot open. Enter your own mobile and every Open in WhatsApp link opens a chat with you instead. Stored on this device only.</p>
+        <p class="dm-explain">These sample customers use fictional numbers, which WhatsApp cannot open. Enter your own mobile and every Open in WhatsApp link opens a chat with you instead, including the customer's Send my enquiry to Daniel on WhatsApp message. Stored on this device only.</p>
         <${Field} label="Open WhatsApp links with this mobile number" id="demo-phone-input" error=${phoneError}>
           <${Input} id="demo-phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="07700 900555"
             value=${phone} onInput=${(e) => { setPhone(e.target.value); if (phoneError) setPhoneError(''); }}
@@ -161,6 +163,15 @@ export default function DemoView() {
           <${Icon} name=${demoDigits ? 'circle-check' : 'info'} size=${18} />
           <span>${demoDigits ? `Links open WhatsApp for +${demoDigits}` : 'Not set: links go to the fictional numbers and will not open a chat.'}</span>
         </p>
+      <//>
+    </section>
+
+    <section class="db-section" aria-labelledby="dm-loop-title">
+      <h2 class="db-section__title" id="dm-loop-title">Two phones, one loop</h2>
+      <${Card}>
+        <p class="dm-explain">This part is real. The customer's confirmation has a button that opens WhatsApp with their enquiry written out and a link at the end. Opening that link on your phone shows the enquiry in full, and one tap adds it here. A quote you send, and the customer's accept or decline, come back the same way. There is no server: the details travel inside the link. A live build does it by itself through your website webhook.</p>
+        <p class="dm-explain">To try it on your own, use two browsers (or a private window): one as the customer, one as the owner. If a link will not open, paste the whole WhatsApp message into the Import screen.</p>
+        <${Button} variant="secondary" icon="clipboard-check" href=${routeHref('import')} data-testid="demo-open-import">Paste a customer's WhatsApp message<//>
       <//>
     </section>
 

@@ -1,18 +1,20 @@
-// js/dashboard/views/connections-webhook.js: Website funnel webhook (#/connections/webhook): endpoint and secret, field mapping, example payload, test enquiry.
-// Owner: K1 (connections hub, domain, webhook, tracking)
+// js/dashboard/views/connections-webhook.js: "Keep your Facebook funnel" (#/connections/webhook): send the instructions to his agency, try a test enquiry,
+// and (folded away, for the agency) the address, the secret, the field mapping and an example enquiry.
+// Owner: K1 (connections hub, domain, webhook, tracking); round 2 (T13): leads with the one thing he does, plain words, the technical bits collapsed
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import {
-  Banner, Button, CodeBlock, ConfirmDialog, ConnectionBadge, CopyField, DataTable, Icon, PageHeader, RealBuildNote, SimBanner, Switch,
-  failureMessage, pageHref, pageTarget, toast, useStore
+  Banner, Button, CodeBlock, ConfirmDialog, ConnectionBadge, CopyField, DataTable, Disclosure, Icon, PageHeader, RealBuildNote, Sheet, SimBanner, Switch,
+  copyText, failureMessage, pageHref, pageTarget, toast, useBrand, useStore
 } from '../../ui/index.js';
 import { ENQUIRY_STEPS } from '../../core/config.js';
 import { webhookSamplePayload } from '../../core/connections.js';
 import { rotateWebhookSecret, sendTestEvent, setConnection } from '../../core/store.js';
+import { mailtoLink } from '../../core/messages.js';
 import { fmtDayShort, stampDay, stampTime } from '../../core/dates.js';
 import { routeHref } from '../router.js';
 import { StorageNote, undoToast } from './connections.js';
 
-export const title = 'Website webhook';
+export const title = 'Keep your Facebook funnel';
 export const css = ['css/connections.css'];
 
 const selectState = (state) => state;
@@ -61,24 +63,53 @@ function latestWebhookBooking(state) {
   return best;
 }
 
+/** The plain-English message he sends his agency: what to do, where to send it, a sample of what it looks like, and the one tip about the ad link. */
+function agencyMessage({ owner, url, secret, payload }) {
+  return [
+    `Hi, it's ${owner} from 180 Electrical. Could you set up our Facebook funnel so that every new enquiry is ALSO sent to my dashboard? Please keep the funnel exactly as it is. This only adds a copy.`,
+    '',
+    'Most funnel tools have an Integrations or Webhooks page. Please add a webhook (a POST request with JSON) with these details:',
+    '',
+    `Webhook URL: ${url}`,
+    `Secret key: ${secret}`,
+    '',
+    'It should send each enquiry like this (the real answers go in place of the sample ones):',
+    payload,
+    '',
+    'One more thing: please add ?utm_source=facebook to the link in the ads (and utm_source=instagram on Instagram ads), so I can see which ad each enquiry came from.',
+    '',
+    `Thanks, ${owner}`
+  ].join('\n');
+}
+
 export default function WebhookView() {
   const state = useStore(selectState);
+  const brand = useBrand();
   const hook = state.settings.connections.webhook;
   const payload = useMemo(() => JSON.stringify(webhookSamplePayload(state), null, 2), [state]);
   const latest = useMemo(() => latestWebhookBooking(state), [state]);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [agencyOpen, setAgencyOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(null); // { id, ref, name, postcode } for the success banner, or { error }
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+
+  const message = useMemo(() => agencyMessage({ owner: brand.ownerFirst, url: hook.url, secret: hook.secret, payload }), [brand.ownerFirst, hook.url, hook.secret, payload]);
+  const waHref = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const mailHref = mailtoLink('', 'Please add a webhook to our Facebook funnel', message);
+  const copyMessage = async () => {
+    const ok = await copyText(message);
+    toast({ message: ok ? 'Message copied' : 'Could not copy. Use WhatsApp or email instead.', detail: ok ? 'Paste it into any chat or email to your agency.' : undefined, icon: ok ? 'copy' : undefined, tone: ok ? 'default' : 'danger' });
+  };
 
   const toggle = (next) => {
     const res = setConnection('webhook', { enabled: next });
     if (!res || !res.ok) { toast({ message: failureMessage(res), tone: 'danger' }); return; }
     setSent(null);
     undoToast({
-      message: next ? 'Webhook is on' : 'Webhook is paused',
-      detail: next ? 'Enquiries from your funnel will be accepted.' : 'Enquiries your funnel sends will be ignored (simulated).',
+      message: next ? 'Funnel enquiries are on' : 'Funnel enquiries are paused',
+      detail: next ? 'Enquiries from your funnel will be accepted.' : 'Enquiries your funnel sends will be ignored (practice mode).',
       icon: 'webhook', token: res.undoToken
     });
   };
@@ -87,7 +118,7 @@ export default function WebhookView() {
     setConfirmRotate(false);
     const res = rotateWebhookSecret();
     if (!res || !res.ok) { toast({ message: failureMessage(res), tone: 'danger' }); return; }
-    undoToast({ message: 'New secret created', detail: 'Copy it into your funnel tool. The old one no longer works.', icon: 'key-round', token: res.undoToken });
+    undoToast({ message: 'New secret key created', detail: 'Send your agency the new one. The old one no longer works.', icon: 'key-round', token: res.undoToken });
   };
 
   const send = async () => {
@@ -99,9 +130,9 @@ export default function WebhookView() {
     if (!alive.current) return;
     setSending(false);
     if (!res || !res.ok) {
-      const message = res && res.reason === 'disabled' ? 'The webhook is paused. Switch it on above, then send the test again.' : failureMessage(res, 'The test enquiry did not go through. Please try again.');
-      setSent({ error: message });
-      toast({ message, tone: 'danger' });
+      const text = res && res.reason === 'disabled' ? 'Funnel enquiries are paused. Switch them on above, then send the test again.' : failureMessage(res, 'The test enquiry did not go through. Please try again.');
+      setSent({ error: text });
+      toast({ message: text, tone: 'danger' });
       return;
     }
     const b = res.booking;
@@ -110,79 +141,76 @@ export default function WebhookView() {
   };
 
   const on = !!hook.enabled;
+  const waiting = on && !hook.lastEventAt;
   return html`<div class="db-page k1-page" data-testid="k1-webhook">
     <${PageHeader}
       back=${{ href: routeHref('connections'), label: 'Back to Connections' }}
-      eyebrow="Connections" title="Website funnel webhook"
-      subtitle="Keep your funnel exactly as it is. Every enquiry it collects can land here too."
+      eyebrow="Connections" title="Keep your Facebook funnel"
+      subtitle="Your agency keeps running the funnel. Every enquiry it collects lands here too."
     />
-    <${SimBanner}>The address and the secret below are examples. Nothing arrives from a real funnel.<//>
+    <${SimBanner} compact />
     <${StorageNote} />
 
-    <section class="k1-section" aria-labelledby="k1-how-title" data-testid="k1-how">
-      <h2 class="k1-section__title" id="k1-how-title">How it works</h2>
-      <ol class="k1-steps k1-steps--cards">
-        <li><span class="k1-steps__n" aria-hidden="true">1</span><span><strong>Your funnel keeps running.</strong> Customers see the same page and the same six questions as now.</span></li>
-        <li><span class="k1-steps__n" aria-hidden="true">2</span><span><strong>It passes each enquiry on.</strong> Most funnel tools can send the answers to a web address (a webhook). Look for Integrations or Webhooks, and check your plan includes it.</span></li>
-        <li><span class="k1-steps__n" aria-hidden="true">3</span><span><strong>We turn it into an enquiry.</strong> It lands in Bookings with a free survey pencilled in and an alert in Messages, like one from our own funnel.</span></li>
-      </ol>
+    <section class="k1-panel k1-agency-card" aria-labelledby="k1-agency-title" data-testid="k1-agency">
+      <div class="k1-panel__head">
+        <span class="k1-panel__icon" aria-hidden="true"><${Icon} name="send" size=${22} /></span>
+        <div>
+          <h2 class="k1-panel__title" id="k1-agency-title">One message to your agency</h2>
+          <p class="k1-panel__sub">They add one line to your funnel. We write the message for you, with everything they need.</p>
+        </div>
+      </div>
+      <${Button} variant="primary" size="lg" block icon="send" onClick=${() => setAgencyOpen(true)} data-testid="k1-agency-send">Send these instructions to my agency<//>
+      <p class="k1-tip" data-testid="k1-utm-tip"><${Icon} name="lightbulb" size=${18} /><span><strong>Tip:</strong> ask them to put <span class="k1-inline-code">utm_source=facebook</span> in the ad link. Each enquiry then says which ad it came from.</span></p>
     </section>
 
-    <div class="k1-split">
-      <div class="k1-split__a">
-        <section class="k1-panel" aria-label="Webhook status" data-testid="k1-hook-status">
-          <div class="k1-panel__head">
-            <span class="k1-panel__icon" aria-hidden="true"><${Icon} name="webhook" size=${22} /></span>
-            <div>
-              <h2 class="k1-panel__title">Receiving enquiries</h2>
-              <p class="k1-panel__sub" data-testid="k1-last-event">${hook.lastEventAt ? `Last event ${whenText(hook.lastEventAt)}` : 'No events yet'}</p>
-            </div>
-            <${ConnectionBadge} status=${on ? 'connected' : 'off'} label=${on ? 'On' : 'Paused'} data-testid="k1-hook-badge" />
-          </div>
-          <${Switch} checked=${on} onChange=${toggle} label="Accept enquiries from my funnel"
-            description=${on ? 'Switch off to pause. Anything your funnel sends is then ignored.' : 'Paused. Switch on to accept enquiries again.'} data-testid="k1-hook-switch" />
-        </section>
-
-        <section class="k1-panel" aria-labelledby="k1-endpoint-title" data-testid="k1-endpoint">
-          <div class="k1-panel__head">
-            <span class="k1-panel__icon" aria-hidden="true"><${Icon} name="link" size=${22} /></span>
-            <div>
-              <h2 class="k1-panel__title" id="k1-endpoint-title">Your webhook address</h2>
-              <p class="k1-panel__sub">Paste these into your funnel tool.</p>
-            </div>
-          </div>
-          <${CopyField} label="Webhook URL" value=${hook.url} testid="k1-webhook-url" hint="Where your funnel sends each enquiry. This is a placeholder address." />
-          <${CopyField} label="Signing secret" value=${hook.secret} secret testid="k1-webhook-secret" hint="Like a password for the address. Keep it private." />
-          <div class="k1-actions">
-            <${Button} variant="secondary" size="sm" icon="refresh-cw" onClick=${() => setConfirmRotate(true)} data-testid="k1-secret-rotate">Rotate secret<//>
-          </div>
-        </section>
-
-        <section class="k1-panel" aria-labelledby="k1-test-title" data-testid="k1-test">
-          <div class="k1-panel__head">
-            <span class="k1-panel__icon" aria-hidden="true"><${Icon} name="send" size=${22} /></span>
-            <div>
-              <h2 class="k1-panel__title" id="k1-test-title">Try it</h2>
-              <p class="k1-panel__sub">Sends a pretend enquiry the same way a real one would arrive.</p>
-            </div>
-          </div>
-          <${Button} variant="primary" icon="send" loading=${sending} onClick=${send} data-testid="k1-test-send">Send test enquiry<//>
-          <div aria-live="polite" class="k1-live-region">
-            ${sent && sent.error ? html`<${Banner} tone="warn" data-testid="k1-test-error">${sent.error}<//>` : null}
-            ${sent && sent.ok !== false && sent.id ? html`<${Banner} tone="ok" data-testid="k1-test-result"
-              actions=${html`<${Button} size="sm" variant="secondary" iconRight="arrow-right" href=${routeHref('bookings', { id: sent.id })} data-testid="k1-test-open">Open the enquiry<//>`}>
-              <strong>Test enquiry received.</strong> ${sent.name}, ${sent.postcode} (${sent.ref}) is in your Bookings. Simulated.
-            <//>` : null}
-            ${!sent && latest ? html`<p class="k1-small" data-testid="k1-test-latest">Latest from the webhook: <strong>${latest.customer.name}</strong> (${latest.ref}).
-              <a class="k1-link" href=${routeHref('bookings', { id: latest.id })} data-testid="k1-test-latest-open">Open it</a></p>` : null}
-          </div>
-        </section>
+    <section class="k1-panel" aria-label="Funnel enquiries" data-testid="k1-hook-status">
+      <div class="k1-panel__head">
+        <span class="k1-panel__icon" aria-hidden="true"><${Icon} name="webhook" size=${22} /></span>
+        <div>
+          <h2 class="k1-panel__title">Enquiries from your funnel</h2>
+          <p class="k1-panel__sub" data-testid="k1-last-event">${hook.lastEventAt ? `Last enquiry ${whenText(hook.lastEventAt)}` : 'None yet'}</p>
+        </div>
+        <${ConnectionBadge} status=${waiting ? 'pending' : on ? 'connected' : 'off'} label=${waiting ? 'Waiting for your first enquiry' : on ? 'On' : 'Paused'} data-testid="k1-hook-badge" />
       </div>
+      <${Switch} checked=${on} onChange=${toggle} label="Accept enquiries from my funnel"
+        description=${on ? 'Switch off to pause. Anything your funnel sends is then ignored.' : 'Paused. Switch on to accept enquiries again.'} data-testid="k1-hook-switch" />
+    </section>
 
-      <div class="k1-split__b">
+    <section class="k1-panel" aria-labelledby="k1-test-title" data-testid="k1-test">
+      <div class="k1-panel__head">
+        <span class="k1-panel__icon" aria-hidden="true"><${Icon} name="circle-check" size=${22} /></span>
+        <div>
+          <h2 class="k1-panel__title" id="k1-test-title">Try it</h2>
+          <p class="k1-panel__sub">Sends a pretend enquiry the way a real one would arrive. It also marks this as tried out.</p>
+        </div>
+      </div>
+      <${Button} variant="secondary" icon="send" loading=${sending} onClick=${send} data-testid="k1-test-send">Send test enquiry<//>
+      <div aria-live="polite" class="k1-live-region">
+        ${sent && sent.error ? html`<${Banner} tone="warn" data-testid="k1-test-error">${sent.error}<//>` : null}
+        ${sent && sent.ok !== false && sent.id ? html`<${Banner} tone="ok" data-testid="k1-test-result"
+          actions=${html`<${Button} size="sm" variant="secondary" iconRight="arrow-right" href=${routeHref('bookings', { id: sent.id })} data-testid="k1-test-open">Open the enquiry<//>`}>
+          <strong>Test enquiry received.</strong> ${sent.name}, ${sent.postcode} (${sent.ref}) is in your Bookings. Practice mode.
+        <//>` : null}
+        ${!sent && latest ? html`<p class="k1-small" data-testid="k1-test-latest">Latest from the funnel: <strong>${latest.customer.name}</strong> (${latest.ref}).
+          <a class="k1-link" href=${routeHref('bookings', { id: latest.id })} data-testid="k1-test-latest-open">Open it</a></p>` : null}
+      </div>
+    </section>
+
+    <${Disclosure} title="Technical details" summary="For your agency" class="k1-tech" testid="k1-tech">
+      <div class="k1-tech__body">
+        <section class="k1-section" aria-labelledby="k1-endpoint-title" data-testid="k1-endpoint">
+          <h2 class="k1-section__title" id="k1-endpoint-title">Where to send enquiries</h2>
+          <p class="k1-section__intro">The message above already has these. Both are examples: nothing arrives from a real funnel.</p>
+          <${CopyField} label="Webhook address" value=${hook.url} testid="k1-webhook-url" hint="Where the funnel sends each enquiry. This is a placeholder address." />
+          <${CopyField} label="Secret key" value=${hook.secret} secret testid="k1-webhook-secret" hint="Like a password for that address. Keep it private." />
+          <div class="k1-actions">
+            <${Button} variant="secondary" size="sm" icon="refresh-cw" onClick=${() => setConfirmRotate(true)} data-testid="k1-secret-rotate">Make a new secret<//>
+          </div>
+        </section>
+
         <section class="k1-section" aria-labelledby="k1-map-title" data-testid="k1-mapping">
           <h2 class="k1-section__title" id="k1-map-title">Which answer goes where</h2>
-          <p class="k1-section__intro">Send each answer under the name shown. These words are exact: they are the ones we recognise.</p>
+          <p class="k1-section__intro">Each answer is sent under the name shown. These names and words are exact: they are the ones we recognise.</p>
           <${DataTable} caption="Funnel questions and the field each one is sent as" testid="k1-map-table" rows=${MAPPING} rowKey=${(r) => r.id}
             rowTestid=${(r) => `k1-map-row-${r.id}`} columns=${MAPPING_COLUMNS} />
         </section>
@@ -193,7 +221,7 @@ export default function WebhookView() {
           <${CodeBlock} label="Example enquiry" language="json" code=${payload} testid="k1-payload" />
         </section>
       </div>
-    </div>
+    <//>
 
     <section class="k1-panel k1-panel--quiet" aria-labelledby="k1-alt-title">
       <div class="k1-panel__head">
@@ -210,13 +238,26 @@ export default function WebhookView() {
 
     <${RealBuildNote} items=${[
       'A public web address that accepts your funnel\'s posts over HTTPS',
-      'Checking the signing secret on every post, so nobody can send fake enquiries',
+      'Checking the secret key on every post, so nobody can send fake enquiries',
       'Handling repeats and retries without creating the same enquiry twice',
       'Saving each enquiry in a database and sending the WhatsApp alert for real'
     ]} />
 
-    <${ConfirmDialog} open=${confirmRotate} tone="danger" title="Create a new secret?"
-      body="Your funnel tool will stop being accepted until you paste the new secret into it. You can undo this straight afterwards."
-      confirmLabel="Rotate secret" cancelLabel="Keep the old one" onConfirm=${rotate} onCancel=${() => setConfirmRotate(false)} />
+    <${Sheet} open=${agencyOpen} title="Send these instructions" testid="k1-agency-sheet" onClose=${() => setAgencyOpen(false)}
+      description="Pick how to send them. The message is written for you: your agency reads it and adds the webhook to your funnel.">
+      <div class="k1-agency">
+        <pre class="k1-agency__preview" tabindex="0" aria-label="The message your agency will get" data-testid="k1-agency-preview">${message}</pre>
+        <div class="k1-agency__actions">
+          <${Button} variant="primary" size="lg" block icon="message-circle" href=${waHref} onClick=${() => setAgencyOpen(false)} data-testid="k1-agency-whatsapp">Send by WhatsApp<//>
+          <${Button} variant="secondary" size="lg" block icon="mail" href=${mailHref} onClick=${() => setAgencyOpen(false)} data-testid="k1-agency-email">Send by email<//>
+          <${Button} variant="ghost" icon="copy" onClick=${copyMessage} data-testid="k1-agency-copy">Copy the message<//>
+        </div>
+        <p class="k1-small">WhatsApp and your email app open with the message ready. You choose who it goes to. Nothing is sent from this prototype.</p>
+      </div>
+    <//>
+
+    <${ConfirmDialog} open=${confirmRotate} tone="danger" title="Make a new secret?"
+      body="Your funnel will stop being accepted until your agency has the new secret. You can undo this straight afterwards."
+      confirmLabel="Make a new secret" cancelLabel="Keep the old one" onConfirm=${rotate} onCancel=${() => setConfirmRotate(false)} />
   </div>`;
 }

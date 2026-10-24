@@ -7,6 +7,8 @@ import { getUtm } from '../core/utm.js';
 import { ENQUIRY_STEPS, PROMISES } from '../core/config.js';
 import { isValidPostcode, normalisePostcode, postcodeZone, validateName, validatePhone } from '../core/format.js';
 import { clearDraft } from './draft.js';
+import { ReassureRow } from './bk-shared.js';
+import { OptionIcon, answerIconName } from './option-icons.js';
 
 export const FUNNEL_TOTAL = 6;
 export const FUNNEL_SERVICE_ID = 'ev_quote';
@@ -15,25 +17,42 @@ export const FUNNEL_SERVICE_ID = 'ev_quote';
 export const FUNNEL_STEP1 = {
   eyebrow: "Let's find the right home charging setup for you",
   title: "What's your installation postcode?",
-  label: 'UK postcode',
-  placeholder: 'e.g. SW1A 1AA',
+  label: 'Your postcode',
+  placeholder: 'e.g. BT7 3AB',
   error: 'Please enter a valid UK postcode so we can check your location.',
   button: 'Continue',
-  help: 'Your postcode helps us confirm we cover your area.',
+  help: 'We cover Northern Ireland (BT postcodes)',
+  time: 'About 1 minute',
   free: 'Free, no-obligation quote.' // from his hero, under the CTA
 };
 
+/** His three steps ("From first enquiry to charging at home", docs/reference/180-site-report.md), shown quietly on step 1 when the screen has room (css/booking.css .bk-next). */
+export const FUNNEL_NEXT = [
+  { title: 'Tell us about your home', body: 'Answer a few short questions about your location, parking and plans.' },
+  { title: 'Discuss your installation', body: 'The team will review your enquiry and explain the next steps.' },
+  { title: 'Arrange your installation', body: 'Once you are happy with the agreed quote and scope, arrange a suitable installation date.' }
+];
+
 export const FUNNEL_STEP6 = {
-  title: (business) => `Where can ${business} contact you about your quote?`,
+  title: (owner) => `Where should ${owner} send your quote?`,
+  promise: (owner, hours) => `${owner} will contact you within ${hours} hours. Free, no-obligation quote.`,
   name: 'Full name',
+  namePlaceholder: 'e.g. Aoife Magee',
   postcode: 'Installation postcode',
-  postcodePlaceholder: 'e.g. DE1 1AA',
+  postcodePlaceholder: 'e.g. BT7 3AB',
   phone: 'Mobile number',
+  phonePlaceholder: '07xxx xxx xxx',
+  phoneHint: (owner) => `${owner} may text or WhatsApp you`,
   email: 'Email address',
+  emailPlaceholder: 'name@email.com',
+  emailHint: 'Your written quote comes here',
   notes: 'Anything else we should know? (optional)',
   notesPlaceholder: 'Your vehicle, preferred charger or anything about your property',
   optIn: (business) => `Keep me updated with occasional offers and EV charging tips from ${business}. Optional, and you can opt out at any time.`,
   submit: 'Request my installation quote',
+  footLine: 'We only use this to reply to your enquiry.',
+  privacy: 'Privacy',
+  check: (n) => (n === 1 ? 'Please check 1 field' : `Please check ${n} fields`),
   smallPrint: (business) => `${business} will use these details to respond to your installation enquiry. By submitting your details you give us permission to contact you.`
 };
 
@@ -45,11 +64,50 @@ export function replyHours(state) {
 
 export const FUNNEL_CONFIRM = {
   title: 'Thanks, your enquiry has been received.',
-  body: (business, hours = PROMISES.contactWithinHours) => `The team at ${business} will review your details and contact you to discuss your home charger installation within ${hours} hours. Please also check your emails.`,
+  body: (owner, hours = PROMISES.contactWithinHours) => `${owner} will review your details and contact you to discuss your home charger installation within ${hours} hours. Please also check your emails.`,
   readyTitle: 'Helpful to have ready',
-  ready: 'If you can, have a photo of your consumer unit and preferred charger location ready. These may help the team assess your installation.',
+  // His own words (docs/reference/180-site-report.md, "Helpful to have ready"); the owner's name is not in them, so the argument stays for the call sites.
+  ready: () => 'If you can, have a photo of your consumer unit and preferred charger location ready. These may help the team assess your installation.',
   call: (phone) => `Prefer to speak to us? Call ${phone}`
 };
+
+// One line under each question: why it is asked. Generic and true, no promises (steps 2 to 5).
+export const FUNNEL_WHY = {
+  parking: (owner) => `${owner} uses this to plan the cable route.`,
+  vehicle: (owner) => `${owner} uses this to suggest a suitable charger.`,
+  timing: (owner) => `${owner} uses this to plan his diary around you.`,
+  permission: (owner) => `${owner} uses this to plan any permission needed.`
+};
+
+// A short grey line on each answer card (13px). Keep each one line at 375px wide. The answer values and labels are unchanged.
+export const FUNNEL_OPTION_HINTS = {
+  parking: {
+    driveway: () => 'Off-street, at your home',
+    garage: () => 'Attached or detached',
+    allocated: () => 'A bay that comes with your home',
+    street: () => 'On the road outside',
+    other: (owner) => `${owner} can talk it through`
+  },
+  vehicle: {
+    have: () => 'Ready to charge at home',
+    ordered: () => 'Plan the install in advance',
+    choosing: () => 'Get help choosing a charger'
+  },
+  timing: {
+    asap: (owner) => `Earliest date ${owner} can offer`,
+    month: () => 'In the next few weeks',
+    one_to_three: () => 'Plenty of time to plan',
+    researching: () => 'No rush, just exploring'
+  },
+  permission: {
+    yes: () => 'You own it, or have the go-ahead',
+    landlord: (owner) => `${owner} can advise what is needed`,
+    unsure: (owner) => `That is fine, ${owner} can help`
+  }
+};
+
+/** Shown under the answers when On-street is chosen on step 2 (the answer is kept; the step waits for Continue instead of moving on by itself). */
+export const FUNNEL_STREET_NOTE = (owner) => `Home chargers usually need off-street parking. ${owner} can talk through options, or call`;
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E'];
 const ADVANCE_MS = 260; // long enough to see the card settle into its selected state, short enough to feel instant
@@ -62,11 +120,20 @@ export function validateEmail(v) {
   return EMAIL_RE.test(s) ? '' : "That email address doesn't look right";
 }
 
-/** The furthest step the customer may be on: the first one whose answer is still missing (never skips a step). */
-export function funnelAllowedStep(postcode, answers) {
-  if (!isValidPostcode(postcode)) return 1;
+/**
+ * The furthest step the customer may be on: the first one whose answer is still missing (never skips a step).
+ * `postcodeOk` is whether the postcode that got them past step 1 was a real one: booking-sheet.js remembers that when step 1 is left,
+ * so editing the postcode again on step 6 can never throw them back to step 1 (the error shows under the field instead).
+ */
+export function funnelAllowedStepFor(postcodeOk, answers) {
+  if (!postcodeOk) return 1;
   const missing = ANSWER_STEP_KEYS.findIndex((k) => !(answers && answers[k]));
   return missing === -1 ? FUNNEL_TOTAL : missing + 2;
+}
+
+/** The same, judged from a postcode string (unit tests and stale drafts use this). */
+export function funnelAllowedStep(postcode, answers) {
+  return funnelAllowedStepFor(isValidPostcode(postcode), answers);
 }
 
 /** The four contact errors ('' = fine) in field order. */
@@ -82,11 +149,25 @@ export function funnelContactErrors(form) {
 const FIELD_IDS = { fnpostcode: 'fn-postcode', name: 'fn-name', postcode: 'fn-postcode-6', phone: 'fn-phone', email: 'fn-email' };
 const NEXT_FIELD = { 'fn-name': 'fn-postcode-6', 'fn-postcode-6': 'fn-phone', 'fn-phone': 'fn-email', 'fn-email': 'fn-note' };
 
+/** Focus a field and scroll it to the middle of the visible area (the sticky footer must never cover it). */
 export function focusFunnelField(key) {
   setTimeout(() => {
     const el = document.getElementById(FIELD_IDS[key]);
-    if (el) el.focus();
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'auto' });
   }, 0);
+}
+
+/** "Privacy" in the footer: takes the visitor to the full wording above the opt-in (it lives in the form, not in the footer). */
+export function showSmallPrint() {
+  const el = document.getElementById('fn-smallprint');
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: 'auto' });
+  el.focus({ preventScroll: true });
+  el.classList.remove('is-flash');
+  void el.offsetWidth; // restart the highlight
+  el.classList.add('is-flash');
 }
 
 /** Enter on a single-line field moves to the next field (the keyboard's "next" key), like the on-screen keyboard hint promises. */
@@ -122,24 +203,32 @@ function zoneHint(postcode, business) {
 }
 
 function PostcodeStep({ ctx }) {
-  const { form, setForm, shown, setShown, state, fn } = ctx;
+  const { form, setForm, shown, setShown, state, fn, brand } = ctx;
   const error = shown.has('fnpostcode') && !isValidPostcode(form.postcode) ? FUNNEL_STEP1.error : '';
   const zone = zoneHint(form.postcode, state.settings.business);
+  const covered = !!zone && zone.tone === 'ok'; // a Northern Ireland postcode: green border and tick (anything else stays neutral, never red)
   return html`<div class="bk-step bk-fn" data-testid="funnel-step-1" data-dir=${fn.dir}>
     <div class="bk-titleblock">
       <p class="bk-fn__eyebrow">${FUNNEL_STEP1.eyebrow}</p>
       <h2 class="bk-title" tabindex="-1" data-bk-title="true" data-testid="funnel-title">${FUNNEL_STEP1.title}</h2>
     </div>
     <${Field} label=${FUNNEL_STEP1.label} id="fn-postcode" hint=${FUNNEL_STEP1.help} error=${error} errorTestid="error-funnel-postcode" required class="bk-fn-postcode">
-      <${Input} id="fn-postcode" value=${form.postcode} placeholder=${FUNNEL_STEP1.placeholder}
-        onInput=${(e) => setForm({ postcode: e.target.value })}
-        onBlur=${() => { if (form.postcode.trim()) setShown((prev) => new Set([...prev, 'fnpostcode'])); }}
-        onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); continueFromPostcode(ctx); } }}
-        type="text" inputmode="text" autocomplete="postal-code" autocapitalize="characters" spellcheck=${false} enterkeyhint="go" maxlength="8"
-        data-testid="funnel-postcode" />
+      <div class=${cx('bk-fn-input', covered && 'is-valid')}>
+        <${Input} id="fn-postcode" value=${form.postcode} placeholder=${FUNNEL_STEP1.placeholder} class=${covered ? 'is-valid' : undefined}
+          onInput=${(e) => setForm({ postcode: e.target.value })}
+          onBlur=${() => { if (form.postcode.trim()) setShown((prev) => new Set([...prev, 'fnpostcode'])); }}
+          onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); continueFromPostcode(ctx); } }}
+          type="text" inputmode="text" autocomplete="postal-code" autocapitalize="characters" spellcheck=${false} enterkeyhint="go" maxlength="8"
+          data-testid="funnel-postcode" />
+        ${covered ? html`<span class="bk-fn-input__ok" aria-hidden="true" data-testid="funnel-postcode-ok"><${Icon} name="check" size=${20} /></span>` : null}
+      </div>
     <//>
     <p class=${cx('bk-fn__zone', zone && `bk-fn__zone--${zone.tone}`, !zone && 'is-empty')} role="status" data-testid="funnel-zone-hint">${zone
     ? html`<${Icon} name=${zone.icon} size=${18} />${' '}<span>${zone.text}</span>` : null}</p>
+    <ol class="bk-next" aria-label="What happens next" data-testid="funnel-next-steps">${FUNNEL_NEXT.map((it, i) => html`<li class="bk-next__item" key=${i}>
+      <span class="bk-next__n" aria-hidden="true">${i + 1}</span><p class="bk-next__title">${it.title}</p><p class="bk-next__text">${it.body}</p>
+    </li>`)}</ol>
+    <${ReassureRow} brand=${brand} state=${state} free=${false} credentials=${true} />
   </div>`;
 }
 
@@ -147,10 +236,11 @@ function PostcodeStep({ ctx }) {
 
 /**
  * One question, one tap. Keyboard: Tab reaches the group once (roving tab stop), the arrow keys, Home and End move between the
- * options, Enter or Space picks, and the letter on a card (A to E) or its number picks it straight away. Picking advances by itself.
+ * options, Enter or Space picks, and a number key (or the letters A to E, kept as quiet shortcuts) picks straight away. Picking advances by itself.
+ * Each row carries a small line icon for its answer; the answers and the test ids are unchanged.
  */
 function ChoiceStep({ ctx, def }) {
-  const { fn } = ctx;
+  const { fn, brand, state } = ctx;
   const current = fn.answers[def.key] || '';
   const count = def.options.length;
   const [advancing, setAdvancing] = useState(false);
@@ -159,11 +249,15 @@ function ChoiceStep({ ctx, def }) {
   const optRefs = useRef([]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  // On-street parking is kept as the answer but does not move on by itself: the step shows a short note and a Continue button.
+  const holds = (value) => def.key === 'parking' && value === 'street';
+  const owner = brand.ownerFirst;
   const pick = (value, i) => {
     fn.setAnswer(def.key, value);
     setTabIdx(i);
-    setAdvancing(true);
     clearTimeout(timer.current);
+    if (holds(value)) { setAdvancing(false); return; }
+    setAdvancing(true);
     timer.current = setTimeout(() => fn.setStep(def.step + 1), ADVANCE_MS);
   };
   const focusOpt = (i) => {
@@ -180,7 +274,7 @@ function ChoiceStep({ ctx, def }) {
     if (k === 'ArrowUp' || k === 'ArrowLeft') { e.preventDefault(); focusOpt(at < 0 ? tabIdx : at - 1); return; }
     if (k === 'Home') { e.preventDefault(); focusOpt(0); return; }
     if (k === 'End') { e.preventDefault(); focusOpt(count - 1); return; }
-    // A to E, or 1 to 5, choose the card with that letter (the letters on the cards are the shortcuts)
+    // 1 to 5 (or A to E) choose the row in that position; only while focus is inside the group
     const letter = k.length === 1 ? LETTERS.indexOf(k.toUpperCase()) : -1;
     const digit = /^[1-9]$/.test(k) ? Number(k) - 1 : -1;
     const i = letter >= 0 ? letter : digit;
@@ -190,40 +284,51 @@ function ChoiceStep({ ctx, def }) {
   return html`<div class="bk-step bk-fn" data-testid=${`funnel-step-${def.step}`} data-dir=${fn.dir} onKeyDown=${onKeyDown}>
     <div class="bk-titleblock">
       <h2 class="bk-title" tabindex="-1" data-bk-title="true" id=${`fn-title-${def.step}`} data-testid="funnel-title">${def.title}</h2>
+      ${FUNNEL_WHY[def.key] ? html`<p class="bk-fn__why" data-testid="funnel-why">${FUNNEL_WHY[def.key](owner)}</p>` : null}
     </div>
     <div class=${cx('bk-fn-opts', advancing && 'is-advancing')} role="group" aria-labelledby=${`fn-title-${def.step}`}>
       ${def.options.map((o, i) => {
     const on = current === o.value;
+    const hintFor = FUNNEL_OPTION_HINTS[def.key] && FUNNEL_OPTION_HINTS[def.key][o.value];
+    const hint = hintFor ? hintFor(owner) : '';
     return html`<button type="button" key=${o.value} class=${cx('bk-fn-opt', on && 'is-selected')} aria-pressed=${on ? 'true' : 'false'}
         style=${{ '--i': i }} tabindex=${i === tabIdx ? 0 : -1} ref=${(el) => { optRefs.current[i] = el; }}
         onFocus=${() => setTabIdx(i)}
         data-testid=${`funnel-option-${def.key}-${o.value}`} onClick=${() => pick(o.value, i)}>
-        <span class="bk-fn-opt__letter" aria-hidden="true">${LETTERS[i]}</span>
-        <span class="bk-fn-opt__label">${o.label}</span>
+        <span class="bk-fn-opt__icon" aria-hidden="true"><${OptionIcon} name=${answerIconName(def.key, o.value)} size=${22} /></span>
+        <span class="bk-fn-opt__text"><span class="bk-fn-opt__label">${o.label}</span>${hint ? html`<span class="bk-fn-opt__hint" data-testid=${`funnel-hint-${def.key}-${o.value}`}>${hint}</span>` : null}</span>
         <span class="bk-fn-opt__tick" aria-hidden="true"><${Icon} name="check" size=${18} /></span>
       </button>`;
   })}
     </div>
-    ${def.note ? html`<p class="bk-fn__note" data-testid="funnel-note">${def.note}</p>` : null}
+    ${def.key === 'parking' && current === 'street' ? html`<div class="bk-fn__street" data-testid="funnel-street-note" role="note">
+      <p class="bk-fn__streettext"><${Icon} name="info" size=${18} /><span>${FUNNEL_STREET_NOTE(owner)}${' '}<a href=${brand.telHref} class="bk-nowrap">${brand.phone}</a>.</span></p>
+      <${Button} variant="primary" size="lg" block class="bk-pill bk-cta" onClick=${() => fn.setStep(def.step + 1)} data-testid="funnel-next">Continue<//>
+    </div>` : null}
+    <${ReassureRow} brand=${brand} state=${state} />
   </div>`;
 }
 
 // ---- Step 6: contact ----------------------------------------------------------------------------------------------
 
 function ContactStep({ ctx }) {
-  const { form, setForm, shown, setShown, brand, banner, fn } = ctx;
+  const { form, setForm, shown, setShown, brand, banner, fn, state } = ctx;
+  const owner = brand.ownerFirst;
   const errors = funnelContactErrors(form);
   const err = (key) => (shown.has(key) ? errors[key] : '');
   const touch = (key) => () => setShown((prev) => new Set([...prev, key]));
-  return html`<div class="bk-step bk-fn" data-testid="funnel-step-6" data-dir=${fn.dir}>
+  // A helper line is only worth the space while there is no error to show under the same field.
+  const hint = (key, text) => (err(key) ? undefined : text);
+  return html`<div class="bk-step bk-fn bk-fn--contact" data-testid="funnel-step-6" data-dir=${fn.dir}>
     <div class="bk-titleblock">
-      <h2 class="bk-title" tabindex="-1" data-bk-title="true" data-testid="funnel-title">${FUNNEL_STEP6.title(brand.name)}</h2>
+      <h2 class="bk-title" tabindex="-1" data-bk-title="true" data-testid="funnel-title">${FUNNEL_STEP6.title(owner)}</h2>
+      <p class="bk-fn__promise" data-testid="funnel-promise"><${Icon} name="clock" size=${18} /><span>${FUNNEL_STEP6.promise(owner, replyHours(state))}</span></p>
     </div>
     ${banner && banner.kind === 'fn_error'
     ? html`<${Banner} tone=${banner.tone || 'danger'} class="bk-banner" data-testid="funnel-error-banner">${banner.text}<//>` : null}
     <div class="bk-fields">
       <${Field} label=${FUNNEL_STEP6.name} id="fn-name" error=${err('name')} errorTestid="error-name" required>
-        <${Input} id="fn-name" value=${form.name} onInput=${(e) => setForm({ name: e.target.value })} onBlur=${touch('name')} onKeyDown=${enterToNext}
+        <${Input} id="fn-name" value=${form.name} placeholder=${FUNNEL_STEP6.namePlaceholder} onInput=${(e) => setForm({ name: e.target.value })} onBlur=${touch('name')} onKeyDown=${enterToNext}
           type="text" autocomplete="name" autocapitalize="words" enterkeyhint="next" maxlength="60" data-testid="field-name" />
       <//>
       <${Field} label=${FUNNEL_STEP6.postcode} id="fn-postcode-6" error=${err('postcode')} errorTestid="error-postcode" required>
@@ -231,12 +336,12 @@ function ContactStep({ ctx }) {
           onInput=${(e) => setForm({ postcode: e.target.value })} onBlur=${touch('postcode')} onKeyDown=${enterToNext}
           type="text" inputmode="text" autocomplete="postal-code" autocapitalize="characters" spellcheck=${false} enterkeyhint="next" maxlength="8" data-testid="field-postcode" />
       <//>
-      <${Field} label=${FUNNEL_STEP6.phone} id="fn-phone" error=${err('phone')} errorTestid="error-phone" required>
-        <${Input} id="fn-phone" value=${form.phone} onInput=${(e) => setForm({ phone: e.target.value })} onBlur=${touch('phone')} onKeyDown=${enterToNext}
+      <${Field} label=${FUNNEL_STEP6.phone} id="fn-phone" hint=${hint('phone', FUNNEL_STEP6.phoneHint(owner))} error=${err('phone')} errorTestid="error-phone" required>
+        <${Input} id="fn-phone" value=${form.phone} placeholder=${FUNNEL_STEP6.phonePlaceholder} onInput=${(e) => setForm({ phone: e.target.value })} onBlur=${touch('phone')} onKeyDown=${enterToNext}
           type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next" maxlength="20" data-testid="field-phone" />
       <//>
-      <${Field} label=${FUNNEL_STEP6.email} id="fn-email" error=${err('email')} errorTestid="error-email" required>
-        <${Input} id="fn-email" value=${form.email} onInput=${(e) => setForm({ email: e.target.value })} onBlur=${touch('email')} onKeyDown=${enterToNext}
+      <${Field} label=${FUNNEL_STEP6.email} id="fn-email" hint=${hint('email', FUNNEL_STEP6.emailHint)} error=${err('email')} errorTestid="error-email" required>
+        <${Input} id="fn-email" value=${form.email} placeholder=${FUNNEL_STEP6.emailPlaceholder} onInput=${(e) => setForm({ email: e.target.value })} onBlur=${touch('email')} onKeyDown=${enterToNext}
           type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck=${false} enterkeyhint="next" maxlength="100" data-testid="funnel-email" />
       <//>
       <${Field} label=${FUNNEL_STEP6.notes} id="fn-note">
@@ -249,6 +354,7 @@ function ContactStep({ ctx }) {
       <span class="bk-fn-check__box" aria-hidden="true"><${Icon} name="check" size=${16} /></span>
       <span class="bk-fn-check__text">${FUNNEL_STEP6.optIn(brand.name)}</span>
     </label>
+    <p class="bk-fn__small" id="fn-smallprint" tabindex="-1" data-testid="funnel-small-print">${FUNNEL_STEP6.smallPrint(brand.name)}</p>
   </div>`;
 }
 
@@ -268,20 +374,24 @@ export function FunnelBody({ ctx }) {
   return def ? html`<${ChoiceStep} key=${def.step} ctx=${ctx} def=${def} />` : null;
 }
 
-/** Sticky footer: Continue on step 1, the submit button (and the small print) on step 6. Steps 2 to 5 have none. */
+/** Sticky footer: Continue on step 1; on step 6 the submit button, a "Please check N fields" line after a failed try, and one line of reassurance (about 100px in all). Steps 2 to 5 have none. */
 export function FunnelFooter({ ctx }) {
-  const { fn, brand, submitting, svc } = ctx;
+  const { fn, submitting, svc, form, shown } = ctx;
   if (!svc || !svc.active) return null;
   if (fn.step === 1) {
-    return html`<div class="bk-footer">
+    return html`<div class="bk-footer bk-footer--fn">
       <${Button} variant="primary" size="lg" block class="bk-pill bk-cta" onClick=${() => continueFromPostcode(ctx)} data-testid="funnel-continue">${FUNNEL_STEP1.button}<//>
       <p class="bk-footer__note bk-fn__free"><${Icon} name="shield-check" size=${16} />${' '}<span>${FUNNEL_STEP1.free}</span></p>
     </div>`;
   }
   if (fn.step === 6) {
-    return html`<div class="bk-footer">
+    const errors = funnelContactErrors(form);
+    const bad = Object.values(errors).filter(Boolean).length;
+    const check = shown.has('attempt') && bad > 0;
+    return html`<div class="bk-footer bk-footer--fn">
+      ${check ? html`<p class="bk-fn__check" role="alert" data-testid="funnel-check-summary"><${Icon} name="circle-alert" size=${16} /><span>${FUNNEL_STEP6.check(bad)}</span></p>` : null}
       <${Button} variant="primary" size="lg" block class="bk-pill bk-cta" loading=${submitting} onClick=${() => submitFunnel(ctx)} data-testid="funnel-submit">${FUNNEL_STEP6.submit}<//>
-      <p class="bk-footer__consent bk-fn__small" data-testid="funnel-small-print">${FUNNEL_STEP6.smallPrint(brand.name)}</p>
+      <p class="bk-footer__note bk-fn__foot" data-testid="funnel-foot-line"><span>${FUNNEL_STEP6.footLine}</span><button type="button" class="bk-fn__privacy" onClick=${showSmallPrint} data-testid="funnel-privacy">${FUNNEL_STEP6.privacy}</button></p>
     </div>`;
   }
   return null;
@@ -308,7 +418,7 @@ export function submitFunnel(ctx) {
   if (lock.current) return;
   const errors = funnelContactErrors(form);
   const keys = ['name', 'postcode', 'phone', 'email'];
-  ctx.setShown(new Set(keys));
+  ctx.setShown(new Set([...keys, 'attempt']));
   ctx.setBanner(null);
   const bad = keys.find((k) => errors[k]);
   if (bad) { focusFunnelField(bad); return; }

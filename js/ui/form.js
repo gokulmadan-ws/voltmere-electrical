@@ -1,4 +1,4 @@
-// js/ui/form.js: Field, Input, Select, Textarea, Switch (breaker lever), Segmented, Stepper, MoneyInput.
+// js/ui/form.js: Field, Input, Select, Textarea, Switch (iOS-style), Segmented, Stepper, MoneyInput.
 // Owner: B3 (was WP2)
 import { h, createContext, useContext, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Icon } from './display.js';
@@ -82,8 +82,9 @@ export function Textarea({ id, value, onInput, rows = 3, error, class: cls, ...r
 }
 
 /**
- * On/off switch drawn as a breaker lever. The whole 56px row is the target; state is also written as the
- * word On / Off, so it never relies on the green LED alone. `onChange(checked)` gets the NEW value.
+ * On/off switch drawn as a standard iOS-style switch (51x31: grey track and thumb on the left when off, green track and thumb on
+ * the right when on). The whole 56px row is the target; state is also written as the word On / Off, so it never relies on
+ * the colour alone. `onChange(checked)` gets the NEW value.
  */
 export function Switch({ checked, onChange, label, description, disabled, id, class: cls, ...rest }) {
   const idsRef = useRef(null);
@@ -108,7 +109,6 @@ export function Switch({ checked, onChange, label, description, disabled, id, cl
     description ? h('span', { class: 'ui-switch__desc', id: ids.desc }, description) : null),
   h('span', { class: 'ui-switch__state', 'aria-hidden': 'true' }, on ? 'On' : 'Off'),
   h('span', { class: 'ui-switch__body', 'aria-hidden': 'true' },
-    h('span', { class: 'ui-switch__led' }),
     h('span', { class: 'ui-switch__lever' })));
 }
 

@@ -92,7 +92,8 @@ QuoteItem = {
   unit: 'each' | 'metre',
   unitPrice: <whole pounds>,
   defaultQty: <positive integer>,          // what the quote builder starts with
-  suggested: <boolean>                     // true = included in a new quote's starting lines
+  suggested: <boolean>,                    // true = included in a new quote's starting lines
+  optional: <boolean>                      // true = a POSSIBLE EXTRA: its quote line is listed apart and never counted in the total (consumer_unit is the default one); docs/V4-API.md section 9
 }
 ```
 Default catalogue (sample prices): one charger line per brand in `business.brands` (ZAPPI 799, OHME 679, SYNC 649), `install_standard` "Standard installation (up to 10 m of cable)" 450, `cable_extra` "Extra cable (per metre)" 12 (unit metre, suggested false), `circuit` "Dedicated circuit and protective device" 180, `consumer_unit` "Consumer unit upgrade (if required)" 420 (suggested false), `enclosure` "Surface-mounted enclosure" 95 (suggested false), `groundwork` "Groundwork (per metre)" 65 (unit metre, suggested false), `testing` "Testing and certification" 85. `suggested: true` = first charger line, `install_standard`, `circuit`, `testing`.
@@ -192,7 +193,7 @@ Pure helpers (`js/core/quotes.js`, also re-exported from `selectors.js`):
 | Export | Result |
 |---|---|
 | `quoteLineTotal(line)` | `qty * unitPrice` |
-| `quoteTotal(quote)` | sum of line totals, whole pounds (the spec's pinned helper; also exported from `selectors.js`) |
+| `quoteTotal(quote)` | sum of the FIXED line totals, whole pounds (the spec's pinned helper; also exported from `selectors.js`). A line flagged `optional: true` is a possible extra and is left out: see `docs/V4-API.md` section 9 |
 | `quoteStatus(quote, nowStampStr?)` | the EFFECTIVE status: a stored `sent` or `viewed` quote whose `validUntil` is before today is `'expired'`; everything else is its stored status |
 | `quoteExpiresInDays(quote, nowStampStr?)` | whole days from today to `validUntil` (0 = last day, negative = past) |
 | `defaultQuoteLines(settings, { brand? })` | the starting lines from the catalogue (`suggested` items; the charger line of `brand`), each `{ id, label, detail, qty, unitPrice }` |
@@ -340,7 +341,7 @@ removeBookingPhoto(id, photoId) -> { ok, booking, undoToken }
 
 Default texts (plain, no exclamation marks, no emoji):
 - `customer_quote_sent`: "Hi {customerFirst}, it's {ownerFirst} from {business}. Your written quote for the home charger installation is ready: {quoteTotal}, valid until {quoteValidUntil}. You can read it and choose an install day here: {quoteLink} Questions? Reply here or call {ownerPhone}. Ref {ref}"
-- `customer_quote_accepted`: "Hi {customerFirst}, thanks for accepting your quote ({quoteTotal}). I have pencilled in your installation for {installWhen}. I will be in touch to confirm it. Quote {quoteId}"
+- `customer_quote_accepted`: "Hi {customerFirst}, thanks for accepting your quote ({quoteTotal}). The install day you chose is {installWhen}. I will be in touch to confirm it. Quote {quoteId}" (reworded in the polish round: a customer never reads "pencilled" or "provisional")
 - `owner_quote_accepted`: "*Quote accepted {quoteId}*\n{customerName} accepted your quote ({quoteTotal}).\nInstall pencilled in: {installWhen} (provisional)\n{address}\nOpen: {jobLink}" (to owner, on the INSTALL booking, so its `bubbleActions` are Confirm, Call, Open job)
 - `owner_quote_declined`: "*Quote declined {quoteId}*\n{customerName} declined your quote ({quoteTotal}).\n{reasonLine}\nOpen: {jobLink}" (on the enquiry booking)
 - `customer_photos_request`: "Hi {customerFirst}, it's {ownerFirst} from {business}. To prepare your quote, could you send a photo of your consumer unit and where you'd like the charger? Just reply here with the photos. Ref {ref}"
@@ -353,7 +354,7 @@ Default texts (plain, no exclamation marks, no emoji):
 ```js
 imageUrl(key, { width, images } = {})
 ```
-`images` is the configured map (pass `state.settings.business.images`, or `selectBrand(state).images`); omitted = the defaults. Result: for `https://perspective.imgix.net/...` the query is replaced by `?w=<width>&auto=compress,format&q=70`; for `https://images.unsplash.com/...` the `w` parameter is set to `<width>` and every other parameter is kept; any other host, or a relative path, is returned unchanged. `width` is rounded and clamped to 16 to 4000. With no `width`: the `logo` returns the original URL; every other key uses a default width (hero 1080, about 900, work1 to work4 640). An unknown key returns `''`. `selectImageUrl(state, key, { width })` does the same from a state (in `selectors.js`), `selectBrand(state)` now also carries `address` and `images`.
+`images` is the configured map (pass `state.settings.business.images`, or `selectBrand(state).images`); omitted = the defaults. Result: for `https://perspective.imgix.net/...` the query is replaced by `?w=<width>&q=70` (no `auto=compress,format`: measured bigger than plain `?w=N`); for `https://images.unsplash.com/...` the `w` parameter is set to `<width>` and every other parameter is kept; any other host, or a relative path, is returned unchanged. `width` is rounded and clamped to 16 to 4000. With no `width`: the `logo` returns the original URL; every other key uses a default width (hero 1080, about 900, work1 to work4 640). An unknown key returns `''`. `selectImageUrl(state, key, { width })` does the same from a state (in `selectors.js`), `selectBrand(state)` now also carries `address` and `images`.
 
 ## 12. UTM (`js/core/utm.js`)
 

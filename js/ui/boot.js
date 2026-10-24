@@ -5,6 +5,7 @@ import { initStore } from '../core/store.js';
 import { initTheme } from './theme.js';
 import { ToastHost } from './toast.js';
 import { Button } from './button.js';
+import { initClean } from './clean.js';
 
 const FAIL_KEY = 'vm_boot_fail';
 const STATE_KEY = 'vm_state_v1';
@@ -68,6 +69,9 @@ function fatalScreen(root) {
 export function bootApp(vnode, { container = '#app' } = {}) {
   const root = typeof container === 'string' ? document.querySelector(container) : container;
   if (!root) { console.error('bootApp: container not found', container); return; }
+
+  // Opt-in clean preview (?clean=1 / ?clean=0): read and applied before anything renders, so no prototype strip ever flashes.
+  try { initClean(); } catch (err) { console.error('Clean preview failed to start', err); }
 
   let storeOk = true;
   try {

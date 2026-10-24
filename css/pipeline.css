@@ -1,138 +1,131 @@
-/* css/pipeline.css: the Pipeline screen (pl-): stage strip, job cards, kanban board from 1100px, Lost drawer. Tokens only, no hex colours.
-   Owner: P1. Loaded on top of components.css and dashboard.css. */
+/* css/pipeline.css: the Pipeline screen (pl-): stage tiles, job cards, kanban board from 1260px, Lost drawer. Tokens only, no hex colours.
+   Owner: P1 (round 2, T04). Loaded on top of components.css and dashboard.css. */
 
 /* The board wants more room than the usual 1080px column when the screen has it. */
 @media (min-width: 1100px) { .db-page.pl-page { max-width: min(1480px, 100%); } }
 
-.pl-toggle { max-width: 420px; margin: 0 0 var(--space-4); }
+.pl-toggle { max-width: 420px; margin: 0 0 var(--space-3); }
 .pl-toggle .ui-seg__opt { flex: 1 1 0; }
-.pl-banner { margin: 0 0 var(--space-4); }
-.pl-banner strong { font-weight: var(--fw-bold); }
 .pl-note { margin: var(--space-5) 0 0; color: var(--text-2); font-size: var(--fs-14); }
 
-/* ================= Stage strip (phones and tablets) ================= */
-/* Runs edge to edge of the screen so the next tile peeks in; the first tile still lines up with the page gutter. */
-.pl-strip-wrap {
-  position: relative;
-  margin-inline: calc(max(var(--gutter), var(--safe-left)) * -1) calc(max(var(--gutter), var(--safe-right)) * -1);
+/* ================= The reply reminder: one slim row (48px), dismissible, only for an enquiry inside his area ================= */
+.pl-sla {
+  display: flex; align-items: center; gap: var(--space-2);
+  min-height: 48px; max-height: 56px; margin: 0 0 var(--space-3); padding: 2px 4px 2px 12px;
+  border: 1.5px solid var(--line); border-radius: var(--r-lg);
+  background: var(--card-bg); box-shadow: inset 4px 0 0 var(--danger), var(--shadow-1);
 }
-.pl-strip-wrap::before, .pl-strip-wrap::after {
-  content: ''; position: absolute; top: 0; bottom: 12px; width: 28px; z-index: 1; pointer-events: none; opacity: 0;
-  transition: opacity var(--dur-base) var(--ease-out);
+.pl-sla__icon { flex: none; color: var(--danger-text); }
+.pl-sla__text { flex: 1 1 0; min-width: 0; margin: 0; max-width: none; display: flex; align-items: baseline; gap: 0; overflow: hidden; white-space: nowrap; font-size: var(--fs-14); line-height: 1.3; color: var(--text-2); }
+.pl-sla__who { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); font-weight: var(--fw-bold); }
+.pl-sla__what { flex: none; padding-left: 5px; }
+.pl-sla__more, .pl-sla__full { display: none; }
+.pl-sla .ui-btn { flex: none; min-height: var(--tap); height: var(--tap); padding: 0 var(--space-3); font-size: var(--fs-15); }
+.pl-sla .ui-icon-btn { flex: none; width: var(--tap); height: var(--tap); border-color: transparent; background: transparent; color: var(--text-2); }
+@media (min-width: 640px) {
+  .pl-sla__more, .pl-sla__full { display: inline; }
+  .pl-sla__short, .pl-sla__first { display: none; }
 }
-.pl-strip-wrap::before { left: 0; background: linear-gradient(90deg, var(--bg), transparent); }
-.pl-strip-wrap::after { right: 0; background: linear-gradient(270deg, var(--bg), transparent); }
-.pl-strip-wrap[data-left="1"]::before, .pl-strip-wrap[data-right="1"]::after { opacity: 1; }
 
-.pl-strip {
-  position: relative; display: flex; align-items: stretch; gap: 10px;
-  padding: 4px max(var(--gutter), var(--safe-right)) 14px max(var(--gutter), var(--safe-left));
-  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
-  scroll-snap-type: x proximity; scroll-padding-inline: max(var(--gutter), var(--safe-left));
-}
-.pl-strip::-webkit-scrollbar { display: none; }
+/* ================= Stage tiles (phones and tablets): 3 x 2 on a phone, one row from 640px. Nothing scrolls sideways. ================= */
+.pl-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 var(--space-3); }
+@media (min-width: 640px) { .pl-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 
 .pl-tile {
-  position: relative; flex: 0 0 auto; width: 138px; min-height: 116px;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  padding: 12px 14px 12px;
-  border: 1.5px solid var(--line); border-radius: var(--r-lg);
+  position: relative; min-width: 0; min-height: var(--tap);
+  display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; gap: 2px;
+  padding: 7px 9px 7px;
+  border: 1.5px solid var(--line); border-radius: var(--r-md);
   background: var(--card-bg); color: var(--text); box-shadow: var(--shadow-1);
   font: inherit; text-align: left; cursor: pointer;
-  scroll-snap-align: center;
   transition: background-color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .pl-tile:active { transform: translateY(1px) scale(0.985); }
-.pl-tile__step { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.2; }
-.pl-tile__count {
-  margin-top: 6px;
-  font-family: var(--font-display); font-size: 2.25rem; font-weight: var(--fw-heavy); line-height: 1.05; letter-spacing: var(--tracking-tight);
-}
-.pl-tile__value { color: var(--text-2); font-size: var(--fs-14); line-height: 1.3; font-variant-numeric: tabular-nums; }
-.pl-tile__value.is-empty { color: var(--text-3); }
-.pl-tile.is-selected { background: var(--cta-soft); border-color: var(--cta); }
-.pl-tile.is-selected .pl-tile__step { color: var(--text); font-weight: var(--fw-bold); }
+.pl-tile__label { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.2; white-space: nowrap; }
+.pl-tile__nums { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 0; min-width: 0; }
+.pl-tile__count { font-family: var(--font-display); font-size: 1.5rem; font-weight: var(--fw-heavy); line-height: 1.1; letter-spacing: var(--tracking-tight); }
+.pl-tile__value { color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.3; }
+.pl-tile__value.is-empty { color: var(--text-3); font-weight: var(--fw-regular); }
+/* Selected is neutral (T02): a grey fill and a 2px ink ring, like a selected chip. dashboard.css restates it with more weight so a view cannot undo it. */
+.pl-tile.is-selected { background: var(--surface-2); border-color: var(--text); box-shadow: inset 0 0 0 0.5px var(--text); }
+.pl-tile.is-selected .pl-tile__label { color: var(--text); font-weight: var(--fw-bold); }
 .pl-tile.is-selected .pl-tile__value { color: var(--text); }
-.pl-tile__flag {
-  display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 8px 1px 6px;
-  border: 1.5px solid var(--danger); border-radius: var(--r-pill); background: var(--danger-tint); color: var(--danger-text);
-  font-size: var(--fs-12); font-weight: var(--fw-bold); line-height: 1.4; white-space: nowrap;
-}
+/* An overdue reply: a small orange dot beside the stage name (the words are there for a screen reader, and the card carries the stripe). */
+.pl-tile__flag { display: inline-flex; align-items: center; flex: none; }
+.pl-tile__pip { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 
 /* ================= The selected stage ================= */
 .pl-panel { min-width: 0; }
 .pl-panel:focus, .pl-panel:focus-visible { outline: none; }
-.pl-panel__head { display: flex; flex-direction: column; gap: 2px; margin: var(--space-2) 0 var(--space-3); }
-.pl-panel__title { margin: 0; font-size: var(--fs-20); }
-.pl-panel__hint { margin: 0; color: var(--text-2); font-size: var(--fs-14); }
+.pl-panel__head { margin: 0 0 var(--space-2); }
+/* On a phone the selected tile already says which stage this is, so the caption goes: the first card is what he came for. */
+@media (max-width: 639px) { .pl-panel__head { display: none; } }
+.pl-panel__hint { margin: 0; max-width: none; color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; }
 .pl-empty { border: 1.5px dashed var(--line); border-radius: var(--r-lg); }
 
-.pl-cards { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.pl-cards { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; min-width: 0; }
 @media (min-width: 700px) {
   .pl-panel > .pl-cards, .pl-cards--lost { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
 }
 
 /* ================= A job card ================= */
-/* The card is a size container: it lays itself out for its own width, so the same card fits a phone and a narrow board column. */
+/* The card is a size container: it lays itself out for its own width, so the same card fits a phone and a narrow board column.
+   The whole card is one link. The left stripe is for urgency ONLY (orange overdue, amber due soon): an inset shadow, so it follows the corners. */
 .pl-card {
   container-type: inline-size; container-name: plcard;
-  display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+  position: relative; display: block; min-width: 0; overflow: hidden;
   border: 1.5px solid var(--line); border-radius: var(--r-lg);
   background: var(--card-bg); box-shadow: var(--shadow-1);
-}
-.pl-card.is-overdue { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); box-shadow: inset 4px 0 0 var(--danger), var(--shadow-1); }
-.pl-card__main {
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px;
-  padding: 14px 14px 12px; color: inherit; text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out);
 }
-.pl-card__main:active { background: var(--surface-2); }
-@media (hover: hover) { .pl-card__main:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); } }
-.pl-card__avatar { display: none; }
-.pl-card__name { font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
-.pl-card__value { font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); line-height: 1.25; letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums; }
+.pl-card.is-overdue { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); box-shadow: inset 4px 0 0 var(--danger), var(--shadow-1); }
+.pl-card.is-soon { border-color: color-mix(in srgb, var(--dot-few) 45%, var(--line)); box-shadow: inset 4px 0 0 var(--dot-few), var(--shadow-1); }
+.pl-card:active { background: var(--surface-2); }
+@media (hover: hover) { .pl-card:hover { background: var(--surface-2); } }
+
+.pl-card__link {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-3); row-gap: 2px; align-items: start;
+  min-height: 56px; padding: 12px 40px 12px 14px; color: inherit; text-decoration: none;
+}
+.pl-card__link:focus-visible { outline-offset: -3px; border-radius: var(--r-lg); }
+.pl-card__name { grid-column: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; }
+.pl-card__value { grid-column: 2; grid-row: 1; justify-self: end; font-family: var(--font-display); font-size: var(--fs-17); font-weight: var(--fw-heavy); line-height: 1.3; letter-spacing: var(--tracking-tight); }
 .pl-card__value.is-empty { font-family: var(--font-body); font-size: var(--fs-14); font-weight: var(--fw-semibold); letter-spacing: 0; color: var(--text-3); }
-.pl-card__meta { display: flex; flex-wrap: wrap; gap: 0 8px; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
-.pl-card__pc { font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
-.pl-card__summary { margin-top: 2px; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; overflow-wrap: anywhere; }
+.pl-card__meta, .pl-card__summary, .pl-card__badges { grid-column: 1 / -1; min-width: 0; }
+.pl-card__meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
+.pl-card__pc { font-weight: var(--fw-semibold); }
+.pl-card__sep { color: var(--text-3); }
+/* The detail line wraps to two lines at a word boundary; it is never cut mid-word with a dangling "...". */
+.pl-card__summary {
+  margin-top: 2px; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; overflow-wrap: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
 .pl-card__badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pl-card__chev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; transition: transform var(--dur-base) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+@media (hover: hover) { .pl-card:hover .pl-card__chev { color: var(--text); transform: translate(2px, -50%); } }
+/* Only the compact (board) card uses these two. */
+.pl-card__glyph, .pl-card__pip { display: none; }
 
-.pl-card__action {
-  display: flex; align-items: center; gap: var(--space-2); min-height: 48px; padding: 8px 14px;
-  border-top: 1px solid var(--line); color: var(--cta-text);
-  font-size: var(--fs-15); font-weight: var(--fw-bold); line-height: 1.25; text-decoration: none;
-  transition: background-color var(--dur-fast) var(--ease-out);
+/* A narrow card (a board column): name, £, one status icon and an urgency dot. The chips and the detail line give way to the icon. */
+@container plcard (max-width: 259px) {
+  .pl-card__link { padding-right: 14px; }
+  .pl-card__chev { display: none; }
 }
-.pl-card__action-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-.pl-card__action-arrow { flex: none; transition: transform var(--dur-base) var(--ease-out); }
-.pl-card__action:active { background: var(--surface-2); }
-@media (hover: hover) {
-  .pl-card__action:hover { background: var(--cta-soft); }
-  .pl-card__action:hover .pl-card__action-arrow { transform: translateX(3px); }
-}
-.pl-card__action:focus-visible, .pl-card__main:focus-visible { outline-offset: -3px; }
-
-/* A narrow card (a board column): the summary is held to three lines and the action loses its leading icon. */
-@container plcard (max-width: 235px) {
-  .pl-card__summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
-  .pl-card__action { padding-inline: 12px; font-size: var(--fs-14); }
-  .pl-card__action > .ui-icon:first-child { display: none; }
-  .pl-card__meta { flex-direction: column; }
-}
-@container plcard (min-width: 236px) {
-  .pl-card__main { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-3); }
-  .pl-card__name { grid-column: 1; }
-  .pl-card__value { grid-column: 2; grid-row: 1; text-align: right; align-self: start; }
-  .pl-card__meta, .pl-card__summary, .pl-card__badges { grid-column: 1 / -1; }
-}
-@container plcard (min-width: 300px) {
-  .pl-card__main { grid-template-columns: 36px minmax(0, 1fr) auto; }
-  .pl-card__avatar { display: inline-flex; grid-column: 1; grid-row: 1 / span 2; align-self: start; }
-  .pl-card__name { grid-column: 2; align-self: center; }
-  .pl-card__value { grid-column: 3; }
-  .pl-card__meta { grid-column: 2 / -1; grid-row: 2; }
-  .pl-card__summary, .pl-card__badges { grid-column: 1 / -1; }
-  .pl-card__summary { margin-top: var(--space-2); }
+@container plcard (max-width: 209px) {
+  .pl-card__link { padding: 8px 10px; row-gap: 1px; column-gap: 6px; min-height: 0; }
+  .pl-card__name { grid-row: 1; grid-column: 1 / -1; font-size: var(--fs-14); line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .pl-card__value { grid-row: 2; grid-column: 1; justify-self: start; font-size: var(--fs-14); line-height: 1.3; }
+  .pl-card__value.is-empty { font-size: var(--fs-12); }
+  .pl-card__glyph { display: inline-flex; grid-row: 2; grid-column: 2; align-self: center; justify-self: end; color: var(--text-2); }
+  .pl-card__glyph--danger { color: var(--danger-text); }
+  .pl-card__glyph--warn { color: var(--status-on-the-way-fg); }
+  .pl-card__glyph--ok { color: var(--ok-text); }
+  .pl-card__pip { display: block; grid-row: 1; grid-column: 2; align-self: start; justify-self: end; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--danger); }
+  .pl-card__pip--soon { background: var(--dot-few); }
+  .pl-card__meta { grid-row: 3; color: var(--text-3); font-size: var(--fs-12); }
+  .pl-card__pc, .pl-card__sep, .pl-card__verb, .pl-card__summary, .pl-card__badges { display: none; }
+  .pl-card.is-overdue .pl-card__name, .pl-card.is-soon .pl-card__name { padding-right: 14px; }
+  .pl-card__link { grid-template-rows: auto auto auto; }
 }
 
 /* Small status tags: icon + words, never colour alone. */
@@ -148,26 +141,30 @@
 .pl-chip--danger { background: var(--danger-tint); border-color: var(--danger); color: var(--danger-text); }
 .pl-chip--ok { background: var(--ok-tint); border-color: var(--ok); color: var(--ok-text); }
 
-/* ================= Kanban board (1100px and up) ================= */
-@media (min-width: 1100px) {
-  .pl-board {
-    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(172px, 1fr); align-items: start; gap: var(--space-3);
-    padding-bottom: var(--space-3); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin;
-  }
+/* ================= Kanban board (1260px and up): six columns side by side, about 150px each, nothing to scroll ================= */
+@media (min-width: 1260px) {
+  .pl-board { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch; gap: 8px; position: relative; min-width: 0; }
+  /* A lane: a subtle background, so the columns read as the same height on purpose, however many cards each holds. */
   .pl-col {
-    display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; padding: var(--space-3);
+    display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 0 8px 8px;
     border: 1px solid var(--line); border-radius: var(--r-lg);
-    background: color-mix(in srgb, var(--surface) 55%, transparent);
+    background: color-mix(in srgb, var(--surface-2) 45%, var(--bg));
   }
-  .pl-col__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-2); padding: 2px 2px var(--space-1); }
-  .pl-col__title { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--text-2); font-family: var(--font-body); font-size: var(--fs-14); font-weight: var(--fw-bold); letter-spacing: 0; }
-  .pl-col__count { grid-column: 2; grid-row: 1; font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); line-height: 1; letter-spacing: var(--tracking-tight); }
-  .pl-col__value { grid-column: 1 / -1; color: var(--text-2); font-size: var(--fs-14); font-variant-numeric: tabular-nums; }
-  .pl-col__value.is-empty { color: var(--text-3); }
-  .pl-col__head .pl-tile__flag { grid-column: 1 / -1; justify-self: start; }
+  /* The column header sticks under the page header while the cards scroll past. */
+  .pl-col__head {
+    position: sticky; top: calc(var(--h-header) + var(--safe-top)); z-index: var(--z-raised);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 var(--space-2);
+    margin: 0 -8px; padding: 10px 10px 8px;
+    background: var(--surface); border-bottom: 1px solid var(--line); border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
+  }
+  .pl-col__title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin: 0; color: var(--text-2); font-family: var(--font-body); font-size: var(--fs-14); font-weight: var(--fw-bold); letter-spacing: 0; }
+  .pl-col__title .ui-icon { flex: none; }
+  .pl-col__count { grid-column: 2; grid-row: 1; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); line-height: 1; letter-spacing: var(--tracking-tight); }
+  .pl-col__value { grid-column: 1 / -1; color: var(--text-2); font-size: var(--fs-14); }
+  .pl-col__value.is-empty { color: var(--text-3); font-size: var(--fs-12); }
   .pl-col__none {
-    margin: 0; padding: var(--space-5) var(--space-2); text-align: center; max-width: none;
-    border: 1.5px dashed var(--line); border-radius: var(--r-md); color: var(--text-3); font-size: var(--fs-14);
+    margin: 0; padding: var(--space-4) var(--space-2); text-align: center; max-width: none;
+    border: 1.5px dashed var(--line); border-radius: var(--r-md); color: var(--text-3); font-size: var(--fs-12); line-height: 1.35;
   }
   .pl-cards--lost { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 }

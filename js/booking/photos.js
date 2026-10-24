@@ -71,7 +71,8 @@ let keySeq = 0;
  * "Add photos now": up to three photos for the enquiry. Pick or take them, see thumbnails (each can be removed), send.
  * Sent photos are saved on the booking in this browser (a real build would upload them): the card says so.
  */
-export function PhotoCard({ booking, brand }) {
+/** `prompt` replaces the sentence above the buttons (the thank-you page passes its own). In `compact` mode (inside the thank-you page's closed "Add photos" row) both pick buttons are secondary; "Send photos" is the only filled one, and only once photos are picked. */
+export function PhotoCard({ booking, brand, compact = false, prompt = '' }) {
   const [pending, setPending] = useState([]); // chosen but not sent: { key, name, dataUrl }
   const [busy, setBusy] = useState(false); // shrinking pictures
   const [sending, setSending] = useState(false);
@@ -147,15 +148,15 @@ export function PhotoCard({ booking, brand }) {
   };
 
   const slots = saved.length + pending.length;
-  return html`<section class="bk-photos" data-testid="photos-card" aria-labelledby="bk-photos-title">
-    <div class="bk-photos__head">
+  return html`<section class=${cx('bk-photos', compact && 'bk-photos--compact')} data-testid="photos-card" aria-labelledby=${compact ? undefined : 'bk-photos-title'} aria-label=${compact ? 'Add photos' : undefined}>
+    ${compact ? null : html`<div class="bk-photos__head">
       <span class="bk-photos__icon" aria-hidden="true"><${Icon} name="camera" size=${22} /></span>
       <div class="bk-photos__titles">
         <h3 class="bk-photos__title" id="bk-photos-title">Add photos now</h3>
         <p class="bk-photos__opt">Optional</p>
       </div>
-    </div>
-    <p class="bk-photos__text">A photo of your consumer unit and where you'd like the charger helps the team prepare your quote.</p>
+    </div>`}
+    <p class="bk-photos__text" data-testid="photos-prompt">${prompt || `A photo of your consumer unit and where you'd like the charger helps ${brand.ownerFirst} prepare your quote.`}</p>
     ${slots > 0 ? html`<ul class="bk-photos__grid" data-testid="photos-grid">
       ${saved.map((p, i) => html`<li key=${p.id} class="bk-thumb is-saved" data-testid=${`photos-saved-${i}`}>
         <img src=${p.dataUrl} alt=${`Photo ${i + 1}, sent`} width="120" height="120" decoding="async" />
@@ -179,6 +180,6 @@ export function PhotoCard({ booking, brand }) {
     ? html`<${Icon} name=${note.tone === 'ok' ? 'circle-check' : note.tone === 'error' ? 'circle-alert' : 'info'} size=${18} />${' '}<span>${note.text}</span>`
     : (saved.length ? `${saved.length} of ${PHOTO_LIMITS.maxPhotos} photos sent.` : `Up to ${PHOTO_LIMITS.maxPhotos} photos. They are made smaller on your phone first.`)}</p>
     ${note && note.whatsapp ? html`<${Button} variant="secondary" icon="message-circle" href=${waHref} data-testid="photos-whatsapp">Send them on WhatsApp instead<//>` : null}
-    <p class="bk-photos__sim" data-testid="photos-sim">Prototype: photos stay on this device. A live build would upload them securely.</p>
+    ${slots > 0 || note ? html`<p class="bk-photos__sim" data-proto="true" data-testid="photos-sim">Prototype: photos stay on this device. A live build would upload them securely.</p>` : null}
   </section>`;
 }

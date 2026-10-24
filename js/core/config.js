@@ -46,6 +46,12 @@ export const PROMISES = {
   contactWithinHours: 24 // "the team will be in touch within 24 hours" (the enquiry promise on his own site)
 };
 
+// The free survey (an ev_quote enquiry) is never offered or pencilled less than this many hours from "now": nobody has spoken to the
+// customer yet, and his own site only promises to be in touch within 24 hours. settings.leadMinutes (90 by default) still governs every
+// other service, and the owner's own diary view (ownerMode) and emergencies are unaffected.
+export const SURVEY_SERVICE_ID = 'ev_quote';
+export const SURVEY_MIN_LEAD_HOURS = 24;
+
 export const EMERGENCY_REASONS = [
   { id: 'no_power', label: 'No power at all' },
   { id: 'burning', label: 'Burning smell or sparks' },
@@ -134,12 +140,12 @@ export const ENQUIRY_STEPS = [
     ]
   },
   {
-    key: 'permission', step: 5, title: 'Can you authorise installation work at the property?',
+    key: 'permission', step: 5, title: "Do you own the property, or have the owner's permission?",
     note: "Not sure yet? That's fine. We will help you work out what is needed.",
     options: [
       { value: 'yes', label: 'Yes' },
-      { value: 'landlord', label: 'I need landlord or freeholder approval' },
-      { value: 'unsure', label: "I'm not sure" }
+      { value: 'landlord', label: 'I rent or lease and need permission' },
+      { value: 'unsure', label: 'Not sure' }
     ]
   }
 ];
@@ -231,7 +237,7 @@ export const PLACEHOLDERS = {
   newWhen: 'The time after a reschedule',
   reasonLine: 'Cancellation reason sentence, or empty',
   receivedReason: 'Travel check sentence for edge and outside postcodes',
-  receivedLine: 'The body of the enquiry-received text: pencilled-in survey, provisional, contact within 24 hours',
+  receivedLine: 'The body of the enquiry-received text: the visit the customer asked for and the contact-within-24-hours promise',
   contactHours: 'Hours within which the team will be in touch (24)',
   nextFree: 'Next free visit, e.g. Tomorrow, 8–10am',
   nextFreeLine: 'Next free visit sentence',
@@ -246,9 +252,9 @@ export const PLACEHOLDERS = {
   powerCutNumber: 'Power cut phone number',
   quoteId: 'Quote id, e.g. Q-EL-1043 (empty without a quote)',
   quoteLink: 'Customer link to read and accept the quote (empty without a quote)',
-  quoteTotal: 'Quote total, e.g. £1514 (empty without a quote)',
+  quoteTotal: 'Quote total, e.g. £1,514 (empty without a quote)',
   quoteValidUntil: 'Last day the quote can be accepted, e.g. Sat 21 Nov (empty without a quote)',
-  installWhen: 'The pencilled install day in words, e.g. Mon 2 Nov, morning, arriving between 8 and 10am (empty without one)'
+  installWhen: 'The install day in words, e.g. Mon 2 Nov, morning, arriving between 8 and 10am (empty without one)'
 };
 
 // Default message text (10.3). Placeholders are filled by renderTemplate(); empty lines are dropped.
@@ -294,12 +300,12 @@ export const DEFAULT_TEMPLATES = {
   customer_review_request: "Hi {customerFirst}, it's {ownerFirst}. Thanks for choosing {business}. If you were happy with the work, a quick review helps a small firm a lot: {reviewLink}. Ref {ref}",
   customer_reminder: "Hi {customerFirst}, it's {ownerFirst} from {business}. A reminder: I'm booked to arrive {whenLong} at {line1} for {serviceFull}. I'll message when I'm {awayMinutes} minutes away. Need to change it? Call {ownerPhone}. Ref {ref}",
   customer_cancelled: "Hi {customerFirst}, it's {ownerFirst} from {business}. I'm sorry, I have to cancel {serviceWhen}. {reasonLine} {nextFreeLine} Ref {ref}",
-  customer_payment_nudge: "Hi {customerFirst}, it's {ownerFirst} from {business}. A quick reminder that {finalPrice} is due for {service} on {dateShort}. You can pay by card, bank transfer or cash. Thank you. Ref {ref}",
+  customer_payment_nudge: "Hi {customerFirst}, it's {ownerFirst} from {business}. A quick reminder that {finalPrice} is due for {service} on {dateShort}. Thank you. Ref {ref}",
   customer_running_late: "Hi {customerFirst}, it's {ownerFirst}. I'm running about 15 minutes late for {line1}. Sorry about that, I'm on my way. Ref {ref}",
   customer_need_access: "Hi {customerFirst}, it's {ownerFirst}. I'm outside {line1}. Could you let me in and show me the fuse box? Ref {ref}",
   customer_quote_ready: "Hi {customerFirst}, it's {ownerFirst} from {business}. Your written quote is ready. Reply here or call {ownerPhone} and I'll talk you through it. Ref {ref}",
   customer_quote_sent: "Hi {customerFirst}, it's {ownerFirst} from {business}. Your written quote for the home charger installation is ready: {quoteTotal}, valid until {quoteValidUntil}. You can read it and choose an install day here: {quoteLink} Questions? Reply here or call {ownerPhone}. Ref {ref}",
-  customer_quote_accepted: "Hi {customerFirst}, thanks for accepting your quote ({quoteTotal}). I have pencilled in your installation for {installWhen}. I will be in touch to confirm it. Quote {quoteId}",
+  customer_quote_accepted: "Hi {customerFirst}, thanks for accepting your quote ({quoteTotal}). The install day you chose is {installWhen}. I will be in touch to confirm it. Quote {quoteId}",
   owner_quote_accepted: [
     '*Quote accepted {quoteId}*',
     '{customerName} accepted your quote ({quoteTotal}).',
@@ -317,6 +323,20 @@ export const DEFAULT_TEMPLATES = {
   owner_test_event: [
     '*Test message from {business}*',
     'This is a test from your dashboard. A live build would send it to {ownerPhone}. Simulated: nothing was really sent.'
+  ].join('\n')
+};
+
+// The accepted install a WhatsApp acceptance makes has no day yet (the customer has no copy of the owner's diary and only said which
+// days suit). buildMessage uses these instead of the two defaults above unless the owner customised a template.
+export const DEFAULT_UNSCHEDULED_TEMPLATES = {
+  customer_quote_accepted: 'Hi {customerFirst}, thanks for accepting your quote ({quoteTotal}). I will be in touch shortly to agree your installation day. Quote {quoteId}',
+  owner_quote_accepted: [
+    '*Quote accepted {quoteId}*',
+    '{customerName} accepted your quote ({quoteTotal}).',
+    'Install day: still to be agreed.',
+    '{noteLine}',
+    '{address}',
+    'Open: {jobLink}'
   ].join('\n')
 };
 
@@ -344,6 +364,29 @@ export const QUOTE_STATUS_LABELS = { draft: 'Draft', sent: 'Sent', viewed: 'View
 export const QUOTE_VIA = ['whatsapp', 'email', 'link'];
 export const QUOTE_VIA_LABELS = { whatsapp: 'WhatsApp', email: 'Email', link: 'A link I send myself' };
 
+// ---------- v4: the WhatsApp link handoff (docs/V4-API.md) ----------
+// Payloads are plain data in a URL fragment, base64url of compact JSON. HANDOFF_BUDGETS are the most ENCODED characters a TYPICAL payload
+// of each kind may take (a unit test enforces them): a longer link still works but is more likely to be cut off by a messenger.
+export const HANDOFF_VERSION = 1;
+export const HANDOFF_KINDS = ['enq', 'quo', 'acc', 'dec'];
+export const HANDOFF_BUDGETS = { enq: 900, quo: 1800, acc: 700, dec: 500 };
+export const IMPORT_MAX_AGE_DAYS = 30; // an imported enquiry older than this is treated as exactly this old (so a forged stamp cannot bury or fake the reply clock)
+export const HANDOFF_STORAGE_KEY = 'vm_handoff_v1'; // what this browser opened in WhatsApp (localStorage, memory fallback)
+// The "Which days suit you?" chips on the customer's quote page (Mon to Sat, the days he works) and the part of the day.
+export const INSTALL_DAYS = [
+  { id: 'mon', label: 'Mon', long: 'Monday' }, { id: 'tue', label: 'Tue', long: 'Tuesday' }, { id: 'wed', label: 'Wed', long: 'Wednesday' },
+  { id: 'thu', label: 'Thu', long: 'Thursday' }, { id: 'fri', label: 'Fri', long: 'Friday' }, { id: 'sat', label: 'Sat', long: 'Saturday' }
+];
+export const INSTALL_PARTS = [{ id: 'am', label: 'Morning' }, { id: 'pm', label: 'Afternoon' }, { id: 'any', label: 'Any time' }];
+// The reason chips when a customer says "Not for me" (the same ids the quote page has always used).
+export const QUOTE_DECLINE_REASONS = [
+  { id: 'price', label: 'Too expensive' },
+  { id: 'other_installer', label: 'I found another installer' },
+  { id: 'time', label: 'I need more time' },
+  { id: 'plans', label: 'My plans have changed' },
+  { id: 'other', label: 'Something else' }
+];
+
 // Connections are all SIMULATED (nothing leaves the device). The targets below are fictional: documentation ranges and the .example TLD.
 export const CONNECTION_KEYS = ['domain', 'webhook', 'tracking', 'whatsapp', 'calendar', 'email'];
 export const CONNECTION_LABELS = {
@@ -353,7 +396,9 @@ export const CONNECTION_LABELS = {
 export const DOMAIN_TARGETS = { cname: 'sites.example', a: '192.0.2.10' };
 export const WHATSAPP_DEMO_CODE = '482913';
 export const DOMAIN_VERIFY_SECONDS = 20;
-export const TEMPLATE_APPROVAL_SECONDS = 6;
+// Meta usually takes a day or two to approve a message template, so the simulation does the same: they stay pending until this long has passed
+// (clock time), or until the wizard's "Prototype: fast-forward" button approves them now (store.fastForwardWhatsAppTemplates).
+export const TEMPLATE_APPROVAL_SECONDS = 2 * 24 * 60 * 60;
 export const WHATSAPP_TEMPLATE_KINDS = TEMPLATE_KINDS.filter((k) => k !== 'owner_test_event');
 
 // ---------- his photos: one place, hot-linked (docs/reference/180-images.md) ----------
@@ -382,7 +427,8 @@ const DEFAULT_IMAGE_WIDTHS = { hero: 1080, about: 900, work1: 640, work2: 640, w
 
 /**
  * The URL to use for one of his photos. `images` is the configured map (settings.business.images); omitted means the defaults.
- * perspective.imgix.net: the query becomes ?w=<width>&auto=compress,format&q=70. images.unsplash.com: `w` is set, the rest kept.
+ * perspective.imgix.net: the query becomes ?w=<width>&q=70 (NOT auto=compress,format: measured on the live host, that returned BIGGER files than plain ?w=N:
+ * w=800 was 185 KB plain versus 265 KB with auto=compress,format&q=70). images.unsplash.com: `w` is set, the rest kept.
  * Any other host or a relative path comes back unchanged. No width: the logo returns its original URL, the others a default width.
  */
 export function imageUrl(key, { width, images } = {}) {
@@ -400,7 +446,7 @@ export function imageUrl(key, { width, images } = {}) {
     return url; // a relative path such as img/180/hero.jpg
   }
   if (parsed.protocol !== 'https:') return url;
-  if (parsed.hostname === 'perspective.imgix.net') return `${parsed.origin}${parsed.pathname}?w=${w}&auto=compress,format&q=70`;
+  if (parsed.hostname === 'perspective.imgix.net') return `${parsed.origin}${parsed.pathname}?w=${w}&q=70`;
   if (parsed.hostname === 'images.unsplash.com') {
     parsed.searchParams.set('w', String(w));
     return parsed.toString();
@@ -506,6 +552,15 @@ export function makeDefaultBusiness() {
   };
 }
 
+// The default notes on a new quote: one short, neutral, clearly labelled sample line. No guarantee, payment or product wording: his site says
+// none of that, so anything of the kind is his to write. (The customer page also tags the notes "Sample terms".)
+export const DEFAULT_QUOTE_NOTES = `Sample terms: ${makeDefaultBusiness().ownerFirstName} sets his own.`;
+// The longer text earlier builds put in quoteDefaults.notes (it made payment-style promises). The store swaps it for DEFAULT_QUOTE_NOTES when a saved
+// state still holds it unedited.
+export const LEGACY_QUOTE_NOTES = [
+  'Sample terms for this prototype, to be replaced with your own. The price covers the work listed above, supplied and fitted. Anything extra is agreed with you before it starts.'
+];
+
 const SAMPLE_CHARGER_PRICES = { ZAPPI: 799, OHME: 679, SYNC: 649 };
 const NEW_BRAND_PRICE = 700;
 
@@ -517,19 +572,20 @@ export function chargerItemId(brand) {
 /** One sample charger catalogue line for a brand. */
 export function makeChargerItem(brand, unitPrice) {
   const price = Number.isInteger(unitPrice) ? unitPrice : SAMPLE_CHARGER_PRICES[brand] !== undefined ? SAMPLE_CHARGER_PRICES[brand] : NEW_BRAND_PRICE;
-  return { id: chargerItemId(brand), kind: 'charger', brand, label: `Supply of ${brand} home charger`, detail: '', unit: 'each', unitPrice: price, defaultQty: 1, suggested: false };
+  return { id: chargerItemId(brand), kind: 'charger', brand, label: `Supply of ${brand} home charger`, detail: '', unit: 'each', unitPrice: price, defaultQty: 1, suggested: false, optional: false };
 }
 
 /** The editable quote catalogue: a charger line per brand, then the install and extra lines. ALL PRICES ARE SAMPLES. */
 export function makeDefaultQuoteItems(brands = makeDefaultBusiness().brands) {
   const chargers = brands.map((brand, i) => ({ ...makeChargerItem(brand), suggested: i === 0 }));
-  const line = (id, kind, label, unit, unitPrice, suggested, detail = '') => ({ id, kind, brand: '', label, detail, unit, unitPrice, defaultQty: 1, suggested });
+  // `optional`: a possible extra. It is listed on the quote ("Possible extras") but is NEVER part of the fixed total (quoteTotal skips it).
+  const line = (id, kind, label, unit, unitPrice, suggested, optional = false, detail = '') => ({ id, kind, brand: '', label, detail, unit, unitPrice, defaultQty: 1, suggested, optional });
   return [
     ...chargers,
     line('install_standard', 'install', 'Standard installation (up to 10 m of cable)', 'each', 450, true),
     line('cable_extra', 'extra', 'Extra cable (per metre)', 'metre', 12, false),
     line('circuit', 'install', 'Dedicated circuit and protective device', 'each', 180, true),
-    line('consumer_unit', 'extra', 'Consumer unit upgrade (if required)', 'each', 420, false),
+    line('consumer_unit', 'extra', 'Consumer unit upgrade (if required)', 'each', 420, false, true),
     line('enclosure', 'extra', 'Surface-mounted enclosure', 'each', 95, false),
     line('groundwork', 'extra', 'Groundwork (per metre)', 'metre', 65, false),
     line('testing', 'install', 'Testing and certification', 'each', 85, true)
@@ -575,7 +631,7 @@ export function makeDefaultSettings() {
     quoteItems: makeDefaultQuoteItems(),
     quoteDefaults: {
       validDays: 30,
-      notes: 'Sample terms for this prototype, to be replaced with your own. The price covers the work listed above, supplied and fitted. Anything extra is agreed with you before it starts.'
+      notes: DEFAULT_QUOTE_NOTES
     },
     connections: makeDefaultConnections()
   };

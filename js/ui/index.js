@@ -12,6 +12,8 @@ export { Sheet, ConfirmDialog } from './sheet.js';
 export { toast, dismissToast, showUndoToast, ToastHost } from './toast.js';
 export { WhatsAppBubble, PhoneMock } from './whatsapp.js';
 export { PrototypeNotice } from './notice.js';
+export { StorageNote } from './storage-note.js';
+export { isCleanMode, initClean } from './clean.js';
 export { ThemeToggle, getTheme, setThemeChoice, applyTheme, initTheme } from './theme.js';
 export { bootApp } from './boot.js';
 export { loadCss } from './load-css.js';
@@ -24,3 +26,5 @@ export { QrCode, makeQr, qrSvgMarkup } from './qr.js';
 export { ConsentSheet } from './consent.js';
 export { SimBanner, RealBuildNote, Disclosure } from './sim.js';
 export { ListRow, DataTable, KeyValueList } from './rows.js';
+// T11
+export { startEdgeFade } from './edge-fade.js';

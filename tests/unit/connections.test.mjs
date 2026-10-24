@@ -7,6 +7,7 @@ import {
   TEMPLATE_KINDS, makeDefaultConnections, makeDefaultSettings
 } from '../../js/core/config.js';
 import { setClock } from '../../js/core/clock.js';
+import { parseStampSec, toStampSec } from '../../js/core/dates.js';
 import {
   GCAL_GROUP_ID, GCAL_LABEL, domainRecords, isValidEmail, normaliseWhatsAppNumber, settleConnectionsIn, simulatedBusyBlocks, summariseConnections,
   validateConnectionPatch, validateHostname, webhookSamplePayload
@@ -39,7 +40,7 @@ test('defaults: only the webhook is on; the fictional targets use documentation 
   assert.deepEqual(DOMAIN_TARGETS, { cname: 'sites.example', a: '192.0.2.10' });
   assert.equal(WHATSAPP_DEMO_CODE, '482913');
   assert.equal(DOMAIN_VERIFY_SECONDS, 20);
-  assert.ok(TEMPLATE_APPROVAL_SECONDS > 0 && TEMPLATE_APPROVAL_SECONDS <= 10);
+  assert.equal(TEMPLATE_APPROVAL_SECONDS, 2 * 24 * 60 * 60, 'Meta takes a day or two, so the simulation does too');
   assert.deepEqual(makeDefaultConnections(), c, 'deterministic');
   assert.notEqual(makeDefaultConnections().whatsapp.templates, c.whatsapp.templates, 'a fresh copy');
   assert.deepEqual(WHATSAPP_TEMPLATE_KINDS, TEMPLATE_KINDS.filter((k) => k !== 'owner_test_event'));
@@ -127,8 +128,10 @@ test('settleConnectionsIn: templates approve after the delay, a verifying domain
   const base = makeDefaultConnections();
   assert.equal(settleConnectionsIn(base, '2026-10-23T20:30:00'), base, 'nothing due: the same object back');
   const submitted = { ...base, whatsapp: { ...base.whatsapp, status: 'connected', templatesSubmittedAt: '2026-10-23T20:30:00', templates: { ...base.whatsapp.templates, customer_confirmed: 'pending', customer_reminder: 'pending', owner_new_booking: 'approved' } } };
-  assert.equal(settleConnectionsIn(submitted, '2026-10-23T20:30:05'), submitted, 'one second short');
-  const settled = settleConnectionsIn(submitted, `2026-10-23T20:30:0${TEMPLATE_APPROVAL_SECONDS}`);
+  // real elapsed time, so the clock change on 25 October does not move the answer
+  const after = (secs) => toStampSec(new Date(parseStampSec('2026-10-23T20:30:00').getTime() + secs * 1000));
+  assert.equal(settleConnectionsIn(submitted, after(TEMPLATE_APPROVAL_SECONDS - 1)), submitted, 'one second short of two days');
+  const settled = settleConnectionsIn(submitted, after(TEMPLATE_APPROVAL_SECONDS));
   assert.notEqual(settled, submitted);
   assert.equal(settled.whatsapp.templates.customer_confirmed, 'approved');
   assert.equal(settled.whatsapp.templates.customer_reminder, 'approved');
@@ -153,11 +156,11 @@ test('summariseConnections: one row per connection in hub order with connected, 
   const c = makeDefaultConnections();
   const rows = summariseConnections(c, '2026-10-23T20:30:00');
   assert.deepEqual(rows.map((r) => r.key), CONNECTION_KEYS);
-  assert.deepEqual(rows.map((r) => r.status), ['off', 'connected', 'off', 'off', 'off', 'off'], 'the demo default: only the webhook is on');
+  assert.deepEqual(rows.map((r) => r.status), ['off', 'pending', 'off', 'off', 'off', 'off'], 'the demo default: the webhook is on but waiting for its first enquiry, so nothing is set up yet');
   assert.deepEqual(rows.map((r) => r.title), CONNECTION_KEYS.map((k) => CONNECTION_LABELS[k]));
   assert.deepEqual(rows.map((r) => r.href), CONNECTION_KEYS.map((k) => `#/connections/${k}`));
   assert.ok(rows.every((r) => r.label && r.detail && r.raw), 'every row has a label, a detail and the raw status');
-  assert.equal(rows[1].label, 'On');
+  assert.equal(rows[1].label, 'Waiting for your first enquiry');
   assert.match(rows[1].detail, /No events yet/);
   assert.equal(rows[0].label, 'Not set up');
   // each state
@@ -168,6 +171,7 @@ test('summariseConnections: one row per connection in hub order with connected, 
   assert.match(row({ domain: { ...c.domain, status: 'live', domain: 'www.x.co.uk' } }, 'domain').detail, /www\.x\.co\.uk, security certificate ready/);
   assert.deepEqual([row({ webhook: { ...c.webhook, enabled: false } }, 'webhook').status, row({ webhook: { ...c.webhook, enabled: false } }, 'webhook').label], ['off', 'Paused']);
   assert.match(row({ webhook: { ...c.webhook, lastEventAt: '2026-10-23T20:00' } }, 'webhook').detail, /Last test event 2026-10-23 20:00/);
+  assert.deepEqual([row({ webhook: { ...c.webhook, lastEventAt: '2026-10-23T20:00' } }, 'webhook').status, row({ webhook: { ...c.webhook, lastEventAt: '2026-10-23T20:00' } }, 'webhook').label], ['connected', 'On'], 'one event through it and it counts');
   assert.equal(row({ tracking: { ...c.tracking, metaPixelId: '1234567890' } }, 'tracking').detail, 'Meta Pixel 1234567890, Google tag not set');
   assert.equal(row({ tracking: { ...c.tracking, googleTagId: 'G-ABCD1234' } }, 'tracking').status, 'connected');
   const wa = (patch) => row({ whatsapp: { ...c.whatsapp, ...patch } }, 'whatsapp');

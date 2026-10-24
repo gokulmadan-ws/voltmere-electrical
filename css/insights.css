@@ -57,33 +57,109 @@
 }
 
 /* ================= Insights (in-): money and marketing =================
-   Charts are drawn with plain boxes to scale; colour comes from tokens only. Brand red = volume (enquiries, quotes), green = money in,
+   Charts are drawn with plain boxes to scale; colour comes from tokens only. Blue = volume (enquiries, quotes, installs), green = money in only,
    one colour per chart (the label names the entity), every number also written as text, and each chart has a table twin. */
-.in-page { --in-bar: var(--cta); --in-money: var(--ok); --in-track: var(--surface-2); }
-.in-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
-@media (min-width: 768px) { .in-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.in-page { --in-bar: var(--link); --in-money: var(--ok); --in-track: var(--surface-2); }
+/* Display figures use proportional numerals: tabular digits left a hole around every 1 (in £1,xxx) and made the big numbers look badly spaced.
+   Tables and bars that must line up keep tabular figures. */
+.in-figure { font-variant-numeric: proportional-nums; font-feature-settings: 'tnum' 0, 'pnum' 1; }
 .in-note { margin: var(--space-5) 0 0; color: var(--text-2); font-size: var(--fs-14); }
 .in-fine { margin: 0; max-width: none; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
 .in-caption { margin: var(--space-3) 0 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
 .in-sub { margin: 0; font-family: var(--font-body); font-size: var(--fs-15); font-weight: var(--fw-bold); letter-spacing: 0; line-height: 1.3; }
 
-/* Layout: one column on phones in a chosen order (owed, replies, then marketing, then the rest); two columns from 1100px. */
-.in-cols { display: flex; flex-direction: column; }
+/* Layout: one column on a phone, in this order: what he is owed, what he has collected (with its weeks), four small tiles, then the detail.
+   From 1100px the top is two columns (owed | collected and tiles) and the detail below is two columns (money | marketing). */
+.in-top { display: flex; flex-direction: column; gap: var(--space-5); }
+.in-top__side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.in-top > .db-section { margin-top: 0; }
+.in-cols { display: flex; flex-direction: column; margin-top: var(--space-5); }
 .in-col { display: contents; }
 .in-page .in-sec.db-section { margin-top: var(--space-5); }
-.in-sec--owed { order: 1; } .in-sec--reply { order: 2; } .in-sec--sources { order: 3; } .in-sec--ads { order: 4; }
-.in-sec--funnel { order: 5; } .in-sec--weeks { order: 6; } .in-sec--service { order: 7; }
+.in-cols > .in-col:first-child > .in-sec:first-child { margin-top: 0; }
 @media (min-width: 1100px) {
+  .in-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); align-items: start; }
   .in-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); align-items: start; }
   .in-col { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
   .in-page .in-sec.db-section { margin-top: 0; }
 }
 
-.in-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-3); margin: 0 0 var(--space-3); }
+.in-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0 0 var(--space-3); }
 .in-head__text { min-width: 0; }
 .in-head__title { margin: 0; }
 .in-head__sub { margin: 2px 0 0; max-width: none; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
 .in-card { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* ---- Owed to you (first) ---- */
+.in-owedhead { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-3); margin: 0 0 var(--space-3); }
+.in-owedhead__text { min-width: 0; }
+.in-owedhead__title { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.2; }
+.in-owedhead__sub { margin: 2px 0 0; max-width: none; color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; }
+.in-owedhead__sum { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.in-owedhead__total { font-family: var(--font-display); font-size: clamp(2rem, 9.5vw, 2.5rem); font-weight: var(--fw-heavy); line-height: 1; letter-spacing: -0.03em; }
+/* Owed is ink with an amber count: money to chase is not an alarm, so never red. */
+.in-owedhead__count { display: inline-flex; align-items: center; gap: 6px; color: var(--status-on-the-way-fg); font-size: var(--fs-14); font-weight: var(--fw-bold); }
+.in-owedhead__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dot-few); }
+
+/* ---- Collected this month: the hero, with six weeks as one line ---- */
+.in-hero { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; padding: var(--space-4); border: 1.5px solid var(--line); border-radius: var(--r-lg); background: var(--card-bg); box-shadow: var(--shadow-1); }
+.in-hero__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.in-hero__label { margin: 0; font-family: var(--font-body); font-size: var(--fs-14); font-weight: var(--fw-semibold); letter-spacing: 0; color: var(--text-2); }
+.in-hero__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); margin: 0; max-width: none; }
+.in-hero__value { font-family: var(--font-display); font-size: clamp(2.25rem, 11vw, 3rem); font-weight: var(--fw-heavy); line-height: 1.05; letter-spacing: -0.03em; }
+.in-hero__hint { color: var(--text-2); font-size: var(--fs-14); }
+.in-spark { margin-top: var(--space-1); }
+.in-spark__plot { position: relative; height: 56px; margin-right: 6px; }
+.in-spark__svg { display: block; width: 100%; height: 56px; overflow: visible; }
+.in-spark__area { fill: color-mix(in srgb, var(--in-money) 14%, transparent); stroke: none; }
+.in-spark__line { fill: none; stroke: var(--in-money); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.in-spark__line--so-far { stroke-dasharray: 3 5; opacity: 0.75; }
+.in-spark__end { position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; border: 2px solid var(--in-money); background: var(--surface); }
+.in-spark__cap { display: flex; justify-content: space-between; margin: 8px 0 0; max-width: none; color: var(--text-3); font-size: var(--fs-12); }
+
+/* ---- Four small tiles: a one-line label, the value, at most two lines of caption. Same label height in every tile, so the values sit on one baseline. ---- */
+.in-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.in-tile {
+  display: grid; grid-template-rows: 20px auto auto; align-content: start; gap: 2px; min-width: 0; padding: var(--space-3);
+  border: 1.5px solid var(--line); border-radius: var(--r-lg); background: var(--card-bg); box-shadow: var(--shadow-1);
+  color: inherit; text-decoration: none;
+}
+.in-tile--link { min-height: var(--tap); cursor: pointer; transition: transform var(--dur-fast) var(--ease-out); }
+.in-tile--link:active { transform: translateY(1px); background: var(--surface-2); }
+.in-tile__label { height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 20px; }
+.in-tile__value { font-family: var(--font-display); font-size: 1.625rem; font-weight: var(--fw-heavy); line-height: 1.2; letter-spacing: -0.02em; white-space: nowrap; }
+.in-tile__value--ok { color: var(--ok-text); }
+.in-tile__value--warn { color: var(--status-on-the-way-fg); }
+.in-tile__caption {
+  min-height: calc(2 * 1.3em); color: var(--text-2); font-size: var(--fs-14); line-height: 1.3;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.in-tile__sample { margin-left: 2px; }
+
+/* ---- The one win rate ---- */
+.in-win { min-width: 0; }
+.in-win__line { display: flex; align-items: center; justify-content: space-between; gap: 0 var(--space-3); min-height: var(--tap); margin: 0 0 0 var(--space-1); max-width: none; }
+.in-win__text { color: var(--text-2); font-size: var(--fs-15); }
+.in-win__text strong { color: var(--text); font-family: var(--font-display); font-weight: var(--fw-heavy); }
+.in-win__info {
+  display: inline-grid; place-items: center; flex: none; width: var(--tap); height: var(--tap); margin-right: calc(var(--space-2) * -1); padding: 0; border: 0; border-radius: 50%; background: transparent;
+  color: var(--link); cursor: pointer;
+}
+.in-win__def { margin: 0; padding: 10px 14px; max-width: none; border-radius: var(--r-md); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
+
+/* The small "View as a table" toggle in a chart's header (it used to be a heavy full-width row under every chart). */
+.in-tabletoggle {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); margin-right: calc(var(--space-2) * -1); padding: 0 var(--space-2);
+  border: 0; background: transparent; color: var(--link); font: inherit; font-size: var(--fs-14); font-weight: var(--fw-semibold); cursor: pointer;
+}
+.in-tabletoggle svg { flex: none; }
+
+/* Ads and results: folded away until he wants them. */
+.in-adsresults { margin-top: var(--space-5); }
+.in-adsresults .ui-disclosure__body { padding-top: var(--space-1); color: var(--text); }
+.in-adsresults__body { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.in-sub-sec { min-width: 0; }
+@media (min-width: 1100px) { .in-adsresults { margin-top: 0; } }
 
 /* ---- Bars: one baseline, thin, 4px rounded at the data end, square at the baseline ---- */
 @keyframes in-grow { from { transform: scaleX(0); } }
@@ -99,7 +175,7 @@
 .in-bar--full { height: 12px; border-radius: 4px; background: var(--in-track); overflow: hidden; }
 .in-bar--full .in-bar__fill { height: 100%; }
 /* Money per week: label, bar, and the amount written at the tip of the bar. */
-.in-bar--money { --vw: 4.25rem; height: 22px; border-left: 1px solid var(--field-border); }
+.in-bar--money { --vw: 7.5rem; height: 22px; border-left: 1px solid var(--field-border); }
 .in-bar--money .in-bar__fill { width: max(4px, calc((100% - var(--vw)) * var(--p, 0))); background: var(--in-money); }
 
 /* ---- Owed list ---- */
@@ -109,7 +185,7 @@
 .in-owed__who { flex: 1 1 0; min-width: 0; min-height: var(--tap); display: flex; flex-direction: column; justify-content: center; gap: 2px; color: inherit; text-decoration: none; }
 .in-owed__name { font-size: var(--fs-17); font-weight: var(--fw-bold); line-height: 1.25; overflow-wrap: anywhere; }
 .in-owed__meta { color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; overflow-wrap: anywhere; }
-.in-owed__amount { flex: none; padding-top: 2px; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
+.in-owed__amount { flex: none; padding-top: 2px; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); font-variant-numeric: proportional-nums; font-feature-settings: 'tnum' 0, 'pnum' 1; }
 .in-owed__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin-top: var(--space-2); }
 .in-owed__actions > * { min-width: 0; }
 .in-owed__actions .ui-btn { width: 100%; padding-inline: var(--space-2); }
@@ -121,7 +197,7 @@
 .in-reply__lead { margin: 0; font-size: var(--fs-17); line-height: 1.35; }
 .in-reply__lead strong { font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); }
 .in-reply__sub { margin: 4px 0 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
-.in-avg { display: flex; flex-direction: column; gap: 6px; }
+.in-avg { display: flex; flex-direction: column; gap: 6px; margin-top: var(--space-4); }
 .in-avg__row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
 .in-avg__row strong { color: var(--text); font-family: var(--font-display); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
 .in-avg__track { height: 10px; border-radius: 4px; background: var(--in-track); overflow: hidden; }
@@ -151,18 +227,14 @@
 .in-wait__none { display: flex; align-items: center; gap: var(--space-2); margin: 0; max-width: none; color: var(--ok-text); font-weight: var(--fw-semibold); }
 
 /* ---- Where enquiries come from ---- */
-.in-period { width: 100%; margin-bottom: var(--space-3); }
-.in-period { gap: 2px; }
-.in-period .ui-seg__opt { flex: 1 1 0; padding-inline: var(--space-1); }
-@media (max-width: 369px) {
-  .in-period { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: var(--r-lg); }
-  .in-period .ui-seg__opt { border-radius: var(--r-md); }
-}
+.in-period { width: 100%; margin-bottom: var(--space-3); gap: 2px; }
+/* One row, like every other segmented control; on the very narrowest phones it scrolls sideways (with the edge fade) instead of stacking. */
+.in-period .ui-seg__opt { flex: 1 0 auto; padding-inline: 6px; }
 .in-src { display: flex; flex-direction: column; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
 .in-src__row { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .in-src__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .in-src__name { font-size: var(--fs-16); font-weight: var(--fw-bold); }
-.in-src__count { font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
+.in-src__count { font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); }
 .in-src__share { color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-regular); }
 .in-src__foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px var(--space-3); color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; }
 .in-src__rev { color: var(--ok-text); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
@@ -181,7 +253,7 @@
 .in-cost__text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .in-cost__label { font-weight: var(--fw-semibold); }
 .in-cost__hint { color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; }
-.in-cost__value { flex: none; font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums; }
+.in-cost__value { flex: none; font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); }
 .in-cost__value.is-blank { color: var(--text-3); }
 .in-form { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); }
 .in-form__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
@@ -195,7 +267,7 @@
 .in-fun__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .in-fun__label { font-weight: var(--fw-bold); }
 .in-fun__num { text-align: right; color: var(--text-2); font-size: var(--fs-14); }
-.in-fun__num strong { color: var(--text); font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); font-variant-numeric: tabular-nums; }
+.in-fun__num strong { color: var(--text); font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); }
 
 /* ---- Tables (the twin of each chart) ---- */
 .in-tabledisc { margin-top: calc(var(--space-1) * -1); }
@@ -212,14 +284,15 @@
 .in-chan .in-table tbody tr:last-child th { font-weight: var(--fw-semibold); }
 
 /* ---- Collected per week ---- */
-.in-minor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .in-weeks__list { display: flex; flex-direction: column; gap: var(--space-3); margin: 0 0 var(--space-3); padding: 0; list-style: none; }
 .in-week { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 28px; }
 .in-week__label { color: var(--text-2); font-size: var(--fs-14); white-space: nowrap; }
 .in-week.is-current .in-week__label { color: var(--text); font-weight: var(--fw-bold); }
-.in-week.is-zero .in-bar__fill { display: none; }
-.in-week.is-zero .in-bar__val { color: var(--text-3); font-weight: var(--fw-regular); }
-.in-week.is-zero .in-bar--money { }
+/* A week with nothing in it is drawn as a dashed stub and labelled £0; this week is lighter and says "so far", so it never looks finished. */
+.in-bar__stub { flex: none; width: 28px; height: 14px; border: 1.5px dashed var(--field-border); border-left: 0; border-radius: 0 4px 4px 0; }
+.in-week.is-zero .in-bar__val { color: var(--text-2); font-weight: var(--fw-semibold); }
+.in-week.is-current .in-bar__fill { opacity: 0.5; }
+.in-bar__sofar { color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-regular); }
 .in-week .in-bar__val { margin-left: 0; }
 @media (max-width: 359px) { .in-week { grid-template-columns: 4.75rem minmax(0, 1fr); gap: var(--space-2); } }
 

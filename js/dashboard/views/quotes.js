@@ -1,10 +1,12 @@
 // js/dashboard/views/quotes.js: Quotes list (status filters, totals, "Waiting on customer") plus the small pieces the quote builder shares (pill, ages, brand names).
 // Owner: Q1
 import { html } from '../../vendor/preact-htm.js';
-import { Avatar, Button, EmptyState, Icon, ListRow, PageHeader, Tabs, cx, useNow, useStore } from '../../ui/index.js';
+import { Avatar, Button, EmptyState, Icon, PageHeader, Tabs, cx, useBrand, useNow, useStore } from '../../ui/index.js';
 import { selectQuoteList, selectQuoteStats } from '../../core/selectors.js';
 import { fmtDayShort, minutesBetween, toStamp } from '../../core/dates.js';
-import { gbp } from '../../core/format.js';
+import { firstName, gbp } from '../../core/format.js';
+import { quoteShareUrl } from '../../core/quotes.js';
+import { waLink } from '../../core/messages.js';
 import { navigate, routeHref } from '../router.js';
 
 export const title = 'Quotes';
@@ -21,10 +23,15 @@ export const QUOTE_STATUS_META = {
   viewed: { label: 'Viewed', icon: 'eye' },
   accepted: { label: 'Accepted', icon: 'check-check' },
   declined: { label: 'Declined', icon: 'circle-x' },
-  expired: { label: 'Expired', icon: 'hourglass' }
+  expired: { label: 'Expired', icon: 'hourglass' },
+  overdue: { label: 'Overdue', icon: 'triangle-alert' }
 };
 
-/** The status pill. `status` is the effective status from quoteStatus() / selectQuoteList(). */
+/**
+ * The one quote-status pill, used on the Quotes list, the quote header, Pipeline cards and booking detail, so a quote is the same colour everywhere:
+ * draft neutral dashed, sent blue, viewed amber, accepted green, declined and expired grey, overdue orange. Never the brand red.
+ * `status` is the effective status from quoteStatus() / selectQuoteList().
+ */
 export function QuotePill({ status, compact, class: cls, ...rest }) {
   const meta = QUOTE_STATUS_META[status] || QUOTE_STATUS_META.draft;
   return html`<span class=${cx('ui-pill', 'q1-pill', `q1-pill--${QUOTE_STATUS_META[status] ? status : 'draft'}`, compact && 'ui-pill--compact', cls)} ...${rest}>
@@ -75,6 +82,15 @@ export function expiryHint(status, expiresInDays) {
 }
 
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** The WhatsApp nudge for a quote that is out: a link that opens his own WhatsApp with this message ready. '' when there is no phone number. */
+export function nudgeHref({ quote, booking, brand, total }) {
+  if (!booking || !booking.customer || !booking.customer.phone) return '';
+  const first = firstName(quote.customerName);
+  const link = quoteShareUrl(quote, { ownerFirst: brand.ownerFirst, postcode: booking.address ? booking.address.postcode : '' });
+  const text = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name}. Just checking you got my quote for your charger install (${gbp(total)}). Any questions, just ask. ${link}`;
+  return waLink(booking.customer.phone, text, brand.demoPhoneDigits);
+}
 
 // ---------- list ----------
 
@@ -148,17 +164,30 @@ function byExpiry(a, b) {
   return (a.status === 'viewed' ? 0 : 1) - (b.status === 'viewed' ? 0 : 1);
 }
 
-function QuoteRow({ row, booking, nowStampStr }) {
+/**
+ * One quote. The name takes the width left over and gives way with an ellipsis, the time sits under it, only the amount is on the right,
+ * so every row is the same height. A quote that is out also gets a one-tap Nudge (a sibling of the link, never inside it).
+ */
+function QuoteRow({ row, booking, nowStampStr, brand }) {
   const q = row.quote;
   const hint = expiryHint(row.status, row.expiresInDays);
   const postcode = booking && booking.address ? booking.address.postcode : '';
-  return html`<${ListRow} as="li" href=${routeHref('quote-detail', { id: q.id })} testid=${`q1-row-${q.id}`}
-    leading=${html`<${Avatar} name=${row.customerName} size=${44} />`}
-    title=${row.customerName}
-    subtitle=${[postcode, brandLabel(q.brand)].filter(Boolean).join(' · ')}
-    meta=${html`<${QuotePill} status=${row.status} compact data-testid=${`q1-row-status-${q.id}`} />`}
-    value=${gbp(row.total)}
-    valueHint=${html`<span class="q1-end"><span class="q1-end__age">${whenText(q, row.status, nowStampStr)}</span>${hint ? html`<span class=${cx('q1-hint', row.expiresInDays !== null && row.expiresInDays <= 2 && 'is-urgent')}>${hint}</span>` : null}</span>`} />`;
+  const first = firstName(row.customerName);
+  const nudge = isWaiting(row) ? nudgeHref({ quote: q, booking, brand, total: row.total }) : '';
+  return html`<li class=${cx('ui-row__li', 'q1-row', nudge && 'has-nudge')}>
+    <a class="db-list__item ui-row ui-row--interactive q1-row__link" href=${routeHref('quote-detail', { id: q.id })} data-testid=${`q1-row-${q.id}`}>
+      <span class="q1-row__avatar"><${Avatar} name=${row.customerName} size=${44} /></span>
+      <span class="q1-row__name">${row.customerName}</span>
+      <span class="q1-row__amount">${gbp(row.total)}</span>
+      <span class="q1-row__when">${whenText(q, row.status, nowStampStr)}${hint ? html` · <span class=${cx('q1-hint', row.expiresInDays !== null && row.expiresInDays <= 2 && 'is-urgent')}>${hint}</span>` : null}</span>
+      <span class="q1-row__state">
+        <${QuotePill} status=${row.status} compact data-testid=${`q1-row-status-${q.id}`} />
+        <span class="q1-row__sub"><span class="q1-row__pc">${postcode}</span>${q.brand ? html`<span class="q1-row__brand"> · ${brandLabel(q.brand)}</span>` : null}</span>
+      </span>
+    </a>
+    ${nudge ? html`<${Button} variant="secondary" size="sm" href=${nudge} class="q1-row__nudge" aria-label=${`Nudge ${first} on WhatsApp`}
+      data-testid=${`q1-nudge-${q.id}`}>Nudge<//>` : null}
+  </li>`;
 }
 
 function Stat({ label, value, hint, testid }) {
@@ -171,6 +200,7 @@ function Stat({ label, value, hint, testid }) {
 
 export default function QuotesView({ route }) {
   const state = useStore(selectAll);
+  const brand = useBrand();
   const nowDate = useNow(60000);
   const nowStampStr = toStamp(nowDate);
   const f = FILTER_IDS.includes(route.query.f) ? route.query.f : 'all';
@@ -211,7 +241,7 @@ export default function QuotesView({ route }) {
       <${Stat} testid="q1-drafts-stat" label="To finish" value=${plural(stats.draftCount, 'draft', 'drafts')}
         hint=${stats.draftCount ? `${gbp(stats.draftValue)} not sent yet` : 'All sent. Nice.'} />
       <${Stat} testid="q1-winrate-stat" label="Win rate, 90 days" value=${stats.winRatePct === null ? 'None yet' : `${stats.winRatePct}%`}
-        hint=${stats.decided ? `${stats.accepted} of ${stats.decided} decided${stats.avgAcceptedValue ? `, ${gbp(stats.avgAcceptedValue)} average` : ''}` : 'Nothing decided yet'} />
+        hint=${stats.decided ? `${stats.accepted} won of ${stats.decided} decided${stats.sent > stats.decided ? `, ${stats.sent - stats.decided} still waiting` : ''}` : 'Nothing decided yet'} />
     </section>` : null}
 
     <div class="q1-controls">
@@ -227,7 +257,7 @@ export default function QuotesView({ route }) {
         : groups.map((g) => html`<section class="q1-group" key=${g.key} aria-label=${g.heading || undefined}>
             ${g.heading ? html`<h2 class="q1-group__title"><span>${g.heading}</span><span class="q1-group__sum">${plural(g.list.length, 'quote', 'quotes')} · ${gbp(sumTotals(g.list))}</span></h2>` : null}
             <ul class="db-list q1-rows">
-              ${g.list.map((row) => html`<${QuoteRow} key=${row.quote.id} row=${row} booking=${bookings.get(row.bookingId)} nowStampStr=${nowStampStr} />`)}
+              ${g.list.map((row) => html`<${QuoteRow} key=${row.quote.id} row=${row} booking=${bookings.get(row.bookingId)} nowStampStr=${nowStampStr} brand=${brand} />`)}
             </ul>
           </section>`)}
     </div>

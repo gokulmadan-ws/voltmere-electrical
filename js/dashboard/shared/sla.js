@@ -52,3 +52,12 @@ export function SlaChip({ sla, class: cls, ...rest }) {
     <${Icon} name=${ICON[sla.state]} size=${16} /><span>${sla.label}</span>
   </span>`;
 }
+
+/**
+ * The one colour rule for the reply-promise percentage (Today's tile and card, Insights' ring): green at 90% or more, amber from 70%,
+ * red below, neutral while there is nothing to measure. Returns a Meter / ProgressRing / Stat tone name.
+ */
+export function replyTone(pct) {
+  if (pct === null || pct === undefined) return 'neutral';
+  return pct >= 90 ? 'ok' : pct >= 70 ? 'warn' : 'danger';
+}

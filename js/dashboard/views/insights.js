@@ -1,9 +1,9 @@
-// js/dashboard/views/insights.js: Insights, money and marketing (collected, owed, quotes out, win rate, lead sources, ad cost, funnel, reply time, weekly money).
-// Owner: P1 (was WP7; rebuilt for v3 around money and the Facebook ads he pays for)
+// js/dashboard/views/insights.js: Money (route id stays "insights"): what he is owed, what he has collected, quotes out, reply time, lead sources, ad cost, funnel.
+// Owner: P1 (was WP7; rebuilt for v3 around money and the Facebook ads he pays for; round 2, T09: "Money", owed first, one win rate, ads and results folded away)
 import { html, useMemo, useState } from '../../vendor/preact-htm.js';
 import {
   Button, Card, Disclosure, EmptyState, Field, Icon, IconButton, MoneyInput, PageHeader, ProgressRing, SampleTag, Segmented,
-  Stat, cx, toast, showUndoToast, useBrand, useNow, useStore
+  cx, toast, useBrand, useNow, useStore
 } from '../../ui/index.js';
 import { AD_CHANNELS, AD_CHANNEL_LABELS } from '../../core/config.js';
 import {
@@ -15,8 +15,9 @@ import { plural } from '../../core/format.js';
 import { waLink } from '../../core/messages.js';
 import { navigate, routeHref } from '../router.js';
 import { PaidButton } from '../shared/job-actions.js';
+import { replyTone } from '../shared/sla.js';
 
-export const title = 'Insights';
+export const title = 'Money';
 export const css = ['css/insights.css', 'css/bookings.css'];
 
 // Whole state (identity is stable between mutations); the selectors below build fresh objects, so they run inside useMemo.
@@ -75,6 +76,7 @@ function daysAgoText(booking, todayDay) {
 
 // ---------- small shared pieces ----------
 
+/** A section title with an optional line under it and, on the right, whatever the section wants there (a table toggle). */
 function SectionHead({ id, title: heading, sub, children }) {
   return html`<div class="in-head">
     <div class="in-head__text">
@@ -85,38 +87,27 @@ function SectionHead({ id, title: heading, sub, children }) {
   </div>`;
 }
 
-/** A table twin of a chart: closed by default, scrolls inside itself, never widens the page. */
-function ChartTable({ caption, columns, rows, testid }) {
-  return html`<${Disclosure} title="View as a table" class="in-tabledisc" testid=${testid}>
-    <div class="in-tablewrap" tabindex="0" role="region" aria-label=${caption}>
-      <table class="in-table">
-        <caption class="u-sr-only">${caption}</caption>
-        <thead><tr>${columns.map((c, i) => html`<th scope="col" key=${c.key} class=${cx(i > 0 && 'is-num')}>${c.header}</th>`)}</tr></thead>
-        <tbody>${rows.map((r) => html`<tr key=${r.key}>${columns.map((c, i) => (i === 0
-          ? html`<th scope="row" key=${c.key}>${r[c.key]}</th>`
-          : html`<td key=${c.key} class="is-num">${r[c.key]}</td>`))}</tr>`)}</tbody>
-      </table>
-    </div>
-  <//>`;
+/** "View as a table": a small text toggle in the card header (the chart and its table are twins; only one shows at a time). */
+function TableToggle({ on, onToggle, testid }) {
+  return html`<button type="button" class="in-tabletoggle" aria-pressed=${on ? 'true' : 'false'} onClick=${onToggle} data-testid=${testid}>
+    <${Icon} name=${on ? 'trending-up' : 'layout-list'} size=${16} /><span>${on ? 'View as a chart' : 'View as a table'}</span>
+  </button>`;
 }
 
-// ---------- headline row ----------
-
-function Headline({ ins, quotes }) {
-  const quotesOutHint = quotes.waitingCount > 0
-    ? `${plural(quotes.waitingCount, 'quote')} with customers${quotes.draftCount ? `, ${pounds(quotes.draftValue)} in drafts` : ''}`
-    : quotes.draftCount ? `Nothing sent. ${pounds(quotes.draftValue)} in drafts` : 'No quotes out';
-  return html`<div class="in-stats" data-testid="p1-headline">
-    <${Stat} label="Collected this month" value=${pounds(ins.collectedMonth)} hint=${plural(ins.collectedMonthCount, 'job')} tone="ok" data-testid="insights-collected" />
-    <${Stat} label="Owed to you" value=${pounds(ins.owedTotal)} hint=${plural(ins.owedCount, 'job')} tone=${ins.owedCount > 0 ? 'accent' : undefined} data-testid="insights-owed" />
-    <${Stat} label="Quotes out" value=${pounds(quotes.waitingValue)} hint=${quotesOutHint}
-      href=${routeHref('quotes', {}, { f: 'waiting' })} data-testid="p1-quotes-out" />
-    <${Stat} label="Win rate" value=${quotes.winRatePct === null ? '—' : `${quotes.winRatePct}%`}
-      hint=${quotes.decided ? `${quotes.accepted} won of ${quotes.decided} decided, last 90 days` : 'No quotes decided in the last 90 days'} data-testid="p1-win-rate" />
+/** The table twin of a chart: scrolls inside itself, never widens the page. */
+function ChartTable({ caption, columns, rows, testid }) {
+  return html`<div class="in-tablewrap" tabindex="0" role="region" aria-label=${caption} data-testid=${testid}>
+    <table class="in-table">
+      <caption class="u-sr-only">${caption}</caption>
+      <thead><tr>${columns.map((c, i) => html`<th scope="col" key=${c.key} class=${cx(i > 0 && 'is-num')}>${c.header}</th>`)}</tr></thead>
+      <tbody>${rows.map((r) => html`<tr key=${r.key}>${columns.map((c, i) => (i === 0
+        ? html`<th scope="row" key=${c.key}>${r[c.key]}</th>`
+        : html`<td key=${c.key} class="is-num">${r[c.key]}</td>`))}</tr>`)}</tbody>
+    </table>
   </div>`;
 }
 
-// ---------- owed to you (the existing list, unchanged behaviour) ----------
+// ---------- owed to you: the first thing he sees ----------
 
 function OwedRow({ booking, todayDay, brand }) {
   const b = booking;
@@ -137,14 +128,24 @@ function OwedRow({ booking, todayDay, brand }) {
     </div>
     <div class="in-owed__actions">
       <${Button} size="sm" icon="message-circle" onClick=${nudge} data-testid=${`owed-nudge-${b.id}`}>Nudge<//>
-      <${PaidButton} booking=${b} size="sm" />
+      <${PaidButton} booking=${b} size="sm" variant="secondary" />
     </div>
   </li>`;
 }
 
-function OwedSection({ owed, todayDay, brand }) {
+/** Owed to you: the total, in ink (never red) with an amber count, then every job with a Nudge and a Mark paid. */
+function OwedSection({ owed, ins, todayDay, brand }) {
   return html`<section class="db-section in-sec in-sec--owed" aria-labelledby="in-h-owed">
-    <${SectionHead} id="in-h-owed" title="Owed to you" sub=${owed.length ? 'Done jobs that have not been paid yet, oldest first.' : null} />
+    <div class="in-owedhead" data-testid="insights-owed">
+      <div class="in-owedhead__text">
+        <h2 class="in-owedhead__title" id="in-h-owed">Owed to you</h2>
+        <p class="in-owedhead__sub">${owed.length ? 'Done jobs not paid yet, oldest first.' : 'Nobody owes you anything.'}</p>
+      </div>
+      <div class="in-owedhead__sum">
+        <span class="in-figure in-owedhead__total" data-testid="insights-owed-total">${pounds(ins.owedTotal)}</span>
+        ${owed.length ? html`<span class="in-owedhead__count" data-testid="insights-owed-count"><span class="in-owedhead__dot" aria-hidden="true"></span>${plural(ins.owedCount, 'job')}</span>` : null}
+      </div>
+    </div>
     ${owed.length === 0
       ? html`<${Card}><${EmptyState} icon="circle-check" title="Nothing to collect. Nice." data-testid="owed-empty" /><//>`
       : html`<ul class="db-list in-owed" data-testid="owed-list">
@@ -153,12 +154,104 @@ function OwedSection({ owed, todayDay, brand }) {
   </section>`;
 }
 
+// ---------- collected this month: the hero, with the last six weeks ----------
+
+/** Six weeks of money as one line: solid up to last week, dashed to this week (it is only so far), the end drawn hollow. */
+function Sparkline({ weeks }) {
+  const W = 300;
+  const H = 56;
+  const pad = 7;
+  const max = Math.max(1, ...weeks.map((w) => w.total));
+  const pts = weeks.map((w, i) => [Math.round((i / Math.max(1, weeks.length - 1)) * W * 10) / 10, Math.round((H - pad - (w.total / max) * (H - pad * 2)) * 10) / 10]);
+  const solid = pts.slice(0, -1);
+  const last = pts[pts.length - 1];
+  const prev = pts[pts.length - 2] || last;
+  const area = `M${solid.map((p) => p.join(',')).join(' L')} L${solid[solid.length - 1] ? solid[solid.length - 1][0] : 0},${H} L0,${H} Z`;
+  return html`<div class="in-spark" data-testid="insights-spark">
+    <div class="in-spark__plot">
+      <svg class="in-spark__svg" viewBox=${`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path class="in-spark__area" d=${area} />
+        <polyline class="in-spark__line" points=${solid.map((p) => p.join(',')).join(' ')} />
+        <polyline class="in-spark__line in-spark__line--so-far" points=${`${prev.join(',')} ${last.join(',')}`} />
+      </svg>
+      <span class="in-spark__end" style=${{ left: `${(last[0] / W) * 100}%`, top: `${(last[1] / H) * 100}%` }} aria-hidden="true"></span>
+    </div>
+    <p class="in-spark__cap" aria-hidden="true"><span>Last 6 weeks</span><span>this week so far</span></p>
+    <p class="u-sr-only">${`Collected per week, oldest first: ${weeks.map((w, i) => `${pounds(w.total)}${i === weeks.length - 1 ? ' so far' : ''}`).join(', ')}.`}</p>
+  </div>`;
+}
+
+function Hero({ ins, sample }) {
+  return html`<section class="in-hero" aria-labelledby="in-h-collected" data-testid="insights-collected">
+    <div class="in-hero__top">
+      <h2 class="in-hero__label" id="in-h-collected">Collected this month</h2>
+      ${sample ? html`<${SampleTag} data-testid="insights-sample-tag" />` : null}
+    </div>
+    <p class="in-hero__row"><span class="in-figure in-hero__value" data-testid="insights-collected-value">${pounds(ins.collectedMonth)}</span>
+      <span class="in-hero__hint">${plural(ins.collectedMonthCount, 'job')} paid</span></p>
+    <${Sparkline} weeks=${ins.weeks} />
+  </section>`;
+}
+
+// ---------- the four small tiles ----------
+
+/** A small tile: a one-line label, a value and a caption of at most two lines. Labels and values sit at the same height in every tile. */
+function Tile({ label, value, caption, href, tone, sample, testid, valueTestid }) {
+  const inner = html`<span class="in-tile__label">${label}</span>
+    <span class=${cx('in-figure', 'in-tile__value', tone && `in-tile__value--${tone}`)} data-testid=${valueTestid}>${value}</span>
+    <span class="in-tile__caption">${caption}${sample ? html` <${SampleTag} class="in-tile__sample" />` : null}</span>`;
+  return href
+    ? html`<a class="in-tile in-tile--link" href=${href} data-testid=${testid}>${inner}</a>`
+    : html`<div class="in-tile" data-testid=${testid}>${inner}</div>`;
+}
+
+function Tiles({ ins, quotes, sla, sample }) {
+  const pct = sla.withinTargetPct;
+  const tone = replyTone(pct);
+  return html`<div class="in-tiles" data-testid="p1-headline">
+    <${Tile} label="Quotes out" value=${pounds(quotes.waitingValue)} testid="p1-quotes-out" valueTestid="p1-quotes-out-value"
+      caption=${quotes.waitingCount > 0 ? `${plural(quotes.waitingCount, 'quote')} waiting` : quotes.draftCount ? `None sent, ${plural(quotes.draftCount, 'draft')}` : 'None waiting'}
+      href=${routeHref('quotes', {}, { f: 'waiting' })} sample=${sample} />
+    <${Tile} label="Reply rate" value=${pct === null ? '—' : `${pct}%`} testid="p1-reply-rate" valueTestid="p1-reply-rate-value"
+      tone=${tone === 'ok' ? 'ok' : tone === 'neutral' ? '' : 'warn'}
+      caption=${pct === null ? 'Nothing to measure yet' : `within ${sla.replyHours} hours`} />
+    <${Tile} label="Next 14 days" value=${pounds(ins.bookedNext14)} testid="insights-booked-next" valueTestid="insights-booked-next-value"
+      caption=${`${plural(ins.bookedNext14Count, 'job')} booked`} sample=${sample} />
+    <${Tile} label="Average job" value=${pounds(ins.avgJob)} testid="insights-avg" valueTestid="insights-avg-value"
+      caption="paid jobs, last 30 days" />
+  </div>`;
+}
+
+/**
+ * ONE win-rate figure with ONE definition: of the quotes sent in the last 90 days, how many he has had accepted (quotes still waiting count as not
+ * yet accepted). Tap "What counts?" for the definition. The funnel below uses the same definition.
+ */
+function WinRate({ quotes }) {
+  const [open, setOpen] = useState(false);
+  const pct = quotes.sent ? Math.round((100 * quotes.accepted) / quotes.sent) : null;
+  return html`<div class="in-win" data-testid="p1-win-rate">
+    <p class="in-win__line">
+      ${pct === null
+        ? html`<span class="in-win__text">No quotes sent in the last 90 days</span>`
+        : html`<span class="in-win__text">Accepted <strong class="in-figure" data-testid="p1-win-rate-value">${pct}%</strong> of quotes sent</span>`}
+      <button type="button" class="in-win__info" aria-expanded=${open ? 'true' : 'false'} aria-controls="in-win-def" onClick=${() => setOpen(!open)} data-testid="p1-win-rate-info">
+        <${Icon} name="info" size=${20} /><span class="u-sr-only">What counts as accepted?</span>
+      </button>
+    </p>
+    ${open ? html`<p class="in-win__def" id="in-win-def" data-testid="p1-win-rate-def">
+      ${pct === null ? 'The share of the quotes you send that the customer accepts.' : `${quotes.accepted} of the ${plural(quotes.sent, 'quote')} you sent in the last 90 days were accepted.`} Quotes still waiting for an answer count as not accepted yet, and so do ones that were turned down or ran out.
+    </p>` : null}
+  </div>`;
+}
+
 // ---------- reply time vs the promise ----------
 
 function ReplySection({ sla }) {
   const hours = sla.replyHours;
   const pct = sla.withinTargetPct;
-  const tone = pct === null ? 'neutral' : pct >= 90 ? 'ok' : pct >= 70 ? 'warn' : 'danger';
+  // One rate colour rule, the one Today uses: green at or above the target, amber below it (never an alarm colour for a rate).
+  const rate = replyTone(pct);
+  const tone = rate === 'danger' ? 'warn' : rate;
   const avgP = sla.avgReplyMinutes === null ? 0 : Math.min(1, sla.avgReplyMinutes / (hours * 60));
   const avgTone = avgP < 0.5 ? 'ok' : avgP < 1 ? 'warn' : 'danger'; // the average against the promise, drawn to the same scale
   const inside = sla.waitingCount - sla.overdueCount - sla.dueSoonCount;
@@ -174,7 +267,7 @@ function ReplySection({ sla }) {
         : html`<div class="in-reply__top">
             <${ProgressRing} label=${`Replied within ${hours} hours`} value=${pct} max=${100} size=${84} stroke=${8} tone=${tone} valueText=${`${pct}%`} data-testid="p1-reply-ring">${pct}%<//>
             <div class="in-reply__text">
-              <p class="in-reply__lead" data-testid="p1-reply-pct"><strong>${pct}%</strong> answered within ${hours} hours</p>
+              <p class="in-reply__lead" data-testid="p1-reply-pct">Answered within ${hours} hours</p>
               <p class="in-reply__sub">${plural(sla.repliedCount, 'enquiry', 'enquiries')} replied to${sla.overdueCount ? `, ${sla.overdueCount} waiting too long` : ''}.</p>
             </div>
           </div>
@@ -204,22 +297,33 @@ function ReplySection({ sla }) {
 // ---------- where enquiries come from ----------
 
 function SourcesSection({ data, period, onPeriod }) {
+  const [asTable, setAsTable] = useState(false);
   const rows = data.sources.filter((s) => s.enquiries > 0);
   const max = Math.max(1, ...rows.map((s) => s.enquiries));
   const words = (PERIODS.find((p) => p.id === period) || PERIODS[0]).words;
   return html`<section class="db-section in-sec in-sec--sources" aria-labelledby="in-h-sources" data-testid="p1-sources">
     <${SectionHead} id="in-h-sources" title="Where enquiries come from"
-      sub=${data.total.enquiries ? `${plural(data.total.enquiries, 'enquiry', 'enquiries')} ${words}. Counted from the day each one arrived.` : null} />
+      sub=${data.total.enquiries ? `${plural(data.total.enquiries, 'enquiry', 'enquiries')} ${words}. Counted from the day each one arrived.` : null}>
+      ${rows.length ? html`<${TableToggle} on=${asTable} onToggle=${() => setAsTable(!asTable)} testid="p1-sources-toggle" />` : null}
+    <//>
     <${Segmented} size="sm" ariaLabel="Period for sources and funnel" value=${period} onChange=${onPeriod} class="in-period"
       options=${PERIODS.map((p) => ({ value: p.id, label: p.label, testid: `p1-period-${p.id}` }))} data-testid="p1-period" />
     <${Card} class="in-card">
       ${rows.length === 0
         ? html`<${EmptyState} icon="megaphone" title="No enquiries in this period" body="When someone fills in your funnel, you will see which ad or link brought them." data-testid="p1-sources-empty" />`
-        : html`<ul class="in-src" data-testid="p1-sources-list">
+        : asTable
+          ? html`<${ChartTable} caption="Enquiries, quotes, wins, installs and money by source" testid="p1-sources-table"
+              columns=${[
+                { key: 'source', header: 'Source' }, { key: 'enq', header: 'Enquiries' }, { key: 'quotes', header: 'Quotes' },
+                { key: 'won', header: 'Won' }, { key: 'inst', header: 'Installed' }, { key: 'rev', header: 'Money in' }
+              ]}
+              rows=${[...rows.map((s) => ({ key: s.id, source: s.label, enq: s.enquiries, quotes: s.quotes, won: s.accepted, inst: s.installs, rev: pounds(s.revenue) })),
+                { key: 'total', source: 'All sources', enq: data.total.enquiries, quotes: data.total.quotes, won: data.total.accepted, inst: data.total.installs, rev: pounds(data.total.revenue) }]} />`
+          : html`<ul class="in-src" data-testid="p1-sources-list">
           ${rows.map((s) => html`<li class="in-src__row" key=${s.id} data-testid=${`p1-source-${s.id}`}>
             <div class="in-src__head">
               <span class="in-src__name">${s.label}</span>
-              <span class="in-src__count"><span data-testid=${`p1-source-n-${s.id}`}>${s.enquiries}</span> <span class="in-src__share">${s.enquiries === 1 ? 'enquiry' : 'enquiries'} · ${s.sharePct}%</span></span>
+              <span class="in-src__count"><span class="in-figure" data-testid=${`p1-source-n-${s.id}`}>${s.enquiries}</span> <span class="in-src__share">${s.enquiries === 1 ? 'enquiry' : 'enquiries'} · ${s.sharePct}%</span></span>
             </div>
             <div class="in-bar in-bar--full" aria-hidden="true"><span class="in-bar__fill" style=${{ '--p': s.enquiries / max }}></span></div>
             <div class="in-src__foot">
@@ -227,14 +331,7 @@ function SourcesSection({ data, period, onPeriod }) {
               <span class=${cx('in-src__rev', s.revenue === 0 && 'is-zero')} data-testid=${`p1-source-rev-${s.id}`}>${s.revenue > 0 ? `${pounds(s.revenue)} in` : 'No money in yet'}</span>
             </div>
           </li>`)}
-        </ul>
-        <${ChartTable} caption="Enquiries, quotes, wins, installs and money by source" testid="p1-sources-table"
-          columns=${[
-            { key: 'source', header: 'Source' }, { key: 'enq', header: 'Enquiries' }, { key: 'quotes', header: 'Quotes' },
-            { key: 'won', header: 'Won' }, { key: 'inst', header: 'Installed' }, { key: 'rev', header: 'Money in' }
-          ]}
-          rows=${[...rows.map((s) => ({ key: s.id, source: s.label, enq: s.enquiries, quotes: s.quotes, won: s.accepted, inst: s.installs, rev: pounds(s.revenue) })),
-            { key: 'total', source: 'All sources', enq: data.total.enquiries, quotes: data.total.quotes, won: data.total.accepted, inst: data.total.installs, rev: pounds(data.total.revenue) }]} />`}
+        </ul>`}
     <//>
   </section>`;
 }
@@ -244,7 +341,7 @@ function SourcesSection({ data, period, onPeriod }) {
 function CostRow({ label, value, hint, blank, blankHint, testid }) {
   return html`<li class="in-cost__row" data-testid=${testid}>
     <span class="in-cost__text"><span class="in-cost__label">${label}</span><span class="in-cost__hint">${value === null ? blankHint : hint}</span></span>
-    <span class=${cx('in-cost__value', value === null && 'is-blank')}>${value === null
+    <span class=${cx('in-figure', 'in-cost__value', value === null && 'is-blank')}>${value === null
       ? html`<span aria-hidden="true">—</span><span class="u-sr-only">${blank}</span>`
       : pounds(value)}</span>
   </li>`;
@@ -306,7 +403,7 @@ function AdsSection({ state, stamp, month, onMonth }) {
   const noSpendHint = 'Add what you spent below to see this.';
   const noneYet = (what) => `No ${what} yet from this spend.`;
 
-  return html`<section class="db-section in-sec in-sec--ads" aria-labelledby="in-h-ads" data-testid="p1-ads">
+  return html`<section class="in-sub-sec in-sec--ads" aria-labelledby="in-h-ads" data-testid="p1-ads">
     <${SectionHead} id="in-h-ads" title="What your ads cost" sub="Enter what you spent each month and see what an enquiry, a won quote and an install really cost." />
     <${Card} class="in-card">
       <div class="in-month" data-testid="p1-ad-month">
@@ -318,7 +415,7 @@ function AdsSection({ state, stamp, month, onMonth }) {
       </div>
 
       <div class="in-spend">
-        <p class="in-spend__value" data-testid="p1-ad-spend">${pounds(cost.spend)}</p>
+        <p class="in-figure in-spend__value" data-testid="p1-ad-spend">${pounds(cost.spend)}</p>
         <p class="in-spend__sub">${hasSpend
           ? `spent on ${spendChannels.length === 1 ? spendChannels[0] : `${spendChannels.slice(0, -1).join(', ')} and ${spendChannels[spendChannels.length - 1]}`} in ${monthName(month)}`
           : `No ad spend recorded for ${monthName(month)}`}</p>
@@ -368,6 +465,7 @@ function AdsSection({ state, stamp, month, onMonth }) {
 // ---------- enquiry to install funnel ----------
 
 function FunnelSection({ data, period }) {
+  const [asTable, setAsTable] = useState(false);
   const t = data.total;
   const steps = [
     { id: 'enquiries', label: 'Enquiries', n: t.enquiries, of: null, ofLabel: '' },
@@ -379,27 +477,30 @@ function FunnelSection({ data, period }) {
   const conv = (s) => (s.of === null ? null : s.of > 0 ? Math.round((100 * s.n) / s.of) : null);
   const words = (PERIODS.find((p) => p.id === period) || PERIODS[0]).words;
   const overall = t.enquiries > 0 ? Math.round((100 * t.installs) / t.enquiries) : null;
-  return html`<section class="db-section in-sec in-sec--funnel" aria-labelledby="in-h-funnel" data-testid="p1-funnel">
-    <${SectionHead} id="in-h-funnel" title="Enquiry to install funnel" sub=${`Same period as above: ${words}.`} />
+  return html`<section class="in-sub-sec in-sec--funnel" aria-labelledby="in-h-funnel" data-testid="p1-funnel">
+    <${SectionHead} id="in-h-funnel" title="Enquiry to install funnel" sub=${`Same period as the sources: ${words}.`}>
+      ${t.enquiries ? html`<${TableToggle} on=${asTable} onToggle=${() => setAsTable(!asTable)} testid="p1-funnel-toggle" />` : null}
+    <//>
     <${Card} class="in-card">
       ${t.enquiries === 0
         ? html`<${EmptyState} icon="filter" title="No enquiries in this period" body="The funnel fills in as enquiries become quotes and installs." data-testid="p1-funnel-empty" />`
-        : html`<ol class="in-fun" data-testid="p1-funnel-list">
+        : asTable
+          ? html`<${ChartTable} caption="Enquiry to install funnel" testid="p1-funnel-table"
+              columns=${[{ key: 'step', header: 'Step' }, { key: 'n', header: 'Count' }, { key: 'conv', header: 'Of the step before' }]}
+              rows=${steps.map((s) => ({ key: s.id, step: s.label, n: s.n, conv: s.of === null ? '—' : (conv(s) === null ? '—' : `${conv(s)}% of ${s.ofLabel}`) }))} />`
+          : html`<ol class="in-fun" data-testid="p1-funnel-list">
           ${steps.map((s) => {
             const c = conv(s);
             return html`<li class="in-fun__row" key=${s.id} data-testid=${`p1-funnel-${s.id}`}>
               <div class="in-fun__head">
                 <span class="in-fun__label">${s.label}</span>
-                <span class="in-fun__num"><strong>${s.n}</strong>${s.of === null ? null : html` <span class="in-fun__pct">${c === null ? '—' : `${c}%`} of ${s.ofLabel}</span>`}</span>
+                <span class="in-fun__num"><strong class="in-figure">${s.n}</strong>${s.of === null ? null : html` <span class="in-fun__pct">${c === null ? '—' : `${c}%`} of ${s.ofLabel}</span>`}</span>
               </div>
-              <div class="in-bar in-bar--full" aria-hidden="true"><span class=${cx('in-bar__fill', s.id === 'installs' && 'in-bar__fill--ok')} style=${{ '--p': s.n / max }}></span></div>
+              <div class="in-bar in-bar--full" aria-hidden="true"><span class="in-bar__fill" style=${{ '--p': s.n / max }}></span></div>
             </li>`;
           })}
         </ol>
-        <p class="in-fine" data-testid="p1-funnel-overall">${overall === null ? '' : `${overall}% of these enquiries have ended up as an install so far. `}Recent enquiries have not had time to finish yet.</p>
-        <${ChartTable} caption="Enquiry to install funnel" testid="p1-funnel-table"
-          columns=${[{ key: 'step', header: 'Step' }, { key: 'n', header: 'Count' }, { key: 'conv', header: 'Of the step before' }]}
-          rows=${steps.map((s) => ({ key: s.id, step: s.label, n: s.n, conv: s.of === null ? '—' : (conv(s) === null ? '—' : `${conv(s)}% of ${s.ofLabel}`) }))} />`}
+        <p class="in-fine" data-testid="p1-funnel-overall">${overall === null ? '' : `${overall}% of these enquiries have ended up as an install so far. `}Recent enquiries have not had time to finish yet.</p>`}
     <//>
   </section>`;
 }
@@ -407,31 +508,37 @@ function FunnelSection({ data, period }) {
 // ---------- money: collected per week, by service ----------
 
 function WeeklySection({ ins }) {
+  const [asTable, setAsTable] = useState(false);
   const weeks = ins.weeks;
   const max = Math.max(1, ...weeks.map((w) => w.total));
   const none = weeks.every((w) => w.total === 0);
   return html`<section class="db-section in-sec in-sec--weeks" aria-labelledby="in-h-weeks">
-    <${SectionHead} id="in-h-weeks" title="Collected per week" sub="Money you marked as paid, by week." />
+    <${SectionHead} id="in-h-weeks" title="Collected per week" sub="Money you marked as paid, by week.">
+      ${none ? null : html`<${TableToggle} on=${asTable} onToggle=${() => setAsTable(!asTable)} testid="p1-weeks-toggle" />`}
+    <//>
     <${Card} class="in-card">
-      <div class="in-minor">
-        <${Stat} label="Booked next 14 days" value=${pounds(ins.bookedNext14)} hint=${plural(ins.bookedNext14Count, 'booking')} data-testid="insights-booked-next" />
-        <${Stat} label="Average job" value=${pounds(ins.avgJob)} hint="last 30 days, paid jobs" data-testid="insights-avg" />
-      </div>
       ${none
         ? html`<p class="in-fine" data-testid="p1-weeks-empty">No payments marked in the last six weeks. They show here as soon as you mark a job as paid.</p>`
-        : html`<div class="in-weeks" data-testid="insights-weeks">
+        : asTable
+          ? html`<${ChartTable} caption="Collected per week, weeks starting on the Monday shown" testid="p1-weeks-table"
+              columns=${[{ key: 'week', header: 'Week starting' }, { key: 'total', header: 'Collected' }]}
+              rows=${weeks.map((w, i) => ({ key: w.weekStart, week: w.label, total: `${pounds(w.total)}${i === weeks.length - 1 ? ' so far' : ''}` }))} />`
+          : html`<div class="in-weeks" data-testid="insights-weeks">
           <ol class="in-weeks__list">
-            ${weeks.map((w, i) => html`<li class=${cx('in-week', i === weeks.length - 1 && 'is-current', w.total === 0 && 'is-zero')} key=${w.weekStart} data-testid=${`insights-weekbar-${i}`}>
-              <span class="in-week__label">${w.label}</span>
-              <span class="in-bar in-bar--money" aria-hidden="true"><span class="in-bar__fill" style=${{ '--p': w.total / max }}></span><span class="in-bar__val">${pounds(w.total)}</span></span>
-              <span class="u-sr-only">${pounds(w.total)}</span>
-            </li>`)}
+            ${weeks.map((w, i) => {
+              const current = i === weeks.length - 1;
+              return html`<li class=${cx('in-week', current && 'is-current', w.total === 0 && 'is-zero')} key=${w.weekStart} data-testid=${`insights-weekbar-${i}`}>
+                <span class="in-week__label">${w.label}</span>
+                <span class="in-bar in-bar--money" aria-hidden="true">
+                  ${w.total === 0 ? html`<span class="in-bar__stub"></span>` : html`<span class="in-bar__fill" style=${{ '--p': w.total / max }}></span>`}
+                  <span class="in-bar__val">${pounds(w.total)}${current ? html`<span class="in-bar__sofar"> so far</span>` : null}</span>
+                </span>
+                <span class="u-sr-only">${`${pounds(w.total)}${current ? ' so far' : ''}`}</span>
+              </li>`;
+            })}
           </ol>
-          <p class="in-fine">Weeks start on Monday. The last bar is this week so far.</p>
-        </div>
-        <${ChartTable} caption="Collected per week, weeks starting on the Monday shown" testid="p1-weeks-table"
-          columns=${[{ key: 'week', header: 'Week starting' }, { key: 'total', header: 'Collected' }]}
-          rows=${weeks.map((w) => ({ key: w.weekStart, week: w.label, total: pounds(w.total) }))} />`}
+          <p class="in-fine">Weeks start on Monday. The last bar is this week so far, so it is lighter.</p>
+        </div>`}
     <//>
   </section>`;
 }
@@ -472,22 +579,40 @@ export default function InsightsView({ route }) {
   const quotes = useMemo(() => selectQuoteStats(state, '90d', stamp), [state, stamp]);
   const sla = useMemo(() => selectSla(state, stamp), [state, stamp]);
   const sources = useMemo(() => selectLeadSources(state, period, stamp), [state, period, stamp]);
+  // Every figure on this screen comes from the sample jobs until his own replace them.
+  const sample = state.bookings.some((b) => b.seed);
+
+  const adsSummary = (() => {
+    const c = selectCostPerLead(state, { from: `${thisMonth}-01`, to: lastDayOf(thisMonth) }, stamp);
+    return c.hasSpend && c.costPerEnquiry !== null ? `${pounds(c.costPerEnquiry)} an enquiry` : 'Cost and funnel';
+  })();
 
   return html`<div class="db-page in-page" data-testid="p1-insights">
-    <${PageHeader} title="Insights" subtitle=${`${monthName(thisMonth)} so far`} />
-    <${Headline} ins=${ins} quotes=${quotes} />
+    <${PageHeader} title="Money" subtitle=${`${monthName(thisMonth)} so far`} />
+
+    <div class="in-top">
+      <${OwedSection} owed=${owed} ins=${ins} todayDay=${todayDay} brand=${brand} />
+      <div class="in-top__side">
+        <${Hero} ins=${ins} sample=${sample} />
+        <${Tiles} ins=${ins} quotes=${quotes} sla=${sla} sample=${sample} />
+        <${WinRate} quotes=${quotes} />
+      </div>
+    </div>
 
     <div class="in-cols">
       <div class="in-col in-col--money">
-        <${OwedSection} owed=${owed} todayDay=${todayDay} brand=${brand} />
         <${ReplySection} sla=${sla} />
         <${WeeklySection} ins=${ins} />
         <${ServiceSection} ins=${ins} />
       </div>
       <div class="in-col in-col--marketing">
         <${SourcesSection} data=${sources} period=${period} onPeriod=${setPeriod} />
-        <${AdsSection} state=${state} stamp=${stamp} month=${month} onMonth=${setMonth} />
-        <${FunnelSection} data=${sources} period=${period} />
+        <${Disclosure} title="Ads and results" summary=${adsSummary} class="in-adsresults" testid="p1-ads-results">
+          <div class="in-adsresults__body">
+            <${AdsSection} state=${state} stamp=${stamp} month=${month} onMonth=${setMonth} />
+            <${FunnelSection} data=${sources} period=${period} />
+          </div>
+        <//>
       </div>
     </div>
 

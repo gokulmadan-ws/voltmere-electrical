@@ -5,7 +5,8 @@ import {
   Avatar, Button, Card, Chip, EmptyState, Icon, Input, PageHeader, Segmented, Stat,
   cx, useBrand, useStore
 } from '../../ui/index.js';
-import { selectCustomers, selectCustomerByKey, selectBookingById } from '../../core/selectors.js';
+import { selectCustomers, selectCustomerByKey, selectBookingById, quoteStatus, quoteTotal } from '../../core/selectors.js';
+import { nowStamp } from '../../core/clock.js';
 import { fmtDayShort, stampDay } from '../../core/dates.js';
 import { firstName, gbp, outwardCode, plural } from '../../core/format.js';
 import { bookingWhen } from '../../core/availability.js';
@@ -14,7 +15,7 @@ import { goBack, navigate, routeHref } from '../router.js';
 import { BookingPill, isEnquiry, priceLabel } from '../shared/enquiry.js';
 
 export const title = 'Customers';
-export const css = ['css/insights.css'];
+export const css = ['css/insights.css', 'css/bookings.css'];
 
 // Whole state: identity is stable between mutations, so useMemo below only recomputes when something changed
 // (selectCustomers builds fresh objects on every call, which a shallow-compare selector would treat as "changed").
@@ -52,33 +53,58 @@ function ViewToggle() {
     data-testid="bookings-view-toggle" />`;
 }
 
-function CustomerRow({ customer, selected }) {
+const bookingsOf = (state, c) => c.bookingIds.map((id) => selectBookingById(state, id)).filter(Boolean);
+
+/**
+ * What the list and the detail say about a customer's money, worked out here so the words never disagree:
+ * paid = what they have actually paid (finished jobs less what is still owed), quoted = a quote that is out with them,
+ * repeat = two or more finished jobs (a free survey visit is a visit, not a job).
+ */
+function factsFor(state, c, bookings) {
+  const paid = Math.max(0, c.totalValue - c.owed);
+  const ids = new Set(c.bookingIds);
+  const quotes = Array.isArray(state.quotes) ? state.quotes : Object.values(state.quotes || {});
+  const now = nowStamp();
+  const open = quotes
+    .filter((q) => (ids.has(q.bookingId) || bookings.some((b) => b.quoteId === q.id)) && ['sent', 'viewed'].includes(quoteStatus(q, now)))
+    .sort((a, b) => (a.sentAt || a.createdAt || '') < (b.sentAt || b.createdAt || '') ? 1 : -1);
+  const finished = bookings.filter((b) => b.status === 'done' && !isEnquiry(b)).length;
+  const surveyOnly = bookings.length > 0 && bookings.every((b) => isEnquiry(b));
+  let value = null;
+  if (paid > 0) value = { label: 'Paid', amount: gbp(paid) };
+  else if (open.length) value = { label: 'Quoted', amount: gbp(quoteTotal(open[0])) };
+  else if (c.owed <= 0 && surveyOnly) value = { label: '', amount: 'Survey only', quiet: true };
+  const tags = c.tags.filter((t) => t !== 'Repeat').concat(finished >= 2 ? ['Repeat'] : []);
+  return { paid, value, tags, finished };
+}
+
+function CustomerRow({ customer, selected, state }) {
   const c = customer;
   const outward = c.addresses[0] ? outwardCode(c.addresses[0].postcode) : '';
-  const meta = [outward, plural(c.jobs, 'job')].filter(Boolean).join(' · ');
+  const facts = factsFor(state, c, bookingsOf(state, c));
+  const meta = [outward, plural(c.jobs, 'job'), lastLabel(c)].filter(Boolean).join(' · ');
   return html`<li>
     <a class=${cx('db-list__item', 'cu-row', selected && 'is-selected')} href=${routeHref('customers', { key: c.key })}
        aria-current=${selected ? 'page' : undefined} data-testid=${`customer-row-${c.key}`}>
-      <${Avatar} name=${c.name} size=${44} />
+      <${Avatar} name=${c.name || '?'} size=${44} class="cu-avatar" />
       <span class="cu-row__main">
         <span class="cu-row__name">${c.name}</span>
         <span class="cu-row__meta">${meta}</span>
-        <span class="cu-row__meta">${lastLabel(c)}</span>
-        ${c.tags.length || c.owed > 0 ? html`<span class="cu-row__chips">
-          ${c.tags.map((t) => html`<${Chip} key=${t} tone=${t === 'Repeat' ? 'ok' : 'neutral'}>${t}<//>`)}
-          ${c.owed > 0 ? html`<${Chip} tone="accent">Owed ${gbp(c.owed)}<//>` : null}
+        ${facts.tags.length || c.owed > 0 ? html`<span class="cu-row__chips">
+          ${c.owed > 0 ? html`<${Chip} tone="accent" data-testid=${`customer-owed-chip-${c.key}`}>Owed ${gbp(c.owed)}<//>` : null}
+          ${facts.tags.map((t) => html`<${Chip} key=${t} tone=${t === 'Repeat' ? 'ok' : 'neutral'}>${t}<//>`)}
         </span>` : null}
       </span>
-      <span class="cu-row__side">
-        <span class=${cx('cu-row__value', c.totalValue === 0 && 'is-zero')}>${gbp(c.totalValue)}</span>
-        <span class="cu-row__valuelabel">total</span>
-      </span>
+      ${facts.value ? html`<span class="cu-row__side" data-testid=${`customer-value-${c.key}`}>
+        ${facts.value.label ? html`<span class="cu-row__valuelabel">${facts.value.label}</span>` : null}
+        <span class=${cx('cu-row__value', facts.value.quiet && 'is-quiet')}>${facts.value.amount}</span>
+      </span>` : null}
       <${Icon} name="chevron-right" size=${20} class="cu-row__chevron" />
     </a>
   </li>`;
 }
 
-function CustomerList({ customers, total, query, onQuery, selectedKey }) {
+function CustomerList({ state, customers, total, query, onQuery, selectedKey }) {
   const shown = customers.filter((c) => matchesSearch(c, query));
   return html`<div class="cu-list-pane">
     ${selectedKey
@@ -97,7 +123,7 @@ function CustomerList({ customers, total, query, onQuery, selectedKey }) {
       : shown.length === 0
         ? html`<${EmptyState} icon="search" title=${`No customers match "${query.trim()}".`} data-testid="customers-empty" />`
         : html`<ul class="db-list cu-list" data-testid="customers-list">
-          ${shown.map((c) => html`<${CustomerRow} key=${c.key} customer=${c} selected=${c.key === selectedKey} />`)}
+          ${shown.map((c) => html`<${CustomerRow} key=${c.key} customer=${c} selected=${c.key === selectedKey} state=${state} />`)}
         </ul>`}
   </div>`;
 }
@@ -134,9 +160,15 @@ function CustomerDetail({ state, customerKey, brand }) {
     </div>`;
   }
 
-  const bookings = customer.bookingIds.map((id) => selectBookingById(state, id)).filter(Boolean);
+  const bookings = bookingsOf(state, customer);
   const latest = bookings[0];
   const doneCount = bookings.filter((b) => b.status === 'done').length;
+  const facts = factsFor(state, customer, bookings);
+  // Money tiles only where there is money: what they have paid (or have been quoted) and what they still owe. No row of zeros.
+  const tiles = [];
+  if (facts.paid > 0) tiles.push(html`<${Stat} key="paid" label="Paid" value=${gbp(facts.paid)} hint=${plural(doneCount, 'finished job')} tone="ok" data-testid="customer-total" />`);
+  else if (facts.value && facts.value.label === 'Quoted') tiles.push(html`<${Stat} key="quoted" label="Quoted" value=${facts.value.amount} hint="waiting on them" data-testid="customer-total" />`);
+  if (customer.owed > 0) tiles.push(html`<${Stat} key="owed" label="Owed" value=${gbp(customer.owed)} hint="still to collect" tone="accent" data-testid="customer-owed" />`);
   const first = firstName(customer.name);
   const waHref = waLink(customer.phone, `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name}.`, brand.demoPhoneDigits);
   const rebookHref = routeHref('new', {}, { customer: customer.key, service: latest ? (isEnquiry(latest) ? 'ev' : latest.serviceId) : '' });
@@ -145,8 +177,8 @@ function CustomerDetail({ state, customerKey, brand }) {
     <${PageHeader} eyebrow="Customer" title=${customer.name} back=${back} />
     <div class="db-stack">
       <${Card} class="cu-contact">
-        ${customer.tags.length ? html`<div class="cu-contact__tags">
-          ${customer.tags.map((t) => html`<${Chip} key=${t} tone=${t === 'Repeat' ? 'ok' : 'neutral'}>${t}<//>`)}
+        ${facts.tags.length ? html`<div class="cu-contact__tags">
+          ${facts.tags.map((t) => html`<${Chip} key=${t} tone=${t === 'Repeat' ? 'ok' : 'neutral'}>${t}<//>`)}
         </div>` : null}
         <p class="cu-contact__line"><${Icon} name="phone" size=${18} /><span>${customer.phone}</span></p>
         ${customer.email
@@ -158,10 +190,9 @@ function CustomerDetail({ state, customerKey, brand }) {
         </div>
       <//>
 
-      <div class="cu-tiles">
-        <${Stat} label="Total value" value=${gbp(customer.totalValue)} hint=${plural(doneCount, 'finished job')} tone="ok" data-testid="customer-total" />
-        <${Stat} label="Owed" value=${gbp(customer.owed)} hint=${customer.owed > 0 ? 'still to collect' : 'nothing due'} tone=${customer.owed > 0 ? 'accent' : undefined} data-testid="customer-owed" />
-      </div>
+      ${tiles.length
+        ? html`<div class="cu-tiles">${tiles}</div>`
+        : html`<p class="cu-quiet" data-testid="customer-survey-only">Survey only so far: nothing to charge and nothing to collect.</p>`}
 
       <section class="db-section">
         <h2 class="db-section__title">${customer.addresses.length > 1 ? 'Addresses' : 'Address'}</h2>
@@ -208,7 +239,7 @@ export default function CustomersView({ route }) {
   return html`<div class="db-page cu-page">
     <div class=${cx('db-master-detail', key && 'db-master-detail--has-detail')}>
       <div class="db-master-detail__list">
-        <${CustomerList} customers=${customers} total=${customers.length} query=${query} onQuery=${onQuery} selectedKey=${key} />
+        <${CustomerList} state=${state} customers=${customers} total=${customers.length} query=${query} onQuery=${onQuery} selectedKey=${key} />
       </div>
       <div class="db-master-detail__detail">
         ${key

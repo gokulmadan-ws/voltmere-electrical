@@ -1,13 +1,13 @@
-// js/quote/confirmed.js: what the customer sees once the quote is accepted ("You're all set"), on the day and on every reload after.
+// js/quote/confirmed.js: what the customer sees once the quote is accepted ("Thanks <name>, quote accepted" with ONE status, "To be confirmed", then "You're all set" once the owner confirms), on the day and on every reload after.
 // Owner: Q2 (customer quote page)
 import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
-import { Button, Disclosure, Icon, cx } from '../ui/index.js';
+import { Button, Disclosure, Icon, cx, pageHref } from '../ui/index.js';
 import { waLink } from '../core/messages.js';
 import { DateBox, Footer, Hero, LinesCard, StepsCard } from './parts.js';
-import { installText, installWhen, money } from './format.js';
-import { downloadInstallIcs, isProvisionalInstall } from './install-ics.js';
+import { installText, installWhen, money, shownTotal } from './format.js';
+import { downloadInstallIcs } from './install-ics.js';
 
-/** The install booking's status in the customer's words: { id, label, icon, tone }. */
+/** The install booking's status in the customer's words: { id, label, icon, tone }. A day Daniel has not confirmed yet has ONE status: "To be confirmed". */
 export function installStatus(booking) {
   if (!booking) return { id: 'none', label: 'Day to be arranged', icon: 'hourglass', tone: 'wait' };
   switch (booking.status) {
@@ -15,7 +15,7 @@ export function installStatus(booking) {
     case 'on_the_way': return { id: 'on_the_way', label: 'On the way', icon: 'navigation', tone: 'ok' };
     case 'done': return { id: 'done', label: 'Installed', icon: 'badge-check', tone: 'done' };
     case 'cancelled': return { id: 'cancelled', label: 'Cancelled', icon: 'calendar-x', tone: 'warn' };
-    default: return { id: 'pencilled', label: 'Pencilled in', icon: 'pencil', tone: 'wait' };
+    default: return { id: 'to_confirm', label: 'To be confirmed', icon: 'hourglass', tone: 'wait' };
   }
 }
 
@@ -27,15 +27,16 @@ export function confirmCopy(d, brand, status) {
     case 'confirmed':
       return { eyebrow: 'Quote accepted', title: `You're all set, ${first}.`, lead: 'Your install day is confirmed. Everything is booked in.' };
     case 'on_the_way':
-      return { eyebrow: 'Install day', title: `${owner} is on the way.`, lead: 'He is heading to you now. Call him if you need anything.' };
+      return { eyebrow: 'Install day', title: `${owner} is on the way.`, lead: `${owner} is heading to you now. Call if you need anything.` };
     case 'done':
       return { eyebrow: 'Installed', title: 'Your charger is installed.', lead: `Thanks for choosing ${brand.name}. If anything is not right, call ${owner}.` };
     case 'cancelled':
-      return { eyebrow: 'Quote accepted', title: 'Your install day needs rearranging.', lead: `The day pencilled in for you was cancelled. ${owner} will be in touch to find a new one, or call him.` };
+      return { eyebrow: 'Quote accepted', title: 'Your install day needs rearranging.', lead: `The day you chose was cancelled. ${owner} will be in touch to find a new one, or call ${owner}.` };
     case 'none':
       return { eyebrow: 'Quote accepted', title: `Thank you, ${first}.`, lead: `${owner} will be in touch to arrange your install day.` };
     default:
-      return { eyebrow: 'Quote accepted', title: `You're all set, ${first}.`, lead: `Your installation is pencilled in. ${owner} will confirm the day with you.` };
+      // The day they chose is waiting for Daniel's OK, so the headline does not say "all set".
+      return { eyebrow: 'Quote accepted', title: `Thanks ${first}, quote accepted`, lead: `${owner} will confirm your install day with you by WhatsApp or phone.` };
   }
 }
 
@@ -55,7 +56,7 @@ function InstallCard({ d, brand, settings, when, status }) {
   const booking = d.installBooking;
   const [saved, setSaved] = useState(false);
   const wa = waLink(brand.phone, installText(brand, d, when), brand.demoPhoneDigits);
-  const canCalendar = !!booking && (status.id === 'pencilled' || status.id === 'confirmed' || status.id === 'on_the_way');
+  const canCalendar = !!booking && (status.id === 'to_confirm' || status.id === 'confirmed' || status.id === 'on_the_way');
   const addToCalendar = () => { if (downloadInstallIcs(booking, settings, d.quote)) setSaved(true); };
   return html`
     <section class="q2-card q2-install" aria-labelledby="q2-install-h" data-testid="q2-install">
@@ -73,15 +74,14 @@ function InstallCard({ d, brand, settings, when, status }) {
           </div>
         </div>`
     : html`<p class="q2-install__part">${brand.ownerFirst} will be in touch to arrange a day.</p>`}
-      ${booking && isProvisionalInstall(booking)
-    ? html`<p class="q2-install__note">Pencilled in means it is held for you, but ${brand.ownerFirst} has not confirmed it yet.</p>` : null}
       <div class="q2-actions">
-        ${canCalendar ? html`<${Button} variant="secondary" block icon="calendar-plus" onClick=${addToCalendar} data-testid="q2-ics">Add to calendar<//>` : null}
+        ${canCalendar ? html`<${Button} variant="primary" size="lg" block icon="calendar-plus" onClick=${addToCalendar} data-testid="q2-ics">Add to calendar<//>` : null}
         ${saved ? html`<p class="q2-install__saved" role="status" data-testid="q2-ics-saved">Calendar file saved. Open it to add the day to your calendar.</p>` : null}
-        <div class="q2-row q2-row--even">
-          <${Button} variant="secondary" icon="phone" href=${brand.telHref} data-testid="q2-call">Call ${brand.phone}<//>
+        <div class="q2-pair">
+          <${Button} variant=${canCalendar ? 'secondary' : 'primary'} icon="phone" href=${brand.telHref} aria-label=${`Call ${brand.ownerFirst} on ${brand.phone}`} data-testid="q2-call">Call ${brand.ownerFirst}<//>
           <${Button} variant="secondary" icon="message-circle" href=${wa} data-testid="q2-whatsapp">WhatsApp<//>
         </div>
+        <${Button} variant="ghost" class="q2-done" href=${pageHref('index.html')} aria-label=${`Done, back to the ${brand.name} home page`} data-testid="q2-done">Done<//>
       </div>
     </section>
   `;
@@ -89,10 +89,10 @@ function InstallCard({ d, brand, settings, when, status }) {
 
 function nextSteps(d, brand, status, when) {
   const owner = brand.ownerFirst;
-  const accepted = { title: 'Quote accepted', text: when ? `You accepted ${money(d.total)} and chose ${when.short}, ${when.part.toLowerCase()}.` : `You accepted ${money(d.total)}.` };
-  const confirm = { title: `${owner} confirms your day`, text: status.id === 'pencilled' ? `He will get in touch by WhatsApp or phone. Until then it is pencilled in.` : 'Confirmed. You will not need to do anything else.' };
-  const fit = { title: 'Your charger is fitted', text: when && when.arrive ? `${owner} arrives ${when.arrive}. It is fitted and tested, ready to plug in.` : 'Installed and tested, ready to plug in.' };
-  return { steps: [accepted, confirm, fit], done: status.id === 'pencilled' ? 1 : 2 };
+  const accepted = { title: 'Quote accepted', text: when ? `You accepted ${money(shownTotal(d))} and chose ${when.short}, ${when.part.toLowerCase()}.` : `You accepted ${money(shownTotal(d))}.` };
+  const confirm = { title: `${owner} confirms your day`, text: status.id === 'to_confirm' ? `${owner} will get in touch by WhatsApp or phone.` : 'Confirmed. You will not need to do anything else.' };
+  const fit = { title: 'Your charger is installed', text: when && when.arrive ? `${owner} arrives ${when.arrive}.` : `On the day you agree with ${owner}.` };
+  return { steps: [accepted, confirm, fit], done: status.id === 'to_confirm' ? 1 : 2 };
 }
 
 /** The accepted state: ring and tick, headline, the install day, what happens next, references, the quote itself. */
@@ -101,11 +101,11 @@ export function AcceptedView({ d, brand, settings }) {
   const status = installStatus(booking);
   const when = installWhen(booking);
   const copy = confirmCopy(d, brand, status);
-  const showSteps = status.id === 'pencilled' || status.id === 'confirmed';
+  const showSteps = status.id === 'to_confirm' || status.id === 'confirmed';
   const steps = nextSteps(d, brand, status, when);
   const ref = useRef(null);
 
-  // The new headline takes focus (once per arrival), so a screen reader starts at "You're all set".
+  // The new headline takes focus (once per arrival), so a screen reader starts at the thank-you.
   useEffect(() => {
     const el = document.getElementById('q2-title');
     if (el) { try { el.focus({ preventScroll: true }); } catch (e) { /* not focusable */ } }
@@ -114,7 +114,7 @@ export function AcceptedView({ d, brand, settings }) {
 
   return html`
     <div class="q2-state" data-testid="q2-confirm" ref=${ref}>
-      <${Hero} brand=${brand} variant="done" mark=${html`<${ConfirmMark} />`} eyebrow=${copy.eyebrow} title=${copy.title} lead=${copy.lead} titleTestid="q2-confirm-title" />
+      <${Hero} brand=${brand} variant="done" who=${d.customerFirst} mark=${html`<${ConfirmMark} />`} eyebrow=${copy.eyebrow} title=${copy.title} lead=${copy.lead} titleTestid="q2-confirm-title" />
       <main class="q2-wrap q2-stack q2-pull" id="q2-main" tabindex="-1">
         <${InstallCard} d=${d} brand=${brand} settings=${settings} when=${when} status=${status} />
         ${showSteps ? html`<${StepsCard} brand=${brand} heading="What happens next" steps=${steps.steps} done=${steps.done} />` : null}
@@ -124,13 +124,13 @@ export function AcceptedView({ d, brand, settings }) {
             <div><dt>Quote</dt><dd class="u-mono" data-testid="q2-quote-ref">${d.quote.id}</dd></div>
             ${booking ? html`<div><dt>Install booking</dt><dd class="u-mono" data-testid="q2-install-ref">${booking.ref}</dd></div>` : null}
             ${d.quote.brand ? html`<div><dt>Charger</dt><dd>${d.quote.brand}</dd></div>` : null}
-            <div class="q2-kv__sum"><dt>Total</dt><dd data-testid="q2-total">${money(d.total)}</dd></div>
+            <div class="q2-kv__sum"><dt>Total</dt><dd data-testid="q2-total">${money(shownTotal(d))}</dd></div>
           </dl>
         </section>
-        <${Disclosure} title="Read your quote again" summary=${money(d.total)} testid="q2-quote-disclosure" class="q2-disclosure">
+        <${Disclosure} title="Read your quote again" summary=${money(shownTotal(d))} testid="q2-quote-disclosure" class="q2-disclosure">
           <${LinesCard} d=${d} compact />
         <//>
-        <p class="q2-simnote" data-testid="q2-simnote"><${Icon} name="unplug" size=${18} /><span><strong>Prototype.</strong> ${brand.ownerFirst} is not really notified and no WhatsApp or email was sent. A live version would tell him straight away.</span></p>
+        <p class="q2-simnote" data-proto data-testid="q2-simnote"><${Icon} name="unplug" size=${18} /><span><strong>Prototype.</strong> ${brand.ownerFirst} is not really notified and no WhatsApp or email was sent. A live version would tell ${brand.ownerFirst} straight away.</span></p>
       </main>
       <${Footer} brand=${brand} />
     </div>

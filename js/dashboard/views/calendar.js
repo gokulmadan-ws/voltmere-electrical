@@ -7,15 +7,16 @@ import {
 } from '../../ui/index.js';
 import { WINDOWS } from '../../core/config.js';
 import { todayKey } from '../../core/clock.js';
-import { DAY_SHORT, addDays, fmtDayLong, fmtDayShort, isDayKey, weekDates, weekdayOf } from '../../core/dates.js';
-import { firstName, plural } from '../../core/format.js';
+import { DAY_SHORT, addDays, fmtDayLong, fmtDayShort, isDayKey, stampDay, toStamp, weekDates, weekdayOf } from '../../core/dates.js';
+import { firstName, outwardCode, plural } from '../../core/format.js';
 import { bookingWindowIds, bookingWindowLabel, getDayLoad, getDaySlots, getDayStatus } from '../../core/availability.js';
-import { selectBookingsOn } from '../../core/selectors.js';
+import { selectBookingsOn, selectNextOpenDay, selectUpcoming } from '../../core/selectors.js';
 import {
   addBlock, addDaysOff, blockRange, getState, removeBlock, removeBlockGroup, removeDayOff, setDayFull
 } from '../../core/store.js';
 import { navigate, routeHref } from '../router.js';
-import { BookingPill, isPencilled } from '../shared/enquiry.js';
+import { BookingPill, isOutsideNi, isPencilled } from '../shared/enquiry.js';
+import { slaFor } from '../shared/sla.js';
 
 export const title = 'Calendar';
 export const css = ['css/calendar.css'];
@@ -73,7 +74,10 @@ function railLabel(ids) {
 
 /** What the strip chip (and the grid column heading) shows for one day, from the CUSTOMER view of availability. */
 function dayInfo(state, date, today) {
-  const jobs = selectBookingsOn(state, date).length;
+  const booked = selectBookingsOn(state, date);
+  const jobs = booked.length;
+  const names = booked.map((b) => firstName(b.customer.name));
+  const initials = names.map((n) => n.charAt(0).toUpperCase());
   const status = getDayStatus(state, date);
   const load = getDayLoad(state, date);
   let dot = load.level === 'closed' ? 'hatch' : load.level;
@@ -90,8 +94,10 @@ function dayInfo(state, date, today) {
     isToday: date === today,
     isPast: status.kind === 'past',
     isFull: dot === 'full',
-    caption: jobs > 0 ? plural(jobs, 'job') : (word || plural(0, 'job')),
-    label: `${fmtDayShort(date)}, ${plural(jobs, 'job')}, ${spoken}`
+    // "3" and the first-name initials ("R N D", then "+" past three), so the week says who is where without a tap on each day.
+    caption: jobs > 0 ? String(jobs) : (word || plural(0, 'job')),
+    initials: initials.length > 3 ? `${initials.slice(0, 2).join('')}+` : initials.join(''),
+    label: `${fmtDayShort(date)}, ${plural(jobs, 'job')}${names.length ? ` (${names.join(', ')})` : ''}, ${spoken}`
   };
 }
 
@@ -147,27 +153,27 @@ function DayChip({ info, selected, onSelect }) {
     onClick=${() => onSelect(date)}>
     <span class="cal-day__dow" aria-hidden="true">${DAY_SHORT[weekdayOf(date)]}</span>
     <span class=${cx('cal-day__num', info.isFull && 'is-full')} aria-hidden="true">${dayNumber(date)}</span>
-    <span class="cal-day__sub" aria-hidden="true">${info.caption}</span>
+    <span class="cal-day__sub" aria-hidden="true">${info.caption}${info.initials ? html`<span class="cal-day__who">${info.initials}</span>` : null}</span>
     <span class=${`cal-day__dot cal-day__dot--${info.dot}`} aria-hidden="true"></span>
   </button>`;
 }
 
 // ---------- cell bodies (shared by the phone rows and the week grid) ----------
 
-function BookingCard({ booking, ids, compact }) {
+function BookingCard({ booking, ids, compact, stripe }) {
   const who = firstName(booking.customer.name);
   const service = booking.variantLabel ? `${booking.serviceName}, ${booking.variantLabel}` : booking.serviceName;
   const mod = modOf(booking.status);
   const pencil = isPencilled(booking);
   if (compact) {
-    return html`<a class=${cx('cal-booking', 'cal-booking--compact', `cal-booking--${mod}`, pencil && 'cal-booking--pencil')}
+    return html`<a class=${cx('cal-booking', 'cal-booking--compact', `cal-booking--${mod}`, pencil && 'cal-booking--pencil')} data-stripe=${stripe || undefined}
       href=${routeHref('bookings', { id: booking.id })} data-testid=${`calendar-booking-${booking.id}`}>
       <span class="cal-booking__who"><${Icon} name=${STATUS_ICON[booking.status] || 'bell'} size=${14} /><span class="cal-booking__name">${who}</span></span>
       <span class="cal-booking__svc">${service}</span>
       <span class="u-sr-only">${`${bookingWindowLabel(booking)}, ${pencil ? 'pencilled in' : booking.paid === false && booking.status === 'done' && booking.serviceId !== 'ev_quote' ? 'To collect' : booking.status.replace(/_/g, ' ')}`}</span>
     </a>`;
   }
-  return html`<a class=${cx('cal-booking', ids.length > 1 && 'cal-booking--half', `cal-booking--${mod}`, pencil && 'cal-booking--pencil')}
+  return html`<a class=${cx('cal-booking', ids.length > 1 && 'cal-booking--half', `cal-booking--${mod}`, pencil && 'cal-booking--pencil')} data-stripe=${stripe || undefined}
     href=${routeHref('bookings', { id: booking.id })} data-testid=${`calendar-booking-${booking.id}`}>
     <span class="cal-booking__top">
       <span class="cal-booking__service">${service}</span>
@@ -208,8 +214,8 @@ function BlockedButton({ cell, onUnblock }) {
 }
 
 /** The inside of one cell. Free cells carry their own window test id (it is on the button); the rest get it on the wrapper. */
-function CellBody({ date, cell, compact, onFree, onUnblock }) {
-  if (cell.kind === 'booked') return html`<${BookingCard} booking=${cell.booking} ids=${cell.ids} compact=${compact} />`;
+function CellBody({ date, cell, compact, onFree, onUnblock, stripeFor }) {
+  if (cell.kind === 'booked') return html`<${BookingCard} booking=${cell.booking} ids=${cell.ids} compact=${compact} stripe=${stripeFor ? stripeFor(cell.booking) : ''} />`;
   if (cell.kind === 'free') return html`<${FreeButton} date=${date} cell=${cell} compact=${compact} onFree=${onFree} />`;
   if (cell.kind === 'blocked') return html`<${BlockedButton} cell=${cell} onUnblock=${onUnblock} />`;
   return html`<div class="cal-muted">${cell.kind === 'past' ? 'Past' : 'Closed'}</div>`;
@@ -219,27 +225,59 @@ const wrapTestid = (date, cell) => (cell.kind === 'free' ? undefined : `calendar
 
 // ---------- phone: the selected day as rows ----------
 
-function DayRows({ date, cells, onFree, onUnblock }) {
+function DayRows({ date, cells, onFree, onUnblock, stripeFor }) {
   const out = [];
   let lunchDone = false;
-  for (const cell of cells) {
+  // A window that has already gone by and has nothing in it is just noise: only past jobs stay on the page.
+  for (const cell of cells.filter((c) => c.kind !== 'past')) {
     if (!lunchDone && cell.windowId >= 2) {
       lunchDone = true;
-      out.push(html`<div class="cal-lunch" role="separator" key="lunch"><span>Lunch</span></div>`);
+      if (out.length > 0) out.push(html`<div class="cal-lunch" role="separator" key="lunch"><span>Lunch</span></div>`);
     }
     out.push(html`<div class=${cx('cal-row', cell.ids.length > 1 && 'cal-row--half')} key=${`w${cell.windowId}`}>
       <div class="cal-row__time">${railLabel(cell.ids)}</div>
       <div class="cal-row__body" data-testid=${wrapTestid(date, cell)}>
-        <${CellBody} date=${date} cell=${cell} onFree=${onFree} onUnblock=${onUnblock} />
+        <${CellBody} date=${date} cell=${cell} onFree=${onFree} onUnblock=${onUnblock} stripeFor=${stripeFor} />
       </div>
     </div>`);
   }
+  if (out.length === 0) return html`<p class="cal-closed" data-testid="calendar-day-over">That is everything for this day. Pick another day above.</p>`;
   return html`<div class="cal-rows">${out}</div>`;
+}
+
+/**
+ * "Coming up": the next jobs across the whole week and beyond, so Daniel sees who is where without tapping each day. Everything in the next
+ * 7 days, topped up to at least four jobs, six at most: time, first name, outward code and the status badge.
+ */
+function ComingUp({ state, nowStampStr, today }) {
+  const upcoming = selectUpcoming(state, nowStampStr);
+  const horizon = addDays(today, 7);
+  let list = upcoming.filter((b) => b.urgent || stampDay(b.start) < horizon);
+  if (list.length < 4) list = upcoming.slice(0, 4);
+  const more = Math.max(0, Math.max(upcoming.length, 0) - Math.min(list.length, 6));
+  list = list.slice(0, 6);
+  if (list.length === 0) return null;
+  return html`<section class="cal-coming" data-testid="calendar-coming-up" aria-labelledby="cal-coming-title">
+    <h2 class="cal-coming__title" id="cal-coming-title">Coming up</h2>
+    <ul class="cal-coming__list">
+      ${list.map((b) => html`<li key=${b.id}>
+        <a class="cal-coming__row" href=${routeHref('bookings', { id: b.id })} data-testid=${`calendar-coming-${b.id}`}>
+          <span class="cal-coming__when">
+            <strong>${b.urgent ? 'ASAP' : fmtDayShort(stampDay(b.start))}</strong>
+            ${b.urgent ? null : html`<span>${bookingWindowLabel(b)}</span>`}
+          </span>
+          <span class="cal-coming__who"><strong>${firstName(b.customer.name)}</strong>${outwardCode(b.address.postcode) ? ` · ${outwardCode(b.address.postcode)}` : ''}</span>
+          <${BookingPill} booking=${b} compact single />
+        </a>
+      </li>`)}
+    </ul>
+    ${more > 0 ? html`<${TextLink} href=${routeHref('bookings', {}, { f: 'upcoming' })} class="cal-coming__more" data-testid="calendar-coming-more">${`See all ${upcoming.length} upcoming`}<//>` : null}
+  </section>`;
 }
 
 // ---------- 768px and up: the week as a grid (rows = windows, columns = days) ----------
 
-function WeekGrid({ state, dates, today, sel, onSelect, onFree, onUnblock }) {
+function WeekGrid({ state, dates, today, sel, onSelect, onFree, onUnblock, stripeFor }) {
   const days = dates.map((date) => ({ date, info: dayInfo(state, date, today), cells: dayCells(state, date) }));
   // Per column: what goes on each of the five table rows. A half-day job spans two rows ('skip' marks the covered one).
   const columns = days.map(({ cells }) => {
@@ -270,7 +308,7 @@ function WeekGrid({ state, dates, today, sel, onSelect, onFree, onUnblock }) {
     return html`<td key=${date} rowspan=${slot.span > 1 ? slot.span : undefined}
         class=${cx('cal-cell', slot.span > 1 && 'cal-cell--span', date === sel && 'is-col-selected')}
         data-testid=${wrapTestid(date, slot.cell)}>
-        <${CellBody} date=${date} cell=${slot.cell} compact onFree=${onFree} onUnblock=${onUnblock} />
+        <${CellBody} date=${date} cell=${slot.cell} compact onFree=${onFree} onUnblock=${onUnblock} stripeFor=${stripeFor} />
       </td>`;
   })}
     </tr>`;
@@ -384,7 +422,7 @@ function BlockSheet({ date, windowId, onClose, onDone }) {
 
 export default function CalendarView({ route }) {
   const state = useStore(selectAll);
-  useNow(60000); // windows turn 'past' as the day goes on
+  const nowDate = useNow(60000); // windows turn 'past' as the day goes on
   const wide = useMediaQuery('(min-width: 768px)');
   const [freeSlot, setFreeSlot] = useState(null);   // { date, windowId } while the free-window sheet is open
   const [blockSlot, setBlockSlot] = useState(null); // { date, windowId } while the block sheet is open
@@ -394,12 +432,25 @@ export default function CalendarView({ route }) {
 
   const today = todayKey();
   const asked = route && route.params ? route.params.date : '';
-  const sel = isDayKey(asked) ? asked : today;
+  // Opened without a day: today, unless today's last window has gone (or it is a closed day), then the next working day, so the page opens
+  // on something that can still happen.
+  const todayHours = state.settings.hours[weekdayOf(today)] || [];
+  const lastEnd = todayHours.length ? Math.max(...todayHours.map((id) => WINDOWS[id].endMin)) : 0;
+  const todayOver = state.settings.daysOff.some((d) => d.date === today) || nowDate.getHours() * 60 + nowDate.getMinutes() >= lastEnd;
+  const sel = isDayKey(asked) ? asked : (todayOver ? (selectNextOpenDay(state, today) || today) : today);
   const dates = weekDates(sel);
+  const nowStampStr = toStamp(nowDate);
+  const replyHours = state.settings.sla ? state.settings.sla.replyHours : 24;
+  // The one stripe rule (Today's): urgency only. A reply that is overdue is --danger, due soon is amber, nothing else gets a stripe.
+  const stripeFor = (b) => {
+    const sla = slaFor(b, replyHours, nowStampStr);
+    if (!sla || isOutsideNi(b.address.postcode)) return '';
+    return sla.state === 'overdue' ? 'danger' : sla.state === 'due_soon' ? 'soon' : '';
+  };
 
   // Picking a day or a week swaps the hash entry, so Back leaves the Calendar instead of replaying every tap.
   const selectDate = (date) => navigate(routeHref('calendar', { date }), { replace: true });
-  const goToday = () => navigate(routeHref('calendar'), { replace: true });
+  const goToday = () => navigate(routeHref('calendar', { date: today }), { replace: true });
 
   // Below 360px the strip scrolls inside its wrapper: keep the chosen day in view.
   useEffect(() => {
@@ -501,18 +552,20 @@ export default function CalendarView({ route }) {
             ${panelHead}
             ${banners}
           </div>
-          <${WeekGrid} state=${state} dates=${dates} today=${today} sel=${sel} onSelect=${selectDate} onFree=${openFree} onUnblock=${askUnblock} />`
+          <${WeekGrid} state=${state} dates=${dates} today=${today} sel=${sel} onSelect=${selectDate} onFree=${openFree} onUnblock=${askUnblock} stripeFor=${stripeFor} />
+          <${ComingUp} state=${state} nowStampStr=${nowStampStr} today=${today} />`
     : html`<div class="cal-strip-wrap" ref=${stripRef}>
             <div class="cal-strip" role="group" aria-label="Choose a day">
               ${dates.map((date) => html`<${DayChip} key=${date} info=${dayInfo(state, date, today)} selected=${date === sel} onSelect=${selectDate} />`)}
             </div>
           </div>
+          <${ComingUp} state=${state} nowStampStr=${nowStampStr} today=${today} />
           <section class="cal-panel" data-testid="calendar-day-panel" aria-label=${fmtDayLong(sel)}>
             ${panelHead}
             ${banners}
             ${closedAllDay
     ? (off ? null : html`<p class="cal-closed" data-testid="calendar-closed-day">Closed all day. Opening hours are set in Settings.</p>`)
-    : html`<${DayRows} date=${sel} cells=${cells} onFree=${openFree} onUnblock=${askUnblock} />`}
+    : html`<${DayRows} date=${sel} cells=${cells} onFree=${openFree} onUnblock=${askUnblock} stripeFor=${stripeFor} />`}
             ${urgent.length > 0 ? html`<div class="cal-urgent">
               <h3 class="cal-urgent__title">Emergency requests</h3>
               <ul class="db-list">

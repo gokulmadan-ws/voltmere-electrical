@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900" preserveAspectRatio="xMidYMin slice" aria-hidden="true" focusable="false">
   <!-- img/hero-wiring.svg: corner slash motifs (top left, bottom right) echoing the corners of the 180 Electrical logo, drawn faint so they sit behind the hero,
        the calculator result and the final CTA in both themes. Brand red hex and white at low opacity (brand art, like logo-mark.svg). Owner: L3. -->
-  <g fill="#E11414" fill-opacity="0.14">
+  <g fill="#E11414" fill-opacity="0.07">
     <path d="M0 0H210L0 210Z"/>
     <path d="M254 0H320L0 320V254Z"/>
   </g>
@@ -9,7 +9,7 @@
     <path d="M0 372L372 0"/>
     <path d="M0 424L424 0"/>
   </g>
-  <g fill="#E11414" fill-opacity="0.14">
+  <g fill="#E11414" fill-opacity="0.07">
     <path d="M800 900H590L800 690Z"/>
     <path d="M546 900H480L800 580V646Z"/>
   </g>

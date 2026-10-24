@@ -12,6 +12,18 @@
 @media (min-width: 480px) { .sh-actions { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); } }
 .sh-sub { margin: var(--space-2) 0 calc(var(--space-2) * -1); font-family: var(--font-body); font-size: var(--fs-16); font-weight: var(--fw-bold); letter-spacing: 0; }
 
+/* see it as a customer sees it: one or two link rows in the shared db-list, a one-line reason, a small way back */
+.sh-seeit { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); min-width: 0; }
+.sh-seeit__list { align-self: stretch; }
+.sh-seeit__icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%; background: var(--cta-soft); color: var(--cta-text);
+}
+.sh-seeit .ui-row__end { max-width: none; }
+.sh-seeit .ui-row__chev { color: var(--text-3); }
+.sh-seeit__note { padding-inline: var(--space-1); }
+.sh-seeit__back { margin-top: calc(var(--space-1) * -1); padding-inline: var(--space-1); }
+
 /* campaign links */
 .sh-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .sh-use { margin-top: calc(var(--space-2) * -1); }
@@ -20,12 +32,20 @@
 .sh-counts { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
 .sh-counts svg { flex: none; color: var(--cta-text); }
 .sh-ready { margin: 0; padding: 0; list-style: none; border: 1.5px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
-.sh-ready__item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); }
+.sh-ready__item { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-2) var(--space-3); }
 .sh-ready__item + .sh-ready__item { border-top: 1px solid var(--line); }
-.sh-ready__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* The text column gives way, never the Copy button: the address is one ellipsised line. */
+.sh-ready__text { display: flex; flex: 1 1 0; flex-direction: column; gap: 2px; min-width: 0; }
 .sh-ready__label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-15); font-weight: var(--fw-bold); }
 .sh-ready__label svg { flex: none; color: var(--text-2); }
-.sh-ready__url { color: var(--text-2); font-size: var(--fs-12); line-height: 1.4; overflow-wrap: anywhere; }
+.sh-ready__url { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; max-width: 100%; overflow: hidden; overflow-wrap: anywhere; color: var(--text-2); font-size: var(--fs-12); line-height: 1.4; }
+.sh-ready__copy { flex: none; white-space: nowrap; padding-inline: var(--space-3); }
+.sh-ready__copy .ui-btn__label { white-space: nowrap; }
+/* On the narrowest phones the button is a 44px icon square (its aria-label stays) so the text column keeps its room. */
+@media (max-width: 359px) {
+  .sh-ready__copy { width: var(--tap); padding-inline: 0; }
+  .sh-ready__copy .ui-btn__label { display: none; }
+}
 
 /* the card, as it looks on screen and on paper */
 .sh-print {

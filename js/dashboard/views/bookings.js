@@ -2,21 +2,24 @@
 // Owner: E3 (v1 by WP5, enquiry rows by E2)
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import {
-  Button, EmptyState, Icon, Input, PageHeader, Segmented, Select, TextLink, cx, useMediaQuery, useNow, useStore
+  Button, EmptyState, Field, Icon, IconButton, Input, PageHeader, Segmented, Select, Sheet, TextLink, cx, useMediaQuery, useNow, useStore
 } from '../../ui/index.js';
 import { markAllSeen } from '../../core/store.js';
 import { selectUpcoming, selectOwed, selectNeedsYou, selectPipeline, customerKeyOf } from '../../core/selectors.js';
-import { bookingWindowIds, bookingWindowLabel } from '../../core/availability.js';
+import { bookingWhen, bookingWindowLabel } from '../../core/availability.js';
 import { fmtRelativeDay, stampDay, toStamp } from '../../core/dates.js';
 import { todayKey } from '../../core/clock.js';
 import { LEAD_SOURCES, LEAD_SOURCE_LABELS, PIPELINE_STAGES } from '../../core/config.js';
 import { gbp, outwardCode } from '../../core/format.js';
 import { navigate, routeHref } from '../router.js';
 import { BookingDetail } from './booking-detail.js';
-import { AnswerChips, BookingPill, isEnquiry, priceLabel } from '../shared/enquiry.js';
-import { SlaChip, slaFor } from '../shared/sla.js';
-import { LeadChip } from '../shared/lead.js';
+import { BookingPill, isEnquiry, isPencilled, isQuotedInstall, priceLabel } from '../shared/enquiry.js';
+import { OutsidePill } from '../shared/outside.js';
+import { slaFor } from '../shared/sla.js';
+import { NeedsYouActions, NeedsYouMenu } from '../shared/job-actions.js';
+import { needRows, stripeOf } from '../shared/needs.js';
 import { StagePill, stageMapOf } from '../shared/stage.js';
+import { useScrollFade } from '../shared/scroll.js';
 
 export const title = 'Bookings';
 export const css = ['css/bookings.css'];
@@ -73,14 +76,24 @@ function listFor(state, filter, nowStampStr) {
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const isAsap = (b) => b.urgent && b.status !== 'done' && b.status !== 'cancelled';
 
-/** Urgent live requests first under "ASAP", then days with plain headings. new / upcoming run soonest first, the rest newest first. */
-function groupBookings(list, soonestFirst, today) {
+/**
+ * The list in the order Daniel works it: emergencies, then everything that needs him (ranked like Today: overdue and fresh enquiries first,
+ * then accepted quotes by value, then the rest by age), then days with plain headings. The days run soonest first for upcoming, newest first
+ * for the rest.
+ */
+function groupBookings(list, soonestFirst, today, ranked) {
   const dir = soonestFirst ? 1 : -1;
-  const sorted = list.slice().sort((a, b) => dir * (cmp(a.start, b.start) || cmp(a.createdAt, b.createdAt)));
   const groups = [];
-  const asap = sorted.filter(isAsap);
+  const asap = list.filter(isAsap).sort((a, b) => cmp(a.createdAt, b.createdAt));
   if (asap.length) groups.push({ key: 'asap', heading: 'ASAP', items: asap });
-  sorted.filter((b) => !isAsap(b)).forEach((b) => {
+  const needIds = new Set();
+  if (ranked) {
+    const need = ranked.filter((r) => !r.b.urgent && list.some((x) => x.id === r.b.id));
+    need.forEach((r) => needIds.add(r.b.id));
+    if (need.length) groups.push({ key: 'needs', heading: `Needs you · ${need.length}`, items: need.map((r) => r.b), needs: true });
+  }
+  const rest = list.filter((b) => !isAsap(b) && !needIds.has(b.id)).sort((a, b) => dir * (cmp(a.start, b.start) || cmp(a.createdAt, b.createdAt)));
+  rest.forEach((b) => {
     const day = stampDay(b.start);
     const last = groups[groups.length - 1];
     if (last && last.key === day) last.items.push(b);
@@ -110,41 +123,62 @@ function emptyFor(filter, query, stage, source) {
 
 // ---------- rows ----------
 
-function Row({ b, selected, linkQuery, item, sla }) {
-  const ids = bookingWindowIds(b);
-  const urgent = b.urgent;
-  const half = ids.length === 2;
-  const timeMain = urgent ? 'ASAP' : half ? bookingWindowLabel(b).replace(/^(Morning|Afternoon) · arrive /, '') : bookingWindowLabel(b);
-  const timeSub = urgent ? '' : half ? (ids[0] === 0 ? 'Morning' : 'Afternoon') : '';
+/**
+ * The decision fact of a row: the one thing Daniel needs to know to act, in words that wrap onto two lines
+ * ("Reply due in 23 h · Survey Thu 29 Oct, 10am–12", "Quote £1,394 not sent", "Install pencilled in, Tue 3 Nov").
+ */
+function factFor(b, item, sla) {
+  if (b.status === 'cancelled') return 'Cancelled';
+  if (b.urgent) return b.status === 'done' ? 'Emergency visit done' : 'Emergency · ASAP';
+  const money = (n) => gbp(n);
+  if (isEnquiry(b)) {
+    if (b.status === 'new') return [sla ? sla.label : '', `Survey ${isPencilled(b) ? 'pencilled ' : ''}${bookingWhen(b)}`].filter(Boolean).join(' · ');
+    if (b.status === 'confirmed' || b.status === 'on_the_way') return `Survey ${bookingWhen(b)}`;
+    return item && item.summary ? item.summary : 'Survey done';
+  }
+  const service = b.variantLabel ? `${b.serviceName} (${b.variantLabel})` : b.serviceName;
+  if (isQuotedInstall(b)) {
+    if (b.status === 'new') return `Install pencilled in, ${bookingWhen(b)}`;
+    if (b.status === 'confirmed' || b.status === 'on_the_way') return `Install ${bookingWhen(b)}`;
+    if (b.status === 'done') return b.paid ? 'Installed and paid' : `Installed, ${money(b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice)} to collect`;
+  }
+  if (b.status === 'done') return b.paid ? `${service}, paid` : `${service}, ${money(b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice)} to collect`;
+  return `${service}, ${bookingWhen(b)}`;
+}
+
+/**
+ * One booking: name and outward code, the decision fact (two lines, never cut), its ONE status pill and its money (nothing for a free survey).
+ * A row that needs Daniel (a new enquiry or an accepted quote) carries the same single verb button as Today. The stripe is urgency only:
+ * overdue is --danger, due soon is amber, anything else has none.
+ */
+function Row({ b, selected, linkQuery, item, sla, need }) {
   const outward = outwardCode(b.address.postcode);
   const unseen = !b.seenByOwner;
-  const service = b.variantLabel ? `${b.serviceName} (${b.variantLabel})` : b.serviceName;
-  // An enquiry with a quote shows the quote total (the survey itself is free); everything else keeps its own price.
-  const price = isEnquiry(b) && item && item.value > 0 ? gbp(item.value) : priceLabel(b);
-  // The status pill already says "New enquiry", "Quote accepted", "Done" or "Cancelled"; the stage pill only shows when it adds something.
-  const showStage = !!item && !(item.stage === 'enquiry' && b.status === 'new') && !(item.stage === 'accepted' && b.status === 'new') && item.stage !== 'done' && item.stage !== 'lost';
-  return html`<li class="bl-list__li">
-    <a class=${cx('bl-row', unseen && 'is-unseen', selected && 'is-selected', b.status === 'cancelled' && 'is-cancelled')}
+  // An enquiry with a quote shows the quote total (the survey itself is free, so it shows no money); everything else keeps its own price.
+  const price = isEnquiry(b) ? (item && item.value > 0 ? gbp(item.value) : '') : priceLabel(b);
+  const stageChip = !!item && isEnquiry(b) && b.status === 'done' && !['done', 'enquiry', 'survey'].includes(item.stage);
+  const stripe = need ? stripeOf(need) : '';
+  const outside = !!need && need.outside;
+  return html`<li class="bl-list__li" data-stripe=${stripe || undefined}>
+    <a class=${cx('bl-row', !price && 'bl-row--nomoney', selected && 'is-selected', b.status === 'cancelled' && 'is-cancelled')}
       href=${routeHref('bookings', { id: b.id }, linkQuery)} aria-current=${selected ? 'page' : undefined} data-testid=${`booking-row-${b.id}`}>
-      <span class="bl-row__time">
-        <span class="bl-row__time-main">${timeMain}</span>
-        ${timeSub ? html`<span class="bl-row__time-sub">${timeSub}</span>` : null}
-      </span>
       <span class="bl-row__main">
-        <span class="bl-row__name">${unseen ? html`<span class="bl-dot" aria-hidden="true"></span><span class="u-sr-only">New, unseen. </span>` : null}${b.customer.name}</span>
-        <span class="bl-row__svc">${service}${outward ? ` · ${outward}` : ''}</span>
+        <span class="bl-row__name">${b.customer.name}${outward ? html`<span class="bl-row__code">${` · ${outward}`}</span>` : null}${unseen && !need ? html`${' '}<span class="bl-new">New</span>` : null}</span>
+        <span class="bl-row__fact" data-testid=${`booking-row-fact-${b.id}`}>${factFor(b, item, sla)}</span>
       </span>
       <span class="bl-row__side">
-        <span class="bl-row__price" data-testid=${`booking-row-price-${b.id}`}>${price}</span>
+        ${price ? html`<span class="bl-row__price" data-testid=${`booking-row-price-${b.id}`}>${price}</span>` : null}
+        ${outside
+          ? html`<${OutsidePill} />`
+          : stageChip
+            ? html`<${StagePill} stage=${item.stage} compact data-testid=${`booking-row-stage-${b.id}`} />`
+            : html`<${BookingPill} booking=${b} compact single />`}
       </span>
-      <span class="bl-row__tags sh-meta">
-        <${BookingPill} booking=${b} compact />
-        ${item && showStage ? html`<${StagePill} stage=${item.stage} compact data-testid=${`booking-row-stage-${b.id}`} />` : null}
-        ${item ? html`<${LeadChip} booking=${{ utm: { source: item.leadSource } }} data-testid=${`booking-row-lead-${b.id}`} />` : null}
-        <${SlaChip} sla=${sla} />
-      </span>
-      ${b.status === 'new' ? html`<${AnswerChips} booking=${b} class="bl-row__chips" />` : null}
     </a>
+    ${need ? html`<div class="bl-row__acts">
+      <${NeedsYouActions} booking=${b} compact />
+      <${NeedsYouMenu} booking=${b} />
+    </div>` : null}
   </li>`;
 }
 
@@ -155,12 +189,18 @@ export default function BookingsView({ route }) {
   const nowDate = useNow(30000);
   const wide = useMediaQuery('(min-width: 1100px)');
   const controlsRef = useRef(null);
+  const filtersRef = useRef(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const id = route.params.id || '';
+  useScrollFade(filtersRef, '.bl-filters', [id, wide]);
   const stage = STAGE_IDS.includes(route.query.s) ? route.query.s : '';
   const source = LEAD_SOURCES.includes(route.query.src) ? route.query.src : '';
   // Picking a stage or source looks at everything (a survey that is done is not "upcoming"), so the status filter defaults to All then.
-  const defaultF = stage || source ? 'all' : 'upcoming';
+  // With nothing else chosen it opens on "Needs you" while something needs him, else on what is coming up.
+  const needsCount = selectNeedsYou(state).length;
+  const baseDefault = needsCount > 0 ? 'new' : 'upcoming';
+  const defaultF = stage || source ? 'all' : baseDefault;
   const f = FILTER_IDS.includes(route.query.f) ? route.query.f : defaultF;
   const urlQ = route.query.q || '';
   const [q, setQ] = useState(urlQ);
@@ -176,7 +216,7 @@ export default function BookingsView({ route }) {
   const stageMap = stageMapOf(pipeline);
 
   const counts = {
-    new: selectNeedsYou(state).length,
+    new: needsCount,
     upcoming: selectUpcoming(state, nowStampStr).length,
     owed: selectOwed(state).length,
     done: state.bookings.filter((b) => b.status === 'done').length,
@@ -191,18 +231,22 @@ export default function BookingsView({ route }) {
     base = base.filter((b) => rowIds.has(b.id));
   }
   if (source) base = base.filter((b) => { const it = stageMap.get(b.id); return it && it.leadSource === source; });
-  const groups = groupBookings(base, !query && (f === 'new' || f === 'upcoming'), today);
+  const ranked = needRows(selectNeedsYou(state), state, replyHours, nowStampStr);
+  const rankOf = new Map(ranked.map((r) => [r.b.id, r]));
+  const groups = groupBookings(base, !query && (f === 'new' || f === 'upcoming'), today, ranked);
+  const activeCount = (query ? 1 : 0) + (stage ? 1 : 0) + (source ? 1 : 0);
 
   // Filter and search live in the hash (replace, so Back does not step through every keystroke).
   const go = (next) => navigate(routeHref('bookings', id ? { id } : {}, {
     f: next.f === defaultOf(next) ? '' : next.f, s: next.s, src: next.src, q: next.q
   }), { replace: true });
-  const defaultOf = (next) => (next.s || next.src ? 'all' : 'upcoming');
+  const defaultOf = (next) => (next.s || next.src ? 'all' : baseDefault);
   const linkQuery = { f: f === defaultF ? '' : f, s: stage, src: source, q: query };
   const onSearch = (e) => { setQ(e.target.value); go({ f, s: stage, src: source, q: e.target.value.trim() }); };
   const onFilter = (value) => go({ f: value, s: stage, src: source, q: query });
   const onStage = (e) => go({ f, s: e.target.value, src: source, q: query });
   const onSource = (e) => go({ f, s: stage, src: e.target.value, q: query });
+  const clearAll = () => { setQ(''); go({ f, s: '', src: '', q: '' }); };
 
   // Bring the selected filter into view on mount and whenever the list pane comes back on screen.
   useEffect(() => {
@@ -228,10 +272,17 @@ export default function BookingsView({ route }) {
   const sourceCounts = {};
   stageMap.forEach((it, key) => { if (key === it.bookingId) sourceCounts[it.leadSource] = (sourceCounts[it.leadSource] || 0) + 1; });
   const sourceOptions = [{ value: '', label: 'All sources' }].concat(LEAD_SOURCES.map((s) => ({ value: s, label: `${LEAD_SOURCE_LABELS[s]} (${sourceCounts[s] || 0})` })));
+  const shownCount = groups.reduce((t, g) => t + g.items.length, 0);
+
+  // One filter icon in the header holds search, stage and source; the badge says how many are on.
+  const headerActions = html`${hasUnseen ? html`<${Button} variant="ghost" size="sm" onClick=${() => markAllSeen()} data-testid="bookings-mark-all-seen">Mark all seen<//>` : null}
+    <span class="bl-filter">
+      <${IconButton} icon="filter" label=${activeCount ? `Search and filters, ${activeCount} on` : 'Search and filters'} size="lg" class="bl-filter__btn" onClick=${() => setSheetOpen(true)} data-testid="bookings-filter-open" />
+      ${activeCount ? html`<span class="bl-filter__n" aria-hidden="true" data-testid="bookings-filter-count">${activeCount}</span>` : null}
+    </span>`;
 
   return html`<div class=${cx('db-page', 'bl-page', id && 'bl-page--detail')}>
-    ${showListHeader ? html`<${PageHeader} title="Bookings"
-      actions=${hasUnseen ? html`<${Button} variant="ghost" size="sm" onClick=${() => markAllSeen()} data-testid="bookings-mark-all-seen">Mark all seen<//>` : null} />` : null}
+    ${showListHeader ? html`<${PageHeader} title="Bookings" actions=${headerActions} />` : null}
     <div class=${cx('db-master-detail', id && 'db-master-detail--has-detail')}>
       <div class="db-master-detail__list bl-pane">
         <div class="bl-toggle">
@@ -244,19 +295,14 @@ export default function BookingsView({ route }) {
             onChange=${(v) => { if (v === 'customers') navigate('#/customers'); else if (v === 'pipeline') navigate(routeHref('pipeline')); }} />
         </div>
         <div class="bl-controls" ref=${controlsRef}>
-          <div class="bl-search">
-            <${Icon} name="search" size=${20} class="bl-search__icon" />
-            <${Input} id="bookings-search" type="search" value=${q} onInput=${onSearch} placeholder="Name, phone, postcode or ref"
-              aria-label="Search bookings" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="none"
-              spellcheck=${false} class="bl-search__input" data-testid="bookings-search" />
+          <div class="sf-wrap" ref=${filtersRef}>
+            <${Segmented} class="bl-filters sf-fade" ariaLabel="Filter bookings" options=${filterOptions} value=${f} onChange=${onFilter} />
           </div>
-          <${Segmented} class="bl-filters" ariaLabel="Filter bookings" options=${filterOptions} value=${f} onChange=${onFilter} />
-          <p class="bl-searching" role="status">${query ? 'Searching all bookings' : ''}</p>
         </div>
-        <div class="bl-refine">
-          <${Select} id="bookings-stage" aria-label="Filter by pipeline stage" value=${stage} options=${stageOptions} onChange=${onStage} data-testid="bookings-stage-filter" />
-          <${Select} id="bookings-source" aria-label="Filter by where the enquiry came from" value=${source} options=${sourceOptions} onChange=${onSource} data-testid="bookings-source-filter" />
-        </div>
+        ${activeCount ? html`<div class="bl-active" role="status">
+          <span class="bl-searching">${query ? 'Searching all bookings' : [stage ? `Stage: ${(stageOptions.find((o) => o.value === stage) || {}).label || stage}` : '', source ? `From ${LEAD_SOURCE_LABELS[source]}` : ''].filter(Boolean).join(' · ')}</span>
+          <${Button} variant="ghost" size="sm" onClick=${clearAll} data-testid="bookings-clear-filters">Clear<//>
+        </div>` : html`<p class="bl-searching" role="status"></p>`}
 
         <div class="bl-listwrap" data-testid="bookings-list">
           ${groups.length === 0
@@ -265,7 +311,7 @@ export default function BookingsView({ route }) {
               <h2 class="bl-group__title">${g.heading}</h2>
               <ul class="bl-list">
                 ${g.items.map((b) => html`<${Row} key=${b.id} b=${b} selected=${b.id === id} linkQuery=${linkQuery} item=${stageMap.get(b.id) || null}
-                  sla=${slaFor(b, replyHours, nowStampStr)} />`)}
+                  sla=${slaFor(b, replyHours, nowStampStr)} need=${g.needs ? rankOf.get(b.id) : null} />`)}
               </ul>
             </section>`)}
         </div>
@@ -276,5 +322,22 @@ export default function BookingsView({ route }) {
           : html`<${EmptyState} icon="inbox" title="Select a booking" body="Its details and actions show here." class="bl-detail-empty" />`}
       </div>
     </div>
+    <${Sheet} open=${sheetOpen} onClose=${() => setSheetOpen(false)} title="Search and filter" testid="bookings-filter-sheet"
+      footer=${html`<${Button} variant="primary" size="lg" block onClick=${() => setSheetOpen(false)} data-testid="bookings-filter-done">${`Show ${shownCount} ${shownCount === 1 ? 'booking' : 'bookings'}`}<//>`}>
+      <div class="ja-stack">
+        <${Field} label="Search" id="bookings-search">
+          <${Input} id="bookings-search" type="search" value=${q} onInput=${onSearch} placeholder="Name, phone, postcode or ref"
+            inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="none"
+            spellcheck=${false} class="bl-search__input" data-testid="bookings-search" />
+        <//>
+        <${Field} label="Pipeline stage" id="bookings-stage">
+          <${Select} id="bookings-stage" value=${stage} options=${stageOptions} onChange=${onStage} data-testid="bookings-stage-filter" />
+        <//>
+        <${Field} label="Where it came from" id="bookings-source">
+          <${Select} id="bookings-source" value=${source} options=${sourceOptions} onChange=${onSource} data-testid="bookings-source-filter" />
+        <//>
+        ${activeCount ? html`<${Button} variant="ghost" onClick=${clearAll} data-testid="bookings-filter-clear">Clear search and filters<//>` : null}
+      </div>
+    <//>
   </div>`;
 }

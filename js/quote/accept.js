@@ -1,27 +1,35 @@
 // js/quote/accept.js: the "Accept quote" flow: choose an install day from the real availability engine, check it, accept (with friendly recovery).
 // Owner: Q2 (customer quote page)
-import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Banner, Button, Icon, Sheet, cx } from '../ui/index.js';
-import { acceptQuote } from '../core/store.js';
 import { getBookableDays, getDaySlots, isSlotFree } from '../core/availability.js';
 import { todayKey } from '../core/clock.js';
-import { fmtDayLong } from '../core/dates.js';
+import { DAY_SHORT, MONTH_SHORT, fmtDayLong, parseDayKey } from '../core/dates.js';
 import { waLink } from '../core/messages.js';
 import { DateBox, StepFocus } from './parts.js';
+import { acceptQuote } from '../core/store.js';
 import { WINDOWS } from '../core/config.js';
-import { arriveText, dayHeading, money, partOfDay, slotShort } from './format.js';
+import { dayTitle, money, partOfDay, shownTotal, slotShort, soonestText, windowLine } from './format.js';
 
 const HORIZON_DAYS = 14;
 
-/** Days in the next two weeks that still have a free half-day, each with its two options (morning, afternoon). */
-export function freeInstallDays(state) {
+/**
+ * Days in the next two weeks that still have at least one free half-day, each with BOTH halves (morning, afternoon) and whether each
+ * is free. A half that is taken, blocked or closed is kept so the picker can show it as "Booked" instead of leaving a gap.
+ */
+export function installDays(state) {
   const days = getBookableDays(state, { count: HORIZON_DAYS, serviceOrBlocks: 'ev' });
   return days
-    .filter((day) => day.freeSlots > 0)
     .map((day) => ({
       date: day.date,
       slots: getDaySlots(state, day.date, 'ev').map((s) => ({ windowId: s.windowId, free: s.state === 'free' }))
-    }));
+    }))
+    .filter((day) => day.slots.some((s) => s.free));
+}
+
+/** The same days with ONLY their free halves. */
+export function freeInstallDays(state) {
+  return installDays(state).map((day) => ({ date: day.date, slots: day.slots.filter((s) => s.free) }));
 }
 
 /** A plain-English reading of a failed acceptQuote, with what to do about it. `close` means the sheet cannot help any more. */
@@ -37,18 +45,19 @@ export function explainFailure(result, brand) {
     case 'bad_transition':
       return { tone: 'danger', title: "This quote can't be accepted now", text: `It has been closed or is not ready yet. Please call ${owner} to sort it out.`, close: true };
     case 'service_unavailable':
-      return { tone: 'danger', title: "Install days can't be booked here right now", text: `Please call or WhatsApp ${owner} and he will find you a day.`, contact: true };
+      return { tone: 'danger', title: "Install days can't be booked here right now", text: `Please call or WhatsApp ${owner} to find a day.`, contact: true };
     case 'invalid':
       return { tone: 'warn', title: 'Please choose a day', text: 'Pick a morning or afternoon first.' };
     case 'storage_full':
       return { tone: 'danger', title: "Couldn't save this on your device", text: `Your device has no room left, so nothing was changed. Free up some space and try again, or call ${owner}.`, contact: true };
     case 'not_found':
-      return { tone: 'danger', title: "We can't find this quote on this device", text: `Nothing was changed. Please call ${owner}.`, contact: true };
+      return { tone: 'danger', title: "This quote is not on this device", text: `Nothing was changed. Please call ${owner}.`, contact: true };
     default:
       return { tone: 'danger', title: 'Something went wrong', text: `Nothing was changed. Please try again, or call ${owner}.`, contact: true };
   }
 }
 
+/** One half-day as a full-width button (a radio underneath, so the keyboard and screen readers get a proper group). A taken half reads "Booked". */
 function SlotOption({ date, windowId, free, selected, onPick }) {
   const label = partOfDay(windowId);
   return html`
@@ -57,11 +66,56 @@ function SlotOption({ date, windowId, free, selected, onPick }) {
         disabled=${!free} onChange=${() => onPick(date, windowId)} />
       <span class="q2-slot__main">
         <span class="q2-slot__part"><span class="u-sr-only">${fmtDayLong(date)}, </span>${label}</span>
-        <span class="q2-slot__arrive">${free ? `Arrive ${WINDOWS[windowId].label}` : 'Not available'}</span>
+        <span class="q2-slot__arrive">${free ? `Free · arrive ${WINDOWS[windowId].label}` : 'Booked'}</span>
       </span>
       <span class="q2-slot__tick" aria-hidden="true"><${Icon} name="check" size=${18} /></span>
     </label>
   `;
+}
+
+const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** What a screen reader hears for a day chip: 'Thursday 29 October, morning and afternoon free'. */
+function chipLabel(day) {
+  const free = day.slots.filter((s) => s.free).map((s) => partOfDay(s.windowId).toLowerCase());
+  return `${fmtDayLong(day.date)}, ${free.join(' and ')} free`;
+}
+
+/**
+ * The days as one horizontal strip of chips (weekday, date, and AM and PM marks: solid when free, crossed out when booked), with the month
+ * written where it changes. One radio group: choosing a chip chooses the day and shows its two halves underneath. Until a chip is tapped
+ * NOTHING in the strip looks chosen.
+ */
+function DayStrip({ days, viewKey, pickDate, onView }) {
+  const ref = useRef(null);
+  // Keep the viewed chip in the middle of the strip (a chip chosen by "Soonest available" may start off screen).
+  useLayoutEffect(() => {
+    const strip = ref.current;
+    const chip = strip && strip.querySelector('.q2-chip.is-viewed');
+    if (!strip || !chip) return;
+    const left = Math.max(0, chip.offsetLeft - (strip.clientWidth - chip.offsetWidth) / 2);
+    if (typeof strip.scrollTo === 'function') strip.scrollTo({ left, behavior: reducedMotion() ? 'auto' : 'smooth' });
+    else strip.scrollLeft = left;
+  }, [viewKey]);
+  let month = -1;
+  const items = [];
+  for (const day of days) {
+    const date = parseDayKey(day.date);
+    if (date.getMonth() !== month) {
+      month = date.getMonth();
+      items.push(html`<span class="q2-strip__month" key=${`m${day.date}`} aria-hidden="true">${MONTH_SHORT[month]}</span>`);
+    }
+    const viewed = day.date === viewKey;
+    items.push(html`
+      <label class=${cx('q2-chip', viewed && 'is-viewed', pickDate === day.date && 'is-picked')} key=${day.date} data-testid=${`q2-day-${day.date}`}>
+        <input class="q2-chip__input" type="radio" name="q2-day" value=${day.date} checked=${viewed} onChange=${() => onView(day.date)} />
+        <span class="u-sr-only">${chipLabel(day)}</span>
+        <span class="q2-chip__dow" aria-hidden="true">${DAY_SHORT[date.getDay()]}</span>
+        <span class="q2-chip__num" aria-hidden="true">${date.getDate()}</span>
+        <span class="q2-chip__halves" aria-hidden="true">${day.slots.map((s) => html`<i class=${cx('q2-chip__half', s.free ? 'is-free' : 'is-booked')} key=${s.windowId}>${partOfDay(s.windowId) === 'Morning' ? 'AM' : 'PM'}</i>`)}</span>
+      </label>`);
+  }
+  return html`<div class="q2-strip" role="radiogroup" aria-label="Choose a day" data-testid="q2-strip" ref=${ref}>${items}</div>`;
 }
 
 function Problem({ problem, brand, onPickAlt }) {
@@ -80,30 +134,41 @@ function Problem({ problem, brand, onPickAlt }) {
 }
 
 /**
- * The accept flow in a sheet. Step 1 lists the free half-days (live from the availability engine, so a day taken in the meantime
- * disappears), step 2 shows what is being accepted. `onAccepted(result)` runs once the store has accepted the quote.
+ * The accept flow in a sheet. Step 1 is a strip of the free days (live from the availability engine, so a day taken in the meantime
+ * disappears) with the two halves of the chosen day underneath; step 2 shows what is being accepted, with Accept right under the
+ * agreement. `onAccepted(result)` runs once the store has accepted the quote.
  */
 export function AcceptFlow({ open, state, d, brand, onClose, onAccepted }) {
   const [step, setStep] = useState('pick');
   const [pick, setPick] = useState(null);
+  const [viewDay, setViewDay] = useState('');
   const [problem, setProblem] = useState(null);
   const working = useRef(false);
 
-  useEffect(() => {
-    if (open) { setStep('pick'); setPick(null); setProblem(null); working.current = false; }
+  // A layout effect, not a passive one: the reset must land before the first key press or tap, or it could wipe a choice made that fast.
+  useLayoutEffect(() => {
+    if (open) { setStep('pick'); setPick(null); setViewDay(''); setProblem(null); working.current = false; }
   }, [open]);
 
   if (!open) return html`<${Sheet} open=${false} title="Choose your install day" />`;
 
-  const days = freeInstallDays(state);
+  const days = installDays(state);
   const pickFree = !!pick && isSlotFree(state, { date: pick.date, windowId: pick.windowId, blocks: 2 });
   const active = pickFree ? pick : null;
   const gone = !!pick && !pickFree;
   const where = step === 'confirm' && active ? 'confirm' : 'pick';
   const shown = problem || (gone ? { tone: 'warn', title: 'That day was just taken', text: 'Please choose another.' } : null);
+  const owner = brand.ownerFirst;
 
-  const choose = (date, windowId) => { setPick({ date, windowId }); setProblem(null); };
-  const quickPick = (date, windowId) => { setPick({ date, windowId }); setProblem(null); setStep('confirm'); };
+  const hasDay = (key) => !!key && days.some((day) => day.date === key);
+  // Nothing is chosen (or even shown) until the customer taps a day: no day is pre-selected.
+  const viewKey = hasDay(viewDay) ? viewDay : (active && hasDay(active.date) ? active.date : '');
+  const viewed = days.find((day) => day.date === viewKey) || null;
+  const soonest = days[0] ? { date: days[0].date, windowId: days[0].slots.find((slot) => slot.free).windowId } : null;
+  const soonestChosen = !!active && !!soonest && active.date === soonest.date && active.windowId === soonest.windowId;
+
+  const choose = (date, windowId) => { setPick({ date, windowId }); setViewDay(date); setProblem(null); };
+  const quickPick = (date, windowId) => { setPick({ date, windowId }); setViewDay(date); setProblem(null); setStep('confirm'); };
 
   const accept = () => {
     if (working.current || !active) return;
@@ -124,11 +189,11 @@ export function AcceptFlow({ open, state, d, brand, onClose, onAccepted }) {
     if (result && result.reason === 'slot_taken') setPick(null);
   };
 
-  const helpText = `Hi ${brand.ownerFirst}, it's ${d.quote.customerName}. I'd like to accept my quote ${d.quote.id} but I can't see a free install day. Could you suggest one?`;
+  const helpText = `Hi ${owner}, it's ${d.quote.customerName}. I'd like to accept my quote ${d.quote.id} but I can't see a free install day. Could you suggest one?`;
   const title = where === 'confirm' ? 'Check and accept' : 'Choose your install day';
 
   let body;
-  let footer;
+  let footer = null;
   if (where === 'confirm') {
     body = html`
       <${StepFocus} key="confirm" as="h3" class="q2-sheet__h" testid="q2-confirm-heading">Your install day<//>
@@ -136,47 +201,57 @@ export function AcceptFlow({ open, state, d, brand, onClose, onAccepted }) {
         <${DateBox} dayKey=${active.date} />
         <div class="q2-confirm__when">
           <p class="q2-confirm__day">${fmtDayLong(active.date)}</p>
-          <p class="q2-confirm__part">${partOfDay(active.windowId)}, arriving ${arriveText(active.windowId)}</p>
+          <p class="q2-confirm__part">${windowLine(active.windowId)}</p>
+          <button type="button" class="q2-changebtn" onClick=${() => setStep('pick')} data-testid="q2-slot-change"><${Icon} name="pencil" size=${16} /><span>Change</span></button>
         </div>
-        <button type="button" class="q2-linkbtn" onClick=${() => setStep('pick')} data-testid="q2-slot-change">Change</button>
       </div>
       <dl class="q2-confirm__rows">
         <div><dt>Quote</dt><dd class="u-mono">${d.quote.id}</dd></div>
         ${d.quote.brand ? html`<div><dt>Charger</dt><dd>${d.quote.brand}</dd></div>` : null}
-        <div class="q2-confirm__sum"><dt>Total</dt><dd>${money(d.total)}</dd></div>
+        <div class="q2-confirm__sum"><dt>Total</dt><dd>${money(shownTotal(d))}</dd></div>
       </dl>
-      <p class="q2-confirm__fine">By accepting you agree to the prices and notes on this quote. Your day is pencilled in until ${brand.ownerFirst} confirms it with you. No payment is taken on this page.</p>
-      <${Problem} problem=${shown} brand=${brand} onPickAlt=${quickPick} />`;
-    footer = html`
+      <p class="q2-confirm__fine">By accepting you agree to the prices and notes on this quote. ${owner} will confirm your install day with you. Nothing is paid on this page.</p>
+      <${Problem} problem=${shown} brand=${brand} onPickAlt=${quickPick} />
       <div class="q2-sheet__actions" key="foot-confirm">
-        <${Button} variant="secondary" size="lg" icon="arrow-left" onClick=${() => setStep('pick')} data-testid="q2-slot-back" aria-label="Back to the list of days"><span class="q2-back">Back</span><//>
+        <${Button} variant="secondary" size="lg" icon="arrow-left" onClick=${() => setStep('pick')} data-testid="q2-slot-back" aria-label="Back to the choice of day"><span class="q2-back">Back</span><//>
         <${Button} variant="primary" size="lg" block icon="check" onClick=${accept} data-testid="q2-slot-confirm">Accept quote<//>
       </div>`;
   } else {
     body = html`
       <${StepFocus} key="pick" class="q2-sheet__lead" testid="q2-pick-heading">
-        Installation takes about half a day. Pick a morning or afternoon that suits you, and ${brand.ownerFirst} will confirm it.
+        Choose a day and a time of day that suit you. ${owner} will confirm it with you.
       <//>
       <${Problem} problem=${shown} brand=${brand} onPickAlt=${quickPick} />
       ${days.length
     ? html`
-        <fieldset class="q2-slots" data-testid="q2-slots">
-          <legend class="u-sr-only">Install day</legend>
-          ${days.map((day) => html`
-            <div class="q2-day" key=${day.date} role="group" aria-labelledby=${`q2-day-${day.date}`}>
-              <h3 class="q2-day__head" id=${`q2-day-${day.date}`}>${dayHeading(day.date, todayKey())}</h3>
-              <div class="q2-day__opts">
-                ${day.slots.map((s) => html`<${SlotOption} key=${s.windowId} date=${day.date} windowId=${s.windowId} free=${s.free}
-                  selected=${!!active && active.date === day.date && active.windowId === s.windowId} onPick=${choose} />`)}
-              </div>
-            </div>`)}
-        </fieldset>
-        <p class="q2-sheet__small">Showing the next two weeks. Days that are full or closed are left out.</p>`
+        <button type="button" class=${cx('q2-soonest', soonestChosen && 'is-selected')} onClick=${() => choose(soonest.date, soonest.windowId)}
+          aria-pressed=${soonestChosen ? 'true' : 'false'} data-testid="q2-soonest">
+          <span class="q2-soonest__icon" aria-hidden="true"><${Icon} name=${soonestChosen ? 'check' : 'zap'} size=${20} /></span>
+          <span class="q2-soonest__text">
+            <span class="q2-soonest__k">Soonest available</span>
+            <span class="q2-soonest__v">${soonestText(soonest.date, soonest.windowId)}</span>
+          </span>
+          <span class="q2-soonest__go" aria-hidden="true">${soonestChosen ? 'Chosen' : 'Choose'}</span>
+        </button>
+        <p class="q2-pickstep" data-testid="q2-pickstep-day"><span class="q2-pickstep__n" aria-hidden="true">1</span><span>Choose a day</span></p>
+        <${DayStrip} days=${days} viewKey=${viewKey} pickDate=${active ? active.date : ''} onView=${setViewDay} />
+        ${viewed
+    ? html`
+        <div class="q2-slots" data-testid="q2-slots" role="radiogroup" aria-labelledby="q2-day-head">
+          <p class="q2-pickstep" data-testid="q2-pickstep-half"><span class="q2-pickstep__n" aria-hidden="true">2</span><span>Choose morning or afternoon</span></p>
+          <h3 class="q2-day__head" id="q2-day-head" data-testid="q2-day-head">${dayTitle(viewed.date, todayKey())}</h3>
+          <div class="q2-day__opts">
+            ${viewed.slots.map((slot) => html`<${SlotOption} key=${`${viewed.date}-${slot.windowId}`} date=${viewed.date} windowId=${slot.windowId} free=${slot.free}
+              selected=${!!active && active.date === viewed.date && active.windowId === slot.windowId} onPick=${choose} />`)}
+          </div>
+        </div>`
+    : html`<p class="q2-slots__hint" data-testid="q2-slots-hint">Tap a day above to see its morning and afternoon.</p>`}
+        <p class="q2-sheet__small">Showing the next two weeks. AM is morning and PM is afternoon: a solid mark is free, a crossed-out mark is booked.</p>`
     : html`
         <div class="q2-empty" data-testid="q2-slot-empty">
           <${Icon} name="calendar-x" size=${40} />
           <p class="q2-empty__title">No free install days in the next two weeks</p>
-          <p class="q2-empty__text">${brand.ownerFirst} can usually find you a day. Call or WhatsApp and he will sort it out.</p>
+          <p class="q2-empty__text">${owner} can usually find you a day. Call or WhatsApp and it will be sorted out.</p>
           <div class="q2-row q2-row--even">
             <${Button} variant="primary" icon="phone" href=${brand.telHref}>Call ${brand.phone}<//>
             <${Button} variant="secondary" icon="message-circle" href=${waLink(brand.phone, helpText, brand.demoPhoneDigits)}>WhatsApp<//>
@@ -184,11 +259,12 @@ export function AcceptFlow({ open, state, d, brand, onClose, onAccepted }) {
         </div>`}`;
     footer = html`
       <div class="q2-sheet__foot" key="foot-pick">
-        <p class="q2-sheet__sum" data-testid="q2-slot-summary" aria-live="polite">${active ? slotShort(active.date, active.windowId) : 'Choose a day to continue'}</p>
+        <p class="q2-sheet__sum" data-testid="q2-slot-summary" aria-live="polite">${active ? slotShort(active.date, active.windowId) : (viewed ? 'Choose morning or afternoon' : 'Choose a day')}</p>
         <${Button} variant="primary" size="lg" block iconRight="arrow-right" disabled=${!active} onClick=${() => setStep('confirm')} data-testid="q2-slot-continue">Continue<//>
       </div>`;
   }
 
-  return html`<${Sheet} open=${true} size="full" title=${title} onClose=${() => onClose(null)} footer=${footer}
+  // Both steps are short, so the sheet fits its content: no void between the text and the buttons (Accept sits right under the agreement).
+  return html`<${Sheet} open=${true} size="auto" title=${title} onClose=${() => onClose(null)} footer=${footer}
     initialFocus="[data-q2-focus]" testid="q2-accept-sheet">${body}<//>`;
 }

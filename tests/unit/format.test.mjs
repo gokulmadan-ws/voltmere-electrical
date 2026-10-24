@@ -16,7 +16,14 @@ test('gbp', () => {
   assert.equal(gbp(0), '£0');
   assert.equal(gbp(-5), '-£5');
   assert.equal(gbp(-12.5), '-£12.50');
-  assert.equal(gbp(1099.99), '£1099.99');
+  assert.equal(gbp(1099.99), '£1,099.99');
+  assert.equal(gbp(14366), '£14,366');
+  assert.equal(gbp(1394), '£1,394');
+  assert.equal(gbp(999), '£999');
+  assert.equal(gbp(1000000), '£1,000,000');
+  assert.equal(gbp(-26429), '-£26,429');
+  assert.equal(gbp(NaN), '£0');
+  assert.equal(gbp(1234.5), '£1,234.50');
   assert.equal(gbp(0.1 + 0.2), '£0.30');
 });
 

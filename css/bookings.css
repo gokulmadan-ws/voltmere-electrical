@@ -38,10 +38,23 @@
 .ja-secondary { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin-top: var(--space-1); }
 .ja-secondary__btn.is-danger, .ja-needs__decline { color: var(--danger-text); }
 
-.ja-needs { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.ja-needs { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .ja-needs__contact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }
 .ja-needs__contact .ui-btn { padding-inline: var(--space-2); white-space: nowrap; }
 .ja-needs__decline { align-self: stretch; }
+/* One red primary with Call and WhatsApp as 48px icon buttons beside it. */
+.ja-needs__row { display: flex; align-items: stretch; gap: var(--space-2); min-width: 0; }
+.ja-needs__primary { flex: 1 1 0; min-width: 0; min-height: 48px; padding-inline: var(--space-3); white-space: nowrap; }
+.ja-needs__primary .ui-btn__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ja-needs__primary--compact { flex: none; min-height: 44px; padding-inline: var(--space-4); }
+.ja-iconbtn { flex: none; width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 0; }
+/* A new enquiry: Call and WhatsApp are the two main buttons, Confirm survey sits quietly underneath. */
+.ja-needs__pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); min-width: 0; }
+.ja-needs__big { min-height: 52px; padding-inline: var(--space-2); font-weight: var(--fw-bold); white-space: nowrap; }
+.ja-needs__confirm { width: 100%; min-height: 44px; }
+.ja-needs__confirm2 { align-self: flex-start; margin-left: calc(var(--space-2) * -1); color: var(--text-2); font-weight: var(--fw-semibold); }
+.ja-needs__more { flex: none; }
+.ja-bar--compact { flex: 1 1 auto; gap: var(--space-2); }
 
 /* Sheet content (sheets live in #overlay-root, outside #app). */
 .ja-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
@@ -101,24 +114,48 @@
 .ja-more__item.is-danger { color: var(--danger-text); }
 .ja-more__label { min-width: 0; overflow-wrap: anywhere; }
 
+/* The amber "Outside NI" pill (Today and Bookings): warnings are amber, never the brand red. */
+.td-pill-amber {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; min-height: 24px; padding: 1px 8px 1px 6px; box-sizing: border-box;
+  border: 1.5px solid var(--dot-few); border-radius: var(--r-pill);
+  background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg);
+  font-size: var(--fs-12); font-weight: var(--fw-bold); line-height: 1.2; white-space: nowrap;
+}
+.td-pill-amber svg { flex: none; }
+
 /* ================= bl-: bookings list ================= */
 .bl-page .ui-page-header { margin-bottom: var(--space-3); }
 .bl-pane { min-width: 0; }
-.bl-toggle { margin-bottom: var(--space-3); }
+.bl-toggle { margin-bottom: var(--space-2); }
 
-/* Only the search + filter block is sticky, just under the sticky dashboard header; not on short screens (13.5). */
+/* The header's one filter icon (search, stage and source live in its sheet); a count says how many are on. */
+.bl-filter { position: relative; display: inline-flex; }
+.bl-filter__btn.ui-icon-btn { border: 1.5px solid var(--field-border); background: var(--surface); }
+.bl-filter__n {
+  position: absolute; top: -4px; right: -4px; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 5px; border-radius: var(--r-pill);
+  background: var(--cta); color: var(--cta-ink); font-size: var(--fs-12); font-weight: var(--fw-heavy); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.bl-active { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--tap); }
+
+/* Only the status chip row is sticky, just under the sticky dashboard header; not on short screens (13.5). */
 .bl-controls {
   position: sticky; top: calc(var(--h-header) + var(--safe-top)); z-index: var(--z-raised);
   display: flex; flex-direction: column; gap: var(--space-2);
   margin-inline: calc(max(var(--gutter), var(--safe-left)) * -1) calc(max(var(--gutter), var(--safe-right)) * -1);
-  padding: var(--space-2) max(var(--gutter), var(--safe-right)) var(--space-2) max(var(--gutter), var(--safe-left));
+  padding: var(--space-1) max(var(--gutter), var(--safe-right)) var(--space-1) max(var(--gutter), var(--safe-left));
   background: var(--bg);
 }
 @media (max-height: 599px) { .bl-controls { position: static; } }
-.bl-search { position: relative; min-width: 0; }
-.bl-search__icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
-.bl-search__input { padding-left: 44px; }
 .bl-filters { width: 100%; }
+
+/* Sideways scrollers (the filter pills here, the filters in Messages): snap to a pill, and fade the edge that has more behind it, so a
+   clipped last pill reads as "scroll this way". useScrollFade (shared/scroll.js) keeps data-fade-start / data-fade-end up to date. */
+.sf-fade { scroll-snap-type: x proximity; scroll-padding-inline: 8px; -webkit-overflow-scrolling: touch; }
+.sf-fade > * { scroll-snap-align: start; }
+.sf-fade[data-fade-end="1"] { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent); }
+.sf-fade[data-fade-start="1"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px); mask-image: linear-gradient(90deg, transparent, #000 44px); }
+.sf-fade[data-fade-start="1"][data-fade-end="1"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent); }
 .bl-count {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   min-width: 22px; height: 22px; margin-left: 6px; padding: 0 6px; border-radius: var(--r-pill);
@@ -129,7 +166,10 @@
 .bl-searching { margin: 0; color: var(--text-2); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
 .bl-searching:empty { display: none; }
 
+/* The list leaves room under the last row for the + button, so it never covers a price at scroll end. */
+.bl-listwrap { padding-bottom: calc(var(--h-fab) + var(--space-5)); }
 .bl-group { margin-top: var(--space-4); min-width: 0; }
+.bl-group:first-child { margin-top: var(--space-2); }
 .bl-group__title {
   margin: 0 0 var(--space-2) var(--space-1);
   font-family: var(--font-body); font-size: var(--fs-14); font-weight: var(--fw-bold); line-height: 1.3;
@@ -141,41 +181,44 @@
   background: var(--surface); box-shadow: var(--shadow-1);
 }
 .bl-list__li + .bl-list__li { border-top: 1px solid var(--line); }
+/* THE stripe rule: urgency only (overdue --danger, due soon amber, otherwise none), an inset shadow so it follows the corner radius. */
+.bl-list__li[data-stripe="danger"] { box-shadow: inset 4px 0 0 var(--danger); }
+.bl-list__li[data-stripe="soon"] { box-shadow: inset 4px 0 0 var(--dot-few); }
+/* A row: the name and the decision fact on the left (two lines, never cut), the money over the one status pill on the right. With no money
+   (a free survey) the fact runs the full width under the pill. */
 .bl-row {
-  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
-  min-height: 72px; padding: var(--space-3) var(--space-4);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name side" "fact side"; align-items: start; gap: 2px var(--space-3);
+  min-height: 72px; padding: 12px var(--space-3) 12px var(--space-4);
   color: inherit; text-decoration: none;
 }
+.bl-row--nomoney { grid-template-areas: "name side" "fact fact"; }
 .bl-row:active { background: var(--surface-2); }
-/* The answer chips run under the whole row, not inside the narrow name column. */
-.bl-row .bl-row__chips { grid-column: 1 / -1; margin-top: calc(var(--space-1) * -1); }
-.bl-row .bl-row__tags { grid-column: 1 / -1; margin-top: calc(var(--space-1) * -1); }
-.bl-refine { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-1); }
-.bl-refine .ui-select { min-width: 0; text-overflow: ellipsis; }
 .bl-row.is-selected { background: var(--cta-soft); }
-.bl-row__time { display: flex; flex-direction: column; min-width: 0; white-space: nowrap; }
-.bl-row__time-main { font-size: var(--fs-14); font-weight: var(--fw-bold); line-height: 1.25; font-variant-numeric: tabular-nums; }
-.bl-row__time-sub { font-size: var(--fs-12); font-weight: var(--fw-semibold); line-height: 1.25; color: var(--text-2); }
-.bl-row__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.bl-row__name { display: block; font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
-.bl-row__svc { display: block; font-size: var(--fs-14); line-height: 1.35; color: var(--text-2); overflow-wrap: anywhere; }
+.bl-row__main { display: contents; }
+.bl-row__name { grid-area: name; display: block; font-size: var(--fs-16); font-weight: var(--fw-bold); line-height: 1.3; overflow-wrap: anywhere; }
+.bl-row__code { color: var(--text-2); font-weight: var(--fw-semibold); }
+.bl-new { display: inline-flex; align-items: center; padding: 0 6px; border-radius: var(--r-pill); background: var(--cta-soft); box-shadow: inset 0 0 0 1px var(--cta-text); color: var(--cta-text); font-size: var(--fs-12); font-weight: var(--fw-heavy); line-height: 1.5; vertical-align: 1px; }
+.bl-row__fact { grid-area: fact; display: block; font-size: var(--fs-14); line-height: 1.4; color: var(--text-2); overflow-wrap: anywhere; }
 .bl-row.is-cancelled .bl-row__name { text-decoration: line-through; color: var(--text-2); }
-.bl-row__side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; }
+.bl-row__side { grid-area: side; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; }
 .bl-row__price { font-size: var(--fs-16); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
 .bl-row__side .ui-pill-group { flex-direction: column; align-items: flex-end; gap: 4px; }
-.bl-dot {
-  display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%;
-  background: var(--status-new-fg);
-}
+.bl-row__acts { display: flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-2) 10px var(--space-4); }
+.bl-row__acts .ja-needs__primary--compact { flex: 1 1 auto; min-width: 0; }
+.bl-row__acts .ui-btn { min-height: var(--tap); }
 @media (max-width: 374px) {
-  .bl-row { grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--space-2); padding-inline: var(--space-3); }
+  .bl-row { padding-inline: var(--space-3); }
 }
 
 /* ================= bd-: booking detail ================= */
 .bd { min-width: 0; }
 .bd-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .bd-stack > * { min-width: 0; }
-.bd-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.bd-status { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.bd-meta { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.4; overflow-wrap: anywhere; }
+.bd-meta__sla { font-weight: var(--fw-bold); }
+.bd-meta__sla--overdue { color: var(--danger-text); }
+.bd-meta__sla--due_soon { color: var(--status-on-the-way-fg); }
 .bd-muted { color: var(--text-2); font-size: var(--fs-14); }
 .bd-card { display: flex; flex-direction: column; gap: var(--space-4); }
 .bd-card__title { margin: 0; font-size: var(--fs-20); }
@@ -188,15 +231,12 @@
 .bd-who__name { margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); line-height: 1.2; overflow-wrap: anywhere; }
 .bd-who__phone { margin: 0; color: var(--text-2); font-size: var(--fs-15); }
 .bd-who__tag { margin-top: var(--space-1); }
-.bd-contact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-.bd-contact .ui-btn { min-height: 48px; padding: 8px var(--space-2); font-size: var(--fs-15); font-weight: var(--fw-bold); }
+/* Call and WhatsApp are the two obvious buttons; Text, Email and Maps are behind the "..." beside them. */
+.bd-contact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--h-btn); gap: var(--space-2); }
+.bd-contact .ui-btn { min-height: 52px; padding: 8px var(--space-2); font-size: var(--fs-16); font-weight: var(--fw-bold); }
 .bd-contact .ui-btn__label { white-space: nowrap; }
-.bd-contact > :nth-child(odd):last-child { grid-column: 1 / -1; }
-@media (min-width: 480px) {
-  .bd-contact { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
-  .bd-contact .ui-btn { flex-direction: column; gap: 4px; min-height: 60px; padding: 8px 4px; font-size: var(--fs-14); }
-  .bd-contact > :nth-child(odd):last-child { grid-column: auto; }
-}
+.bd-contact__more.ui-icon-btn { width: var(--h-btn); height: 52px; border: 1.5px solid var(--field-border); border-radius: var(--r-pill); background: var(--surface); }
+.bd-who__answers { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; overflow-wrap: anywhere; }
 .bd-address { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-2) var(--space-3); }
 .bd-address__icon { margin-top: 2px; color: var(--text-2); }
 .bd-address__text { margin: 0; font-size: var(--fs-16); overflow-wrap: anywhere; }
@@ -236,9 +276,42 @@
 .bd-quick .ui-btn { min-height: 48px; padding-inline: var(--space-2); }
 
 .bd-actions .ja-bar { flex: 1 1 auto; }
-.bd-embedded-head { margin-bottom: var(--space-4); }
-.bd-embedded-head__eyebrow { margin: 0 0 2px; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.bd-embedded-head__title { margin: 0; font-size: var(--fs-26); }
+/* From 1024px the action sits in the panel itself (a card above the details), not in a bar fixed over the cards. */
+.bd-actions--inline { padding: var(--space-3); border: 1.5px solid var(--line); border-radius: var(--r-lg); background: var(--card-bg); box-shadow: var(--shadow-1); }
+/* The header: a bar with the way back, the booking ref with its one status pill and Call / WhatsApp, then the customer's name as the h1. */
+.bd-head { margin: 0 0 var(--space-3); min-width: 0; }
+.bd-head__bar { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap); min-width: 0; }
+.bd-head__bar .ui-page-header__back { flex: none; margin: 0 0 0 -12px; }
+.bd-head__eyebrow { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin: 0; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.bd-head__title { margin: 2px 0 0; font-family: var(--font-display); font-size: var(--fs-26); font-weight: var(--fw-heavy); line-height: 1.15; letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; }
+.bd-head .ui-pill, .bd-embedded-head .ui-pill { text-transform: none; letter-spacing: 0; }
+.bd-head__ref { letter-spacing: 0; }
+.bd-head__actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.bd-head__btn.ui-icon-btn { border: 1.5px solid var(--field-border); background: var(--surface); }
+.bd-embedded-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+.bd-embedded-head__main { flex: 1 1 0; min-width: 0; }
+.bd-embedded-head__eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2); margin: 0 0 4px; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.bd-embedded-head__title { margin: 0; font-size: var(--fs-26); overflow-wrap: anywhere; }
+
+/* First card: where the request came from, who, the visit (pencilled in or not) and the address. */
+.bd-first { gap: var(--space-3); }
+.bd-first .bd-status { display: block; }
+.bd-visit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; padding: var(--space-3); border: 1.5px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); }
+.bd-visit.is-pencilled { border-color: var(--dot-few); background: var(--status-on-the-way-bg); color: var(--status-on-the-way-fg); }
+.bd-visit__icon { margin-top: 1px; }
+.bd-visit__text { min-width: 0; }
+.bd-visit__label { margin: 0; font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; opacity: 0.9; }
+.bd-visit__when { margin: 2px 0 0; font-size: var(--fs-17); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
+.bd-quote--later { gap: var(--space-2); }
+.bd-quote--later .bd-quote__none { font-size: var(--fs-15); color: var(--text-2); font-family: var(--font-body); font-weight: var(--fw-semibold); }
+.bd-visit__note { margin: 4px 0 0; font-size: var(--fs-14); line-height: 1.4; }
+.bd-quote__link { display: inline-flex; align-items: center; min-height: var(--tap); font-weight: var(--fw-bold); }
+
+/* Collapsed groups: the full history, and this booking's messages. */
+.bd-history { margin-top: var(--space-3); border-width: 1px; box-shadow: none; }
+.bd-messages .ui-disclosure__body { padding-top: 0; }
+.bd-messages .bd-msgs { margin: 0 calc(var(--space-4) * -1); }
+.bd-messages .bd-seeall { display: inline-flex; align-items: center; min-height: var(--tap); }
 
 /* ================= 1100px and up: list left, detail right ================= */
 @media (min-width: 1100px) {
@@ -298,3 +371,14 @@
 .bd-photos p.bd-muted { display: flex; align-items: flex-start; gap: 6px; margin: 0; line-height: 1.45; }
 .bd-photos p.bd-muted svg { flex: none; margin-top: 2px; color: var(--ok-text); }
 .bd-msgs__meta svg { vertical-align: -2px; }
+
+/* ================= cu-: Customers (list tweaks on top of insights.css) ================= */
+/* Avatars here are plain neutral discs with a visible edge: never the brand red, and never invisible on the dark card. */
+.cu-row .cu-avatar.ui-avatar, .cu-detail .cu-avatar.ui-avatar { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1.5px var(--field-border); }
+.cu-row { align-items: flex-start; }
+.cu-row .cu-avatar { margin-top: 2px; }
+.cu-row__side { gap: 1px; padding-top: 2px; }
+.cu-row__valuelabel { font-size: var(--fs-12); font-weight: var(--fw-semibold); color: var(--text-3); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.cu-row__value.is-quiet { color: var(--text-2); font-family: var(--font-body); font-size: var(--fs-14); font-weight: var(--fw-semibold); }
+.cu-row__chevron { align-self: center; }
+.cu-quiet { margin: 0; padding: var(--space-3) var(--space-4); border: 1.5px dashed var(--line); border-radius: var(--r-md); color: var(--text-2); font-size: var(--fs-15); line-height: 1.45; }

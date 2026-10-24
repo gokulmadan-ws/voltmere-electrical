@@ -1,7 +1,7 @@
 // js/core/availability.js: the window and slot engine (four fixed two-hour windows, half-day jobs)
 // Owner: WP1
 import { now as clockNow } from './clock.js';
-import { WINDOWS, HALF_DAY_STARTS } from './config.js';
+import { WINDOWS, HALF_DAY_STARTS, SURVEY_MIN_LEAD_HOURS, SURVEY_SERVICE_ID } from './config.js';
 import {
   addDays, addMinutes, fmtDayShort, fmtRelativeDay, isDayKey, makeStamp, stampDay, stampTime, toStamp, weekdayOf, DAY_SHORT
 } from './dates.js';
@@ -23,9 +23,20 @@ function ctxFor(state, opts = {}) {
     lastCustomerDay: addDays(today, maxDaysAhead - 1),
     ownerMode: !!opts.ownerMode,
     ignoreBookingId: opts.ignoreBookingId || null,
+    // The notice a window needs: settings.leadMinutes, or `opts.minLeadMinutes` when that is longer (the free survey asks for 24 hours).
+    leadMinutes: Number.isFinite(opts.minLeadMinutes) && opts.minLeadMinutes > settings.leadMinutes ? opts.minLeadMinutes : settings.leadMinutes,
     bookings: Array.isArray(state.bookings) ? state.bookings : [],
     blocks: Array.isArray(state.blocks) ? state.blocks : []
   };
+}
+
+/**
+ * Options for searching slots for a service: the free survey (ev_quote) is never offered or pencilled within SURVEY_MIN_LEAD_HOURS of
+ * "now" (a caller can still pass its own `minLeadMinutes`). Every other service keeps settings.leadMinutes only.
+ */
+export function withServiceLead(serviceOrBlocks, opts = {}) {
+  if (serviceOrBlocks !== SURVEY_SERVICE_ID || opts.minLeadMinutes !== undefined) return opts;
+  return { ...opts, minLeadMinutes: SURVEY_MIN_LEAD_HOURS * 60 };
 }
 
 function blocksOf(settings, serviceOrBlocks) {
@@ -89,7 +100,7 @@ function windowState(c, date, windowId) {
   const block = c.blocks.find((b) => b.date === date && b.windowId === windowId);
   if (block) return { state: 'blocked', bookingId: null, blockLabel: block.label || 'Blocked' };
   if (!c.ownerMode && (c.settings.fullDays || []).includes(date)) return { state: 'full', bookingId: null, blockLabel: null };
-  if (!c.ownerMode && startStamp < addMinutes(c.nowStamp, c.settings.leadMinutes)) {
+  if (!c.ownerMode && startStamp < addMinutes(c.nowStamp, c.leadMinutes)) {
     return { state: 'too_soon', bookingId: null, blockLabel: null };
   }
   return { state: 'free', bookingId: null, blockLabel: null };
@@ -202,7 +213,7 @@ function describeSlot(c, info) {
 // CONTRACT-GAP: owner mode searches the same maxDaysAhead days as customer mode (it only relaxes the per-window rules).
 /** Up to `count` free slots in time order, searching today .. today + maxDaysAhead - 1. */
 export function nextFreeSlots(state, serviceOrBlocks, count = 3, opts = {}) {
-  const c = ctxFor(state, opts);
+  const c = ctxFor(state, withServiceLead(serviceOrBlocks, opts));
   const blocks = blocksOf(state.settings, serviceOrBlocks);
   const out = [];
   for (let i = 0; i < c.settings.maxDaysAhead && out.length < count; i += 1) {
@@ -235,19 +246,48 @@ export function windowIdFromStart(stamp) {
   return w ? w.id : null;
 }
 
-/** '8–10am' | 'Morning · arrive 8–10am' | 'Afternoon · arrive 1–3pm' | 'ASAP' (urgent) | 'To be arranged' (no window yet) */
+/**
+ * The WHOLE span of a run of windows as one range, in the style of a window label: '8am–12' (windows 0 and 1), '1–5pm' (2 and 3). A half-day job
+ * blocks the whole span, so the owner's diary prints that, not just the first window (T10: the rest of the half day must not look free).
+ */
+function spanLabel(ids) {
+  const first = WINDOWS[ids[0]];
+  const last = WINDOWS[ids[ids.length - 1]];
+  const sh = Number(first.start.slice(0, 2));
+  const eh = Number(last.end.slice(0, 2));
+  const h12 = (h) => (h % 12 === 0 ? 12 : h % 12);
+  if (sh >= 12) return `${h12(sh)}–${h12(eh)}pm`;
+  if (eh === 12) return `${sh}am–12`;
+  if (eh < 12) return `${sh}–${eh}am`;
+  return `${sh}am–${h12(eh)}pm`;
+}
+
+/** The owner's time label: '8–10am' (one window) | '8am–12' | '1–5pm' (a half day: the whole span) | 'ASAP' (urgent) | 'To be arranged' (no window yet) */
 export function bookingWindowLabel(booking) {
   if (booking.urgent) return 'ASAP';
   if (isUnscheduled(booking)) return 'To be arranged';
   const ids = bookingWindowIds(booking);
   if (ids.length === 0) return stampTime(booking.start);
-  const first = WINDOWS[ids[0]];
-  if (ids.length === 1) return first.label;
-  return ids[0] === 0 ? `Morning · arrive ${first.label}` : `Afternoon · arrive ${first.label}`;
+  if (ids.length === 1) return WINDOWS[ids[0]].label;
+  return spanLabel(ids);
 }
 
-/** 'Sat 24 Oct, 8–10am' | 'Mon 26 Oct, morning, 8–10am' | 'ASAP' | 'To be arranged' (no window yet) */
+/** The owner's day and time: 'Sat 24 Oct, 8–10am' | 'Tue 3 Nov, 1–5pm' (a half day: the whole span) | 'ASAP' | 'To be arranged' (no window yet) */
 export function bookingWhen(booking) {
+  if (booking.urgent) return 'ASAP';
+  if (isUnscheduled(booking)) return 'To be arranged';
+  const ids = bookingWindowIds(booking);
+  const day = fmtDayShort(stampDay(booking.start));
+  if (ids.length === 0) return `${day}, ${stampTime(booking.start)}`;
+  if (ids.length === 1) return `${day}, ${WINDOWS[ids[0]].label}`;
+  return `${day}, ${spanLabel(ids)}`;
+}
+
+/**
+ * What the CUSTOMER is told: the arrival window of the first block, with the part of the day ('Sat 24 Oct, 8–10am' | 'Mon 26 Oct, morning, 8–10am').
+ * Messages and reschedule notices use this one; the owner's diary uses bookingWhen above, which prints the whole span of a half day.
+ */
+export function bookingWhenArrival(booking) {
   if (booking.urgent) return 'ASAP';
   if (isUnscheduled(booking)) return 'To be arranged';
   const ids = bookingWindowIds(booking);

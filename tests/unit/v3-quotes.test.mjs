@@ -110,6 +110,49 @@ test('createQuote: validation with plain messages, and nothing is written on fai
   assert.equal(Object.keys(getState().quotes).length, 17);
 });
 
+test('possible extras: a quote keeps an optional line, its total and its message leave it out, and a quote of only extras cannot be sent', () => {
+  const lines = [
+    { label: 'Supply and fit (sample)', qty: 1, unitPrice: 1200 },
+    { label: 'Consumer unit upgrade (if required)', qty: 1, unitPrice: 420, optional: true }
+  ];
+  const q = sendable({ lines });
+  assert.deepEqual(q.lines.map((l) => l.optional), [false, true]);
+  assert.equal(quoteTotal(q), 1200, 'the possible extra is not in the fixed total');
+  const detail = selectQuoteDetail(getState(), q.id, NOW);
+  assert.equal(detail.total, 1200);
+  assert.deepEqual(detail.lines.map((l) => l.label), ['Supply and fit (sample)'], 'lines are the ones the total adds up');
+  assert.deepEqual(detail.extras.map((l) => [l.label, l.lineTotal, l.optional]), [['Consumer unit upgrade (if required)', 420, true]]);
+  assert.deepEqual(detail.allLines.map((l) => l.optional), [false, true]);
+  // editing keeps the flag (a line can be turned into an extra and back)
+  const edited = updateQuote(q.id, { lines: q.lines.map((l) => ({ ...l, optional: !l.optional })) });
+  assert.equal(edited.ok, true);
+  assert.deepEqual(edited.quote.lines.map((l) => l.optional), [true, false]);
+  assert.equal(quoteTotal(edited.quote), 420);
+  assert.equal(updateQuote(q.id, { lines: q.lines }).ok, true);
+  const sent = sendQuote(q.id, { via: 'whatsapp' });
+  assert.equal(sent.ok, true);
+  assert.ok(sent.message.body.includes('£1,200'), sent.message.body);
+  assert.ok(!sent.message.body.includes('£1,620'), 'the extra is not added into the figure the customer is told');
+  // only extras: nothing to pay, so it is refused like an empty quote
+  const only = createQuote({ bookingId: 'bk_seed_17', lines: [{ label: 'Extra only', qty: 1, unitPrice: 50, optional: true }] });
+  assert.equal(only.ok, true, 'a draft may hold it while it is being written');
+  const refused = sendQuote(only.quote.id, { via: 'whatsapp' });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.reason, 'invalid');
+  assert.match(refused.errors.lines, /at least one line with a price/);
+});
+
+test('acceptQuote prices the install at the fixed total (a possible extra is not charged until it is agreed)', () => {
+  const q = sendable({ lines: [{ label: 'Supply and fit (sample)', qty: 1, unitPrice: 1200 }, { label: 'Consumer unit upgrade (if required)', qty: 1, unitPrice: 420, optional: true }] });
+  assert.equal(sendQuote(q.id, { via: 'link' }).ok, true);
+  const slot = nextFreeSlots(getState(), 'ev', 1)[0] || nextFreeSlots(getState(), 'ev_quote', 1)[0];
+  assert.ok(slot);
+  const accepted = acceptQuote(q.id, { date: slot.date, windowId: slot.windowId });
+  assert.equal(accepted.ok, true, JSON.stringify(accepted));
+  assert.equal(accepted.booking.quotedPrice, 1200);
+  assert.ok(accepted.messages[0].body.includes('£1,200') || accepted.messages[1].body.includes('£1,200'));
+});
+
 // ---------- updateQuote and deleteQuote ----------
 
 test('updateQuote: draft or sent only, validated, a no-op writes nothing, and it makes a demo quote the person\'s own', () => {
@@ -181,10 +224,13 @@ test('deleteQuote: drafts only, undoable, and the enquiry goes back to needing a
 
 test('sendQuote via WhatsApp: sent with the link, one customer_quote_sent message, history on the enquiry, undoable', () => {
   const q = sendable();
-  const link = `${new URL('../../', import.meta.url).href}quote.html#q=${q.id}`;
+  const base = `${new URL('../../', import.meta.url).href}quote.html#`;
   const sent = sendQuote(q.id, { via: 'whatsapp' });
   assert.equal(sent.ok, true);
-  assert.equal(sent.link, link);
+  // v4: the link carries the quote itself (quote.html#d=<payload>) so it opens on any phone
+  assert.ok(sent.link.startsWith(`${base}d=`), sent.link);
+  assert.equal(sent.linkPortable, true);
+  const link = sent.link;
   assert.deepEqual([sent.quote.status, sent.quote.sentVia, sent.quote.sentAt], ['sent', 'whatsapp', NOW]);
   const m = sent.message;
   assert.deepEqual([m.kind, m.to, m.channel, m.bookingId, m.simulated, m.seed, m.sendAt, m.at], ['customer_quote_sent', 'customer', 'whatsapp', SURVEYED, true, false, null, NOW]);
@@ -192,7 +238,7 @@ test('sendQuote via WhatsApp: sent with the link, one customer_quote_sent messag
   assert.equal(m.toPhone, '07700 900425');
   assert.equal('toEmail' in m, false, 'a WhatsApp message keeps the v2 shape');
   assert.ok(m.body.includes(link));
-  assert.ok(m.body.includes('£1514'));
+  assert.ok(m.body.includes('£1,514'));
   assert.ok(m.body.includes('valid until Sun 22 Nov'));
   assert.ok(m.body.startsWith("Hi Leona, it's Daniel from 180 Electrical."));
   assert.ok(!/[{}]|!/.test(m.body));
@@ -341,10 +387,10 @@ test('acceptQuote: a pencilled half-day install, the quote accepted, two message
   const [toCustomer, toOwner] = accepted.messages;
   assert.ok(toOwner.seq > toCustomer.seq);
   assert.deepEqual([toOwner.to, toOwner.bookingId, toCustomer.to, toCustomer.bookingId], ['owner', b.id, 'customer', b.id]);
-  assert.ok(toOwner.body.startsWith(`*Quote accepted ${id}*\nLeona Fitzsimons accepted your quote (£1514).\nInstall pencilled in: `));
+  assert.ok(toOwner.body.startsWith(`*Quote accepted ${id}*\nLeona Fitzsimons accepted your quote (£1,514).\nInstall pencilled in: `));
   assert.ok(toOwner.body.includes('(provisional)'));
   assert.ok(toOwner.body.includes(`dashboard.html#/bookings/${b.id}`));
-  assert.ok(toCustomer.body.startsWith("Hi Leona, thanks for accepting your quote (£1514). I have pencilled in your installation for "));
+  assert.ok(toCustomer.body.startsWith('Hi Leona, thanks for accepting your quote (£1,514). The install day you chose is ') && !/pencilled|provisional/.test(toCustomer.body));
   assert.ok(toCustomer.body.endsWith(`Quote ${id}`));
   assert.deepEqual(booking(SURVEYED).history.at(-1), { at: NOW, event: 'message', by: 'customer', note: 'Quote accepted' });
   assert.equal(stageOf(SURVEYED), 'accepted');
@@ -481,7 +527,7 @@ test('declineQuote: the customer or the owner says no; a reason, an owner messag
   assert.equal(declined.ok, true);
   assert.deepEqual([declined.quote.status, declined.quote.declinedAt, declined.quote.declineReason], ['declined', NOW, 'Found a cheaper price']);
   assert.deepEqual([declined.message.kind, declined.message.to, declined.message.bookingId], ['owner_quote_declined', 'owner', SURVEYED]);
-  assert.equal(declined.message.body, `*Quote declined ${id}*\nLeona Fitzsimons declined your quote (£1514).\nReason: Found a cheaper price.\nOpen: ${new URL('../../', import.meta.url).href}dashboard.html#/bookings/${SURVEYED}`);
+  assert.equal(declined.message.body, `*Quote declined ${id}*\nLeona Fitzsimons declined your quote (£1,514).\nReason: Found a cheaper price.\nOpen: ${new URL('../../', import.meta.url).href}dashboard.html#/bookings/${SURVEYED}`);
   assert.deepEqual(booking(SURVEYED).history.at(-1), { at: NOW, event: 'message', by: 'customer', note: 'Quote declined' });
   assert.equal(stageOf(SURVEYED), 'lost');
   assert.deepEqual(bubbleActions(declined.message, booking(SURVEYED), NOW).map((a) => a.id), ['open_job']);

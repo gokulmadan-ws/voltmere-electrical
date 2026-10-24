@@ -18,14 +18,41 @@ function overlayRoot() {
   return el;
 }
 
-/** Make the page behind inert, lock scroll, and stack the layers. Safe to call repeatedly. */
-function syncLayers() {
-  const app = document.getElementById('app');
-  const any = stack.length > 0;
-  if (app) {
-    if (any) { app.setAttribute('inert', ''); app.setAttribute('aria-hidden', 'true'); }
-    else { app.removeAttribute('inert'); app.removeAttribute('aria-hidden'); }
+// Everything outside the sheets that we have made inert, with what each element looked like before (so closing the last sheet
+// puts back exactly that: an element that was already inert or aria-hidden for another reason stays so).
+const held = new Map();
+
+/** The page behind the sheets: #app and every other child of <body> except #overlay-root (which holds the sheets and the toasts). */
+function pageBehind() {
+  const overlay = document.getElementById('overlay-root');
+  return [...document.body.children].filter((el) => el !== overlay && !/^(SCRIPT|STYLE|LINK|NOSCRIPT|TEMPLATE)$/.test(el.tagName));
+}
+
+function holdPage() {
+  for (const el of pageBehind()) {
+    if (held.has(el)) continue;
+    held.set(el, { inert: el.hasAttribute('inert'), ariaHidden: el.getAttribute('aria-hidden') });
+    el.setAttribute('inert', '');
+    el.setAttribute('aria-hidden', 'true');
   }
+}
+
+function releasePage() {
+  for (const [el, before] of held) {
+    if (!before.inert) el.removeAttribute('inert');
+    if (before.ariaHidden === null) el.removeAttribute('aria-hidden'); else el.setAttribute('aria-hidden', before.ariaHidden);
+  }
+  held.clear();
+}
+
+/**
+ * Make the page behind inert (no focus, no clicks, hidden from screen readers), lock scroll, and stack the layers. Safe to
+ * call repeatedly. Inside #overlay-root only the TOP sheet is live: every sheet below it is inert. #toast-root is a sibling of
+ * the sheet containers and is never touched, so a toast raised from inside a sheet stays visible and readable.
+ */
+function syncLayers() {
+  const any = stack.length > 0;
+  if (any) holdPage(); else releasePage();
   stack.forEach((rec, i) => {
     if (i === stack.length - 1) rec.container.removeAttribute('inert'); else rec.container.setAttribute('inert', '');
     rec.container.style.zIndex = `calc(var(--z-sheet) + ${i})`;

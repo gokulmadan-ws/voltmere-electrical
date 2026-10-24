@@ -1,21 +1,22 @@
 // js/core/store.js: the persisted store (localStorage with memory fallback), every mutation, cross-tab sync and undo
 // Owner: WP1 (v1), A3 (v3 additions: quotes, connections, marketing, photos, storage guard)
 import {
-  AD_CHANNELS, DEFAULT_IMAGES, EMERGENCY_REASONS, HALF_DAY_STARTS, IMAGE_KEYS, KIND_LABELS, PAID_METHODS, PROMISES, QUOTE_VIA, SCHEMA_VERSION,
-  SOURCES, STORAGE_KEYS, WHATSAPP_DEMO_CODE, WHATSAPP_TEMPLATE_KINDS, WINDOWS,
+  AD_CHANNELS, DEFAULT_IMAGES, DEFAULT_QUOTE_NOTES, EMERGENCY_REASONS, HALF_DAY_STARTS, IMAGE_KEYS, KIND_LABELS, PAID_METHODS, PROMISES, QUOTE_VIA, SCHEMA_VERSION,
+  LEGACY_QUOTE_NOTES, SOURCES, STORAGE_KEYS, WHATSAPP_DEMO_CODE, WHATSAPP_TEMPLATE_KINDS, WINDOWS,
   chargerItemId, makeChargerItem, makeDefaultBusiness, makeDefaultConnections, makeDefaultQuoteItems, makeDefaultSettings, normaliseAnswers
 } from './config.js';
 import { now, nowStamp, nowStampSec, todayKey } from './clock.js';
 import { addDays, addMinutes, isDayKey, makeStamp, stampDay } from './dates.js';
-import { bookingWindowIds, bookingWhen, isSlotFree, isUnscheduled, nextFreeSlot, nextFreeSlots, occupiedBy } from './availability.js';
+import { bookingWindowIds, bookingWhenArrival, isSlotFree, isUnscheduled, nextFreeSlot, nextFreeSlots, occupiedBy } from './availability.js';
 import {
   makeId, normaliseDemoPhone, normalisePhone, normalisePostcode, postcodeZone,
   validateLine1, validateName, validatePhone, validatePostcode
 } from './format.js';
-import { buildMessage, buildSystemMessage, messageIsScheduled, reminderSendAt } from './messages.js';
+import { alertHeading, buildMessage, buildSystemMessage, messageIsScheduled, reminderSendAt } from './messages.js';
 import { buildSeed, SIM_POOL } from './seed.js';
 import { isWithinChangeCutoff, quotedPriceFor } from './selectors.js';
-import { defaultQuoteLines, latestQuoteFor, normaliseQuoteItems, normaliseQuoteLines, quoteStatus, quoteTotal, quoteUrl } from './quotes.js';
+import { assessQuoteDecision, defaultQuoteLines, latestQuoteFor, normaliseQuoteItems, normaliseQuoteLines, quoteStatus, quoteTotal } from './quotes.js';
+import { declineReasonText, describePreferences, parseImport, quoteLinkInfo } from './handoff.js';
 import {
   GCAL_GROUP_ID, domainRecords, isValidEmail, normaliseWhatsAppNumber, settleConnectionsIn, simulatedBusyBlocks, validateConnectionPatch, validateHostname
 } from './connections.js';
@@ -178,6 +179,22 @@ function migrateV2(old) {
   return next;
 }
 
+// A v3 save made before the polish round: its catalogue has no `optional` flag (the consumer unit upgrade is the one possible extra) and its
+// quoteDefaults.notes may still hold the longer sample text that made payment-style promises. Both are brought up to date in place; anything the
+// owner edited stays. Quote lines need nothing: a line without `optional` has always counted in its total.
+function refreshQuoteContent(st) {
+  const settings = st && st.settings;
+  if (!settings || typeof settings !== 'object') return st;
+  if (Array.isArray(settings.quoteItems)) {
+    for (const item of settings.quoteItems) {
+      if (item && typeof item === 'object' && typeof item.optional !== 'boolean') item.optional = item.id === 'consumer_unit';
+    }
+  }
+  const defaults = settings.quoteDefaults;
+  if (defaults && typeof defaults === 'object' && LEGACY_QUOTE_NOTES.includes(defaults.notes)) defaults.notes = DEFAULT_QUOTE_NOTES;
+  return st;
+}
+
 /** Parse + migrate + validate. Returns a State or null (garbage, newer schema, missing migration). */
 function parseState(raw) {
   let parsed;
@@ -192,7 +209,7 @@ function parseState(raw) {
     if (!step) return null;
     parsed = step(parsed);
   }
-  return looksValid(parsed) ? parsed : null;
+  return looksValid(parsed) ? refreshQuoteContent(parsed) : null;
 }
 
 function isQuotaError(e) {
@@ -490,6 +507,7 @@ function addHistory(booking, event, by, note) {
 function addMessage(draft, kind, booking, extra = {}, buildState = draft) {
   const m = buildMessage(kind, booking, buildState, { at: nowStamp(), ...extra });
   const message = { id: makeId('msg'), ...m, seq: 0 };
+  if (kind === 'owner_new_booking') message.title = alertHeading(booking); // names the enquiry in the Messages list (T10)
   draft.meta.msgSeq += 1;
   message.seq = draft.meta.msgSeq;
   draft.messages.push(message);
@@ -514,7 +532,9 @@ const isPositiveInt = (n) => Number.isInteger(n) && n > 0;
 
 // ---------- createBooking (8.4) ----------
 
-function createBookingIn(draft, input) {
+// `internal` is for the store's own callers (never the public createBooking): { createdAt (a stamp: when the customer sent it), importId, ref (the
+// ref to keep when it is free here), notesMax }. It is how an enquiry that arrived through a WhatsApp link goes through the SAME code as a website one.
+function createBookingIn(draft, input, internal = {}) {
   const d = input || {};
   const settings = draft.settings;
   const urgent = !!d.urgent;
@@ -522,7 +542,7 @@ function createBookingIn(draft, input) {
   const cust = d.customer || {};
   const addr = d.address || {};
   const name = String(cust.name === undefined || cust.name === null ? '' : cust.name).trim().slice(0, 60);
-  const notes = String(d.notes === undefined || d.notes === null ? '' : d.notes).trim().slice(0, 300);
+  const notes = String(d.notes === undefined || d.notes === null ? '' : d.notes).trim().slice(0, internal.notesMax || 300);
   const serviceId = urgent ? 'emergency' : d.serviceId;
   const service = settings.services.find((s) => s.id === serviceId) || null;
   // The free survey is an enquiry: only the postcode is required, it is never auto-confirmed, and with `pencil: true` and no
@@ -569,6 +589,7 @@ function createBookingIn(draft, input) {
   let unscheduled = false;
   if (autoPencil) {
     // Never lose an enquiry because the diary is full: with no free window it is kept unscheduled and the owner places it.
+    // For the free survey nextFreeSlot already applies SURVEY_MIN_LEAD_HOURS (24 h) for a customer, so nothing is pencilled sooner than that.
     const slot = nextFreeSlot(draft, service.id, { ownerMode: asOwner });
     if (slot) {
       startDate = slot.date;
@@ -580,14 +601,18 @@ function createBookingIn(draft, input) {
     return fail('slot_taken', { alternatives: nextFreeSlots(draft, service.id, 3, { ownerMode: asOwner }) });
   }
 
-  const created = nowStamp();
+  const created = internal.createdAt || nowStamp();
   let variant = null;
   if (service.priceType === 'by_size') {
     variant = service.variants.find((v) => v.id === d.variantId) || service.variants.find((v) => v.id === service.defaultVariantId) || null;
   }
   let refNumber = draft.refSeq;
+  // An imported enquiry keeps the customer's own ref when it is free here and plausible, so the confirmation, the WhatsApp text and this
+  // dashboard all say the same number; otherwise (or for a website enquiry) the next ref in this store's sequence.
+  const wanted = typeof internal.ref === 'string' ? /^EL-(\d{4,7})$/.exec(internal.ref) : null;
+  if (wanted && Number(wanted[1]) >= 1000 && Number(wanted[1]) < draft.refSeq + 100 && !draft.bookings.some((b) => b.ref === internal.ref)) refNumber = Number(wanted[1]);
   while (draft.bookings.some((b) => b.ref === `EL-${refNumber}`)) refNumber += 1;
-  draft.refSeq = refNumber + 1;
+  draft.refSeq = Math.max(draft.refSeq, refNumber + 1);
   let id = makeId('bk');
   while (draft.bookings.some((b) => b.id === id)) id = makeId('bk');
 
@@ -641,6 +666,8 @@ function createBookingIn(draft, input) {
   }
   if (autoPencil && !unscheduled && status === 'new') booking.tentative = true; // provisional until the owner confirms or moves it
   addHistory(booking, 'created', asOwner ? 'owner' : 'customer', source);
+  if (internal.createdAt) booking.history[0].at = created; // the timeline says when the customer sent it, not when it was imported
+  if (internal.importId) booking.importId = internal.importId;
   if (status === 'confirmed') addHistory(booking, 'confirmed', asOwner ? 'owner' : 'system');
   draft.bookings.push(booking);
 
@@ -858,11 +885,11 @@ export function rescheduleBooking(id, { date, windowId } = {}, by = 'owner', { n
     if (!isSlotFree(draft, { date, windowId, blocks, ignoreBookingId: b.id, ownerMode: owner })) {
       return fail('slot_taken', { alternatives: nextFreeSlots(draft, b.serviceId, 3, { ownerMode: owner, ignoreBookingId: b.id }) });
     }
-    const oldWhen = bookingWhen(b);
+    const oldWhen = bookingWhenArrival(b); // what the customer is told: the arrival window
     b.start = makeStamp(date, WINDOWS[windowId].start);
     if (!(b.durationMin > 0)) b.durationMin = blocks * 120;
     if (owner && b.tentative) b.tentative = false; // the owner has chosen the time: no longer a provisional pencil mark
-    const newWhen = bookingWhen(b);
+    const newWhen = bookingWhenArrival(b);
     addHistory(b, 'rescheduled', by, newWhen);
     const removed = dropUnsent(draft, b.id);
     const added = [maybeReminder(draft, b)];
@@ -1068,6 +1095,9 @@ const AHEAD_CHOICES = [7, 14, 21, 28];
 const REQUIRED_BUSINESS = ['name', 'shortName', 'ownerFirstName'];
 const TEXT_BUSINESS = ['descriptor', 'ownerFullName', 'tagline', 'email', 'areaName', 'areaText', 'schemeLine', 'insuranceLine'];
 const IMAGE_OK = /^(https:\/\/\S+|(?![a-z][a-z0-9+.-]*:)\S+)$/i; // https URLs and relative paths only
+// A photo picked on the owner's phone is stored as a downscaled JPEG data URL (Settings > Website photos); kept small so localStorage has room for all seven.
+const IMAGE_DATA_OK = /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i;
+const IMAGE_DATA_MAX = 300000;
 
 // Keep the charger lines of the quote catalogue in step with business.brands: a line per brand, none for a brand that is gone.
 function syncChargerItems(settings) {
@@ -1117,7 +1147,10 @@ export function updateSettings(patch = {}) {
           if (!(key in biz.images)) continue;
           const raw = String(biz.images[key] === null || biz.images[key] === undefined ? '' : biz.images[key]).trim();
           if (!raw) nextImages[key] = DEFAULT_IMAGES[key];
-          else if (raw.length > 600 || raw.startsWith('//') || !IMAGE_OK.test(raw)) errors[`images.${key}`] = 'Use a web address starting with https:// or a file path.';
+          else if (IMAGE_DATA_OK.test(raw)) {
+            if (raw.length > IMAGE_DATA_MAX) errors[`images.${key}`] = 'That photo is too big. Try a smaller one.';
+            else nextImages[key] = raw;
+          } else if (raw.length > 600 || raw.startsWith('//') || !IMAGE_OK.test(raw)) errors[`images.${key}`] = 'Use a web address starting with https:// or a file path.';
           else nextImages[key] = raw;
         }
       }
@@ -1362,7 +1395,7 @@ export function createQuote(input = {}) {
     if (!isDayKey(validUntil)) errors.validUntil = 'Choose the last day the quote is valid.';
     const customerName = d.customerName === undefined ? booking.customer.name : String(d.customerName === null ? '' : d.customerName).trim().slice(0, 60);
     if (!customerName) errors.customerName = 'Enter the customer name.';
-    if (!errors.lines && lines.reduce((t, l) => t + l.qty * l.unitPrice, 0) < 0) errors.lines = 'The total cannot be below zero.';
+    if (!errors.lines && quoteTotal({ lines }) < 0) errors.lines = 'The total cannot be below zero.';
     if (Object.keys(errors).length) return fail('invalid', { errors });
     const quote = {
       id: nextQuoteId(draft, booking), bookingId: booking.id, customerName, createdAt: nowStamp(), status: 'draft', brand, lines, notes, validUntil,
@@ -1402,7 +1435,7 @@ export function updateQuote(id, patch = {}) {
       else errors.customerName = 'Enter the customer name.';
     }
     const lines = changes.lines || quote.lines;
-    if (!errors.lines && lines.reduce((t, l) => t + l.qty * l.unitPrice, 0) < 0) errors.lines = 'The total cannot be below zero.';
+    if (!errors.lines && quoteTotal({ lines }) < 0) errors.lines = 'The total cannot be below zero.';
     if (Object.keys(errors).length) return fail('invalid', { errors });
     if (Object.keys(changes).every((k) => deepEqual(quote[k], changes[k]))) return noop({ ok: true, quote: prev.quotes[id] });
     Object.assign(quote, changes);
@@ -1440,7 +1473,8 @@ export function sendQuote(id, { via } = {}) {
     adopt(quote);
     const message = addMessage(draft, 'customer_quote_sent', booking, { quote, channel: via === 'email' ? 'email' : 'whatsapp' });
     addHistory(booking, 'message', 'owner', KIND_LABELS.customer_quote_sent);
-    return { ok: true, quote, message, link: quoteUrl(quote.id), touched: { quotes: [id], messages: [message.id], bookings: [booking.id] } };
+    const info = quoteLinkInfo(quote, { booking }); // the self-contained link (quote.html#d=...), the same one the message carries
+    return { ok: true, quote, message, link: info.url, linkPortable: info.portable, touched: { quotes: [id], messages: [message.id], bookings: [booking.id] } };
   });
 }
 
@@ -1454,6 +1488,61 @@ export function recordQuoteViewed(id) {
     adopt(quote);
     return { ok: true, quote, changed: true };
   });
+}
+
+// The install booking an accepted quote makes, the quote's new state, the history line and the two simulated messages. Shared by acceptQuote (the
+// customer picked a day on the owner's own diary: date and windowId) and importQuoteDecision (an acceptance that came back through WhatsApp: no day yet,
+// `date: null`, so the install is UNSCHEDULED, like an enquiry the diary had no room for, and the preferences are in its notes).
+function createInstallFor(draft, quote, enquiry, service, { stamp, date, windowId, notes = '', via = '' }) {
+  const unscheduled = date === null || date === undefined;
+  const { ref, id: bookingId } = nextRefAndId(draft);
+  const install = {
+    id: bookingId,
+    ref,
+    createdAt: stamp,
+    serviceId: service.id,
+    serviceName: service.name,
+    variantId: null,
+    variantLabel: '',
+    start: unscheduled ? stamp : makeStamp(date, WINDOWS[windowId].start),
+    durationMin: unscheduled ? 0 : 240,
+    status: 'new',
+    urgent: false,
+    emergencyReasons: [],
+    etaMinutes: null,
+    etaAt: null,
+    customer: { ...enquiry.customer },
+    address: { ...enquiry.address },
+    notes,
+    internalNotes: '',
+    source: enquiry.source,
+    quotedPrice: quoteTotal(quote),
+    finalPrice: null,
+    paid: false,
+    paidMethod: null,
+    paidAt: null,
+    seenByOwner: false,
+    reviewRequested: false,
+    cancelledBy: null,
+    cancelReason: '',
+    seed: false,
+    history: [],
+    quoteId: quote.id
+  };
+  if (!unscheduled) install.tentative = true; // pencilled in until the owner confirms the day
+  if (enquiry.answers) install.answers = { ...enquiry.answers }; // the job card keeps what the customer said about their home
+  addHistory(install, 'created', 'customer', enquiry.source);
+  draft.bookings.push(install);
+  quote.status = 'accepted';
+  quote.acceptedAt = stamp;
+  quote.installBookingId = install.id;
+  if (via) quote.acceptedVia = via;
+  adopt(quote);
+  addHistory(enquiry, 'message', 'customer', 'Quote accepted');
+  // Insertion order as in createBooking: the owner alert last, so it sorts first on the Messages screen.
+  const customerMessage = addMessage(draft, 'customer_quote_accepted', install, { quote, installBooking: install });
+  const ownerMessage = addMessage(draft, 'owner_quote_accepted', install, { quote, installBooking: install });
+  return { install, messages: [customerMessage, ownerMessage] };
 }
 
 export function acceptQuote(id, { date, windowId } = {}) {
@@ -1477,57 +1566,23 @@ export function acceptQuote(id, { date, windowId } = {}) {
     if (!isSlotFree(draft, { date, windowId, blocks: 2, ownerMode: false })) {
       return fail('slot_taken', { alternatives: nextFreeSlots(draft, 'ev', 3) });
     }
-    const { ref, id: bookingId } = nextRefAndId(draft);
-    const install = {
-      id: bookingId,
-      ref,
-      createdAt: stamp,
-      serviceId: service.id,
-      serviceName: service.name,
-      variantId: null,
-      variantLabel: '',
-      start: makeStamp(date, WINDOWS[windowId].start),
-      durationMin: 240,
-      status: 'new',
-      urgent: false,
-      emergencyReasons: [],
-      etaMinutes: null,
-      etaAt: null,
-      customer: { ...enquiry.customer },
-      address: { ...enquiry.address },
-      notes: '',
-      internalNotes: '',
-      source: enquiry.source,
-      quotedPrice: quoteTotal(quote),
-      finalPrice: null,
-      paid: false,
-      paidMethod: null,
-      paidAt: null,
-      seenByOwner: false,
-      reviewRequested: false,
-      cancelledBy: null,
-      cancelReason: '',
-      seed: false,
-      history: [],
-      tentative: true, // pencilled in until the owner confirms the day
-      quoteId: quote.id
-    };
-    if (enquiry.answers) install.answers = { ...enquiry.answers }; // the job card keeps what the customer said about their home
-    addHistory(install, 'created', 'customer', enquiry.source);
-    draft.bookings.push(install);
-    quote.status = 'accepted';
-    quote.acceptedAt = stamp;
-    quote.installBookingId = install.id;
-    adopt(quote);
-    addHistory(enquiry, 'message', 'customer', 'Quote accepted');
-    // Insertion order as in createBooking: the owner alert last, so it sorts first on the Messages screen.
-    const customerMessage = addMessage(draft, 'customer_quote_accepted', install, { quote, installBooking: install });
-    const ownerMessage = addMessage(draft, 'owner_quote_accepted', install, { quote, installBooking: install });
+    const { install, messages } = createInstallFor(draft, quote, enquiry, service, { stamp, date, windowId });
     return {
-      ok: true, quote, booking: install, messages: [customerMessage, ownerMessage],
-      touched: { quotes: [id], bookings: [install.id, enquiry.id], messages: [customerMessage.id, ownerMessage.id] }
+      ok: true, quote, booking: install, messages,
+      touched: { quotes: [id], bookings: [install.id, enquiry.id], messages: messages.map((m) => m.id) }
     };
   });
+}
+
+// Mark a quote declined, log the owner alert on the enquiry and the history line. Shared by declineQuote and importQuoteDecision.
+function declineIn(draft, quote, enquiry, { reason, by, via = '' }) {
+  quote.status = 'declined';
+  quote.declinedAt = nowStamp();
+  quote.declineReason = reason;
+  if (via) quote.declinedVia = via;
+  adopt(quote);
+  addHistory(enquiry, 'message', by, 'Quote declined');
+  return addMessage(draft, 'owner_quote_declined', enquiry, { quote, reason });
 }
 
 export function declineQuote(id, { reason = '', by = 'customer' } = {}) {
@@ -1539,14 +1594,160 @@ export function declineQuote(id, { reason = '', by = 'customer' } = {}) {
     const enquiry = liveBooking(draft, quote.bookingId);
     if (!enquiry) return fail('not_found');
     const why = String(reason === null || reason === undefined ? '' : reason).trim().slice(0, 200);
-    quote.status = 'declined';
-    quote.declinedAt = nowStamp();
-    quote.declineReason = why;
-    adopt(quote);
-    addHistory(enquiry, 'message', by, 'Quote declined');
-    const message = addMessage(draft, 'owner_quote_declined', enquiry, { quote, reason: why });
+    const message = declineIn(draft, quote, enquiry, { reason: why, by });
     return { ok: true, quote, message, touched: { quotes: [id], bookings: [enquiry.id], messages: [message.id] } };
   });
+}
+
+/**
+ * A customer opened a self-contained quote link (quote.html#q=<id>&d=<payload>) in a browser that has never seen the quote, and is
+ * about to accept or decline it. This writes the quote (and a small enquiry to hang it on) into THIS browser's store, as the
+ * "sent and viewed" quote the link describes, so acceptQuote and declineQuote can run unchanged. `link` is the parsed payload
+ * (parseQuotePayload). Idempotent: a quote that already exists here is left alone, except a demo (seed) quote that has not been
+ * decided and is older than the link, which the link replaces. No message is added.
+ */
+export function importLinkedQuote(link) {
+  return mutate((draft) => {
+    const l = link && typeof link === 'object' ? link : {};
+    const id = typeof l.id === 'string' ? l.id : '';
+    if (!/^Q-[A-Za-z0-9-]{1,50}$/.test(id)) return fail('invalid');
+    const existing = quoteOf(draft, id);
+    const replaceable = !!existing && existing.seed === true && ['draft', 'sent', 'viewed'].includes(existing.status);
+    if (existing && !replaceable) return noop({ ok: true, quote: existing, existing: true });
+    const checked = normaliseQuoteLines(Array.isArray(l.lines) ? l.lines.map((x) => ({ label: x.label, detail: x.detail, qty: x.qty, unitPrice: x.unitPrice })) : null);
+    if (checked.error) return fail('invalid', { errors: { lines: checked.error } });
+    if (!checked.lines.length || quoteTotal({ lines: checked.lines }) <= 0) return fail('invalid', { errors: { lines: 'The link has no priced lines.' } });
+    if (!isDayKey(l.validUntil)) return fail('invalid', { errors: { validUntil: 'The link has no valid-until day.' } });
+    const name = String(l.customerName || '').trim().slice(0, 60);
+    if (!name) return fail('invalid', { errors: { customerName: 'The link has no customer name.' } });
+    const service = draft.settings.services.find((x) => x.id === 'ev_quote');
+    if (!service) return fail('service_unavailable');
+    const stamp = nowStamp();
+    const sentAt = typeof l.sentAt === 'string' && l.sentAt ? l.sentAt.slice(0, 16) : stamp;
+    // The enquiry reference is the one the quote id came from when that is free here, else the next one.
+    const m = /^Q-(EL-\d+)/.exec(id);
+    let ref = m && !draft.bookings.some((b) => b.ref === m[1]) ? m[1] : '';
+    let bookingId = makeId('bk');
+    while (draft.bookings.some((b) => b.id === bookingId)) bookingId = makeId('bk');
+    if (!ref) ref = nextRefAndId(draft).ref;
+    const enquiry = {
+      id: bookingId, ref, createdAt: sentAt, serviceId: service.id, serviceName: service.name, variantId: null, variantLabel: '',
+      start: stamp, durationMin: 0, status: 'new', urgent: false, emergencyReasons: [], etaMinutes: null, etaAt: null,
+      customer: { name, phone: '', email: '' }, address: { line1: '', postcode: String(l.postcode || '').slice(0, 10) },
+      notes: '', internalNotes: '', source: 'website', quotedPrice: 0, finalPrice: null, paid: false, paidMethod: null, paidAt: null,
+      seenByOwner: true, reviewRequested: false, cancelledBy: null, cancelReason: '', seed: false, history: []
+    };
+    addHistory(enquiry, 'created', 'customer', 'quote link');
+    draft.bookings.push(enquiry);
+    draft.quotes[id] = {
+      id, bookingId: enquiry.id, customerName: name, createdAt: sentAt, status: 'viewed', brand: String(l.brand || '').trim().slice(0, 40), lines: checked.lines,
+      notes: cleanNotes(l.notes).slice(0, 1500), validUntil: l.validUntil, sentAt, sentVia: 'link', viewedAt: stamp, acceptedAt: null, declinedAt: null,
+      declineReason: '', installBookingId: null, seed: false
+    };
+    return { ok: true, quote: draft.quotes[id], booking: enquiry, imported: true, touched: { quotes: [id], bookings: [enquiry.id] } };
+  });
+}
+
+// ---------- the WhatsApp link handoff (v4): what arrives from the other phone, validated and applied exactly once ----------
+
+// A failed parse (js/core/handoff.js parseImport) as a store failure: the reason, a calm sentence to show, and the field errors when there are some.
+const importFailure = (parsed) => fail(parsed.reason, { message: parsed.message, ...(parsed.errors ? { errors: parsed.errors } : {}) });
+
+const WRONG_KIND = {
+  enq: 'This link is a quote for a customer, not an enquiry. Customers open it on the quote page.',
+  reply: 'This link is a new enquiry, not a reply to a quote.'
+};
+
+/**
+ * An enquiry the customer sent through WhatsApp (dashboard.html#import=...). `input` is the parseImport result, its data or payload, or the encoded
+ * link text: everything is re-validated here. It goes through createBookingIn, the same code as a website enquiry (pencilled survey from THIS diary,
+ * the owner alert, seenByOwner false), with the customer's own sent time as createdAt (never in the future) so the reply clock is honest.
+ * Idempotent: the same enquiry again returns { ok: true, existed: true, bookingId } and changes nothing.
+ */
+export function importEnquiry(input) {
+  return mutate((draft, prev) => {
+    const parsed = parseImport(input);
+    if (!parsed.ok) return importFailure(parsed);
+    if (parsed.kind !== 'enq') return fail('wrong_kind', { message: parsed.kind === 'quo' ? WRONG_KIND.enq : 'This link is a reply to a quote, not a new enquiry.' });
+    const d = parsed.data;
+    const existing = draft.bookings.find((b) => b.importId === d.importId);
+    if (existing) return noop({ ok: true, existed: true, bookingId: existing.id, booking: findById(prev.bookings, existing.id) });
+    const result = createBookingIn(draft, {
+      customer: { name: d.name, phone: d.phone, email: d.email },
+      address: { line1: '', postcode: d.postcode },
+      notes: d.notes,
+      source: 'website',
+      serviceId: 'ev_quote',
+      pencil: true,
+      answers: { postcode: d.postcode, ...d.answers, marketingOptIn: d.marketingOptIn },
+      utm: d.utmSource ? { source: d.utmSource, medium: '', campaign: '' } : undefined
+    }, { createdAt: d.createdAt, importId: d.importId, ref: d.ref, notesMax: 400 });
+    if (!result.ok) {
+      return fail(result.reason, { ...result, message: result.reason === 'service_unavailable' ? 'Home charger enquiries are switched off on this device, so this one was not added.' : 'This enquiry could not be added.' });
+    }
+    addHistory(result.booking, 'note', 'system', 'Added from a WhatsApp link');
+    return { ...result, existed: false, bookingId: result.booking.id };
+  });
+}
+
+// What the install booking's notes say: the days that suit and the customer's own words.
+function installNotesFor(d) {
+  const text = `Install preferences: ${describePreferences(d.days, d.part)}.${d.note ? ` Customer note: ${d.note}` : ''}`;
+  return text.slice(0, 300);
+}
+
+/**
+ * A customer's acceptance or decline that came back through WhatsApp. The rules live in quotes.js assessQuoteDecision (the import screen shows the
+ * same verdict). Accepted: the quote is accepted (acceptedVia 'whatsapp') and the UNSCHEDULED install booking is made, with the preferences in its
+ * notes. Declined: the quote is declined with the reason. Idempotent; a failure changes nothing and carries a plain `message`.
+ * `force: true` applies an acceptance whose total no longer matches the quote (the owner changed a sent quote and has checked with the customer).
+ */
+export function importQuoteDecision(input, { force = false } = {}) {
+  return mutate((draft, prev) => {
+    const parsed = parseImport(input);
+    if (!parsed.ok) return importFailure(parsed);
+    if (parsed.kind !== 'acc' && parsed.kind !== 'dec') return fail('wrong_kind', { message: parsed.kind === 'quo' ? WRONG_KIND.enq : WRONG_KIND.reply });
+    const d = parsed.data;
+    const stamp = nowStamp();
+    let verdict = assessQuoteDecision(draft.quotes, d, stamp);
+    if (verdict.reason === 'total_changed' && force === true) verdict = { ...verdict, state: 'ready', reason: '', message: '' };
+    if (verdict.state === 'blocked') {
+      return fail(verdict.reason, {
+        message: verdict.message,
+        ...(verdict.expected !== undefined ? { expected: verdict.expected, accepted: verdict.accepted } : {}),
+        ...(verdict.bookingId ? { bookingId: verdict.bookingId } : {})
+      });
+    }
+    const quote = draft.quotes[d.quoteId];
+    if (verdict.state === 'done') {
+      return noop({
+        ok: true, existed: true, kind: d.kind, quote: prev.quotes[d.quoteId],
+        ...(d.kind === 'acc' && quote.installBookingId ? { bookingId: quote.installBookingId, booking: findById(prev.bookings, quote.installBookingId) } : {})
+      });
+    }
+    const enquiry = liveBooking(draft, quote.bookingId);
+    if (!enquiry) return fail('not_found', { message: `The enquiry for quote ${quote.id} is no longer on this device.` });
+    if (d.kind === 'dec') {
+      const message = declineIn(draft, quote, enquiry, { reason: declineReasonText(d.reasonId, d.note), by: 'customer', via: 'whatsapp' });
+      return { ok: true, existed: false, kind: 'dec', quote, message, touched: { quotes: [quote.id], bookings: [enquiry.id], messages: [message.id] } };
+    }
+    const service = draft.settings.services.find((x) => x.id === 'ev');
+    if (!service || !service.active) return fail('service_unavailable', { message: 'Installations are switched off on this device, so this acceptance was not applied.' });
+    const { install, messages } = createInstallFor(draft, quote, enquiry, service, { stamp, date: null, windowId: null, notes: installNotesFor(d), via: 'whatsapp' });
+    return {
+      ok: true, existed: false, kind: 'acc', quote, booking: install, bookingId: install.id, messages,
+      touched: { quotes: [quote.id], bookings: [install.id, enquiry.id], messages: messages.map((m) => m.id) }
+    };
+  });
+}
+
+/** One entry point for the import screen: an enquiry goes to importEnquiry, an acceptance or decline to importQuoteDecision (a quote link is { ok: false, reason: 'wrong_kind' }). */
+export function importHandoff(input, opts = {}) {
+  const parsed = parseImport(input);
+  if (!parsed.ok) return importFailure(parsed);
+  if (parsed.kind === 'enq') return importEnquiry(parsed);
+  if (parsed.kind === 'acc' || parsed.kind === 'dec') return importQuoteDecision(parsed, opts);
+  return fail('wrong_kind', { message: WRONG_KIND.enq });
 }
 
 // ---------- photos (v3) ----------
@@ -1701,8 +1902,13 @@ export function submitWhatsAppTemplates() {
     if (wa.status !== 'connected') return fail('not_connected');
     for (const kind of WHATSAPP_TEMPLATE_KINDS) if (!wa.templates[kind] || wa.templates[kind] === 'none') wa.templates[kind] = 'pending';
     wa.templatesSubmittedAt = nowStampSec();
-    return connectionResult(draft, 'whatsapp', { touched: { settings: ['connections.whatsapp'] }, afterCommit: () => armSettle(3000, ['templates']) });
+    return connectionResult(draft, 'whatsapp', { touched: { settings: ['connections.whatsapp'] } });
   });
+}
+
+/** PROTOTYPE ONLY: skip the one to two day wait and approve every pending template now. Behind the wizard's "Prototype: fast-forward" button. */
+export function fastForwardWhatsAppTemplates() {
+  return runSettle(['templates']);
 }
 
 export function connectGoogle(service, { account } = {}) {

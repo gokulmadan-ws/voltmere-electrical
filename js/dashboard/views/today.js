@@ -1,29 +1,32 @@
-// js/dashboard/views/today.js: Today, the command centre (needs you with reply countdowns, pipeline bar, next up, money, diary, tomorrow).
-// Owner: E3 (v1 by WP4, enquiry wording by E2)
-import { html } from '../../vendor/preact-htm.js';
+// js/dashboard/views/today.js: Today, the command centre (greeting, three numbers, next up, needs you ranked by urgency, quotes to write, diary, tomorrow, pipeline).
+// Owner: E3 (v1 by WP4, enquiry wording by E2); round 2 (ranking, hero + compact rows, calmer order) by DASH
+import { html, useState } from '../../vendor/preact-htm.js';
 import {
-  Avatar, Banner, Button, Card, Chip, EmptyState, Icon, Meter, PageHeader, Stat, Switch,
-  copyText, toast, showUndoToast, useNow, useStore
+  Avatar, Button, Card, Chip, EmptyState, Icon, PageHeader, Switch,
+  toast, showUndoToast, useNow, useStore
 } from '../../ui/index.js';
 import {
   quoteTotal, selectBookingsOn, selectBrand, selectInsights, selectNeedsYou, selectNextOpenDay, selectNextUp, selectPipeline,
-  selectQuoteStats, selectRepeatInfo, selectSla
+  selectQuoteStats, selectSla
 } from '../../core/selectors.js';
 import {
   bookingEndStamp, bookingWhen, bookingWindowIds, bookingWindowLabel, getDayLoad, getDaySlots, nextFreeSlot
 } from '../../core/availability.js';
 import {
-  addDays, fmtClock, fmtDayShort, fmtRelativeDay, fmtTimeAgo, minutesBetween, stampDay, toStamp, weekDates, weekStart, weekdayOf
+  addDays, fmtClock, fmtDayShort, fmtRelativeDay, fmtTimeAgo, minutesBetween, stampDay, toStamp, weekdayOf
 } from '../../core/dates.js';
-import { EMERGENCY_REASONS, SITE_BASE_URL } from '../../core/config.js';
+import { EMERGENCY_REASONS } from '../../core/config.js';
 import { firstName, gbp, outwardCode, plural } from '../../core/format.js';
-import { mapsLink, telLink, waLink, waShareLink } from '../../core/messages.js';
-import { addDaysOff, setDayFull } from '../../core/store.js';
+import { mapsLink } from '../../core/messages.js';
+import { setDayFull } from '../../core/store.js';
 import { routeHref } from '../router.js';
-import { JobActionBar, NeedsYouActions } from '../shared/job-actions.js';
-import { AnswerChips, BookingPill, isEnquiry, isOutsideNi, isPencilled, isQuotedInstall, pendingWord, priceLabel } from '../shared/enquiry.js';
-import { SlaChip, fmtSpan, slaFor } from '../shared/sla.js';
-import { LeadChip } from '../shared/lead.js';
+import { JobActionBar, NeedsYouActions, NeedsYouMenu, NudgeButton, PaidButton } from '../shared/job-actions.js';
+import { BookingPill, answerSummaryLine, answersOf, isEnquiry, isPencilled, isQuotedInstall, pendingWord, priceLabel, shortAnswer } from '../shared/enquiry.js';
+import { SlaChip, fmtSpan, replyTone } from '../shared/sla.js';
+import { leadOf } from '../shared/lead.js';
+import { jumpTo } from '../shared/scroll.js';
+import { needRows, stripeOf } from '../shared/needs.js';
+import { OutsidePill } from '../shared/outside.js';
 
 export const title = 'Today';
 export const css = ['css/today.css', 'css/bookings.css'];
@@ -49,8 +52,6 @@ function doneToast(message, token) {
   else toast({ message });
 }
 
-const bookedJobsNote = (n) => (n === 1 ? ' 1 booked job stays in your diary.' : ` ${n} booked jobs stay in your diary.`);
-
 /** A weekday with no open windows (Sunday by default) or a day marked off. */
 function isClosedDay(settings, day) {
   return (settings.hours[weekdayOf(day)] || []).length === 0 || settings.daysOff.some((d) => d.date === day);
@@ -63,16 +64,30 @@ function greeting(nowDate) {
 
 // ---------- Needs you ----------
 
-/** Urgent first, then overdue replies, accepted quotes, replies due soon, then the oldest first. */
-function needRank(b, sla) {
-  if (b.urgent) return 0;
-  if (sla && sla.state === 'overdue') return 1;
-  if (isQuotedInstall(b)) return 2;
-  if (sla && sla.state === 'due_soon') return 3;
-  return 4;
+/** Only the top item is a full hero card; everything else is one compact row. */
+const FULL_CARDS = 1;
+/** Compact rows shown before "See all N". */
+const ROW_LIMIT = 3;
+/** The age of a request in words: "12 min old", "3 h 20 min old". */
+function ageText(age) {
+  return age < 1 ? 'Just in' : `${fmtSpan(age)} old`;
 }
 
-function NeedCard({ booking: b, autoConfirm, nowStamp, sla, quote }) {
+/** The funnel answers as short chips: "Private driveway · Car ordered · ASAP" (permission only when it is not a plain yes). */
+function AnswerRow({ b, testid }) {
+  const a = answersOf(b);
+  if (!a) return null;
+  const keys = ['parking', 'vehicle', 'timing'].concat(a.permission && a.permission !== 'yes' ? ['permission'] : []);
+  const items = keys.filter((k) => a[k]).map((k) => ({ key: k, label: shortAnswer(k, a[k]), tone: k === 'timing' && a[k] === 'asap' ? 'accent' : 'neutral' })).filter((i) => i.label);
+  if (!items.length) return null;
+  return html`<ul class="en-chips td-need__chips" aria-label="Their answers" data-testid=${testid}>
+    ${items.map((i) => html`<li key=${i.key}><${Chip} class="en-chip" tone=${i.tone}>${i.label}<//></li>`)}
+  </ul>`;
+}
+
+/** The first card of Needs you: everything Daniel needs to answer the most important thing right now. */
+function NeedHero({ row, autoConfirm, nowStamp }) {
+  const { b, sla, quote, outside, age } = row;
   const first = firstName(b.customer.name);
   const enquiry = isEnquiry(b);
   const install = isQuotedInstall(b);
@@ -80,45 +95,107 @@ function NeedCard({ booking: b, autoConfirm, nowStamp, sla, quote }) {
     .map((id) => (EMERGENCY_REASONS.find((r) => r.id === id) || {}).label)
     .filter(Boolean)
     .join(', ');
-  let flag = '';
-  if (!b.urgent) {
-    if (isOutsideNi(b.address.postcode)) flag = 'Outside Northern Ireland: check you can travel before you confirm.';
-    else if (!autoConfirm && !enquiry && !install) flag = 'Auto-confirm is off.';
-  }
-  const unseen = b.seenByOwner === false;
   const outward = outwardCode(b.address.postcode);
+  const lead = enquiry ? leadOf(b) : null;
+  const leadWord = lead && lead.id !== 'other' ? (lead.id === 'facebook' ? 'Facebook ad' : lead.label) : '';
   const label = b.urgent ? `${first}, urgent emergency` : `New ${pendingWord(b)}: ${first}${outward ? `, ${outward}` : ''}`;
   const total = quote ? quoteTotal(quote) : b.quotedPrice;
-  const when = install ? `Accepted ${quote && quote.acceptedAt ? fmtTimeAgo(quote.acceptedAt, nowStamp).toLowerCase() : ''}`.trim() : fmtTimeAgo(b.createdAt, nowStamp);
-  return html`<${Card} as="article" class=${`td-need${b.urgent ? ' td-need--urgent' : ''}${install ? ' td-need--accepted' : ''}${sla && sla.state === 'overdue' ? ' td-need--late' : ''}${unseen ? ' is-unseen' : ''}`}
+  const when = install ? `Accepted ${quote && quote.acceptedAt ? fmtTimeAgo(quote.acceptedAt, nowStamp).toLowerCase() : ''}`.trim() : ageText(age);
+  const summary = install ? answerSummaryLine(b) : '';
+  const stripe = stripeOf(row);
+  const flag = !b.urgent && !enquiry && !install && !autoConfirm ? 'Auto-confirm is off' : '';
+  const showSla = !!sla && sla.state !== 'ok';
+  const unseen = b.seenByOwner === false;
+  return html`<${Card} as="article" class=${`td-need td-need--hero${b.urgent ? ' td-need--urgent' : ''}${install ? ' td-need--accepted' : ''}`} data-stripe=${stripe || undefined}
     data-testid=${`needs-you-card-${b.id}`} aria-label=${label}>
     <div class="td-need__top">
       ${b.urgent
         ? html`<span class="ui-pill ui-pill--urgent"><${Icon} name="siren" size=${16} /><span class="ui-pill__label">URGENT</span></span>`
-        : html`<${BookingPill} booking=${b} />`}
+        : html`<${BookingPill} booking=${b} single />`}
       ${unseen ? html`<span class="u-sr-only">Not opened yet</span>` : null}
-      <${SlaChip} sla=${sla} class="td-need__sla" data-testid=${`needs-you-sla-${b.id}`} />
+      <span class="td-need__age" data-testid=${`needs-you-age-${b.id}`}>${when}</span>
     </div>
+    <div class="td-need__head">
+      <p class="td-need__who"><a class="td-need__link" href=${`#/bookings/${b.id}`} data-testid=${`needs-you-open-${b.id}`}><strong>${first}</strong></a>${outward ? ` · ${outward}` : ''}${leadWord ? ` · ${leadWord}` : ''}</p>
+      <${NeedsYouMenu} booking=${b} hero />
+    </div>
+    ${showSla ? html`<${SlaChip} sla=${sla} class="td-need__sla" data-testid=${`needs-you-sla-${b.id}`} />` : null}
     ${install ? html`<p class="td-need__amount u-tabular" data-testid=${`needs-you-amount-${b.id}`}>${gbp(total)}</p>` : null}
-    <p class="td-need__who"><a class="td-need__link" href=${`#/bookings/${b.id}`} data-testid=${`needs-you-open-${b.id}`}><strong>${first}</strong></a> · ${outward} · ${when}</p>
-    ${enquiry ? html`<div class="sh-meta"><${LeadChip} booking=${b} /></div>` : null}
     ${b.urgent
       ? html`<div class="td-need__what">
           ${reasons ? html`<p class="td-need__line">${reasons}</p>` : null}
           ${b.notes ? html`<p class="td-need__note">“${b.notes}”</p>` : null}
         </div>`
       : html`<p class="td-need__line" data-testid=${`needs-you-when-${b.id}`}>${enquiry
-        ? `${isPencilled(b) ? 'Free survey pencilled in' : 'Free survey visit'}, ${bookingWhen(b)}`
+        ? `${isPencilled(b) ? 'Survey pencilled in' : 'Survey visit'}, ${bookingWhen(b)}`
         : install ? `${isPencilled(b) ? 'Install pencilled in' : 'Install day'}, ${bookingWhen(b)}` : `${b.serviceName}, ${bookingWhen(b)}`}</p>`}
-    <${AnswerChips} booking=${b} />
-    ${flag ? html`<p class="td-need__flag"><${Icon} name="triangle-alert" size=${16} /><span>${flag}</span></p>` : null}
-    <${NeedsYouActions} booking=${b} />
+    ${enquiry && !b.urgent ? html`<${AnswerRow} b=${b} testid=${`needs-you-answers-${b.id}`} />` : null}
+    ${summary ? html`<p class="td-need__summary" data-testid=${`needs-you-answers-${b.id}`}>${summary}</p>` : null}
+    ${outside ? html`<p class="td-flag" data-testid=${`needs-you-flag-${b.id}`}><${Icon} name="map-pin" size=${16} /><span>Outside Northern Ireland, check travel first</span></p>` : null}
+    ${flag ? html`<p class="td-flag" data-testid=${`needs-you-flag-${b.id}`}><${Icon} name="info" size=${16} /><span>${flag}</span></p>` : null}
+    <${NeedsYouActions} booking=${b} hero />
   <//>`;
 }
 
-function NeedsYou({ state, items, autoConfirm, nowStamp, replyHours }) {
+/** The decision fact of a compact row: what is being asked, in at most two lines. No ellipsis, it wraps. */
+function rowContext(b, install, enquiry) {
+  if (b.urgent) {
+    const reasons = (b.emergencyReasons || []).map((id) => (EMERGENCY_REASONS.find((r) => r.id === id) || {}).label).filter(Boolean).join(', ');
+    return reasons || b.notes || 'Emergency request';
+  }
+  if (install) return null;
+  if (enquiry) {
+    const a = answersOf(b);
+    const bits = [];
+    if (a) {
+      ['parking', 'vehicle'].forEach((k) => { if (a[k]) bits.push(shortAnswer(k, a[k])); });
+      if (a.timing === 'asap') bits.push('ASAP');
+    }
+    return bits.map((t, i) => (i === 0 || t === 'ASAP' ? t : t.charAt(0).toLowerCase() + t.slice(1))).join(' · ');
+  }
+  return `${b.serviceName}`;
+}
+
+/** A compact row: avatar, name and outward code, a status pill, the decision fact, ONE verb button and the overflow. */
+function NeedRow({ row }) {
+  const { b, sla, quote, outside } = row;
+  const enquiry = isEnquiry(b);
+  const install = isQuotedInstall(b);
+  const outward = outwardCode(b.address.postcode);
+  const total = quote ? quoteTotal(quote) : b.quotedPrice;
+  const stripe = stripeOf(row);
+  const ctx = rowContext(b, install, enquiry);
+  const showSla = !!sla && (sla.state !== 'ok' || outside);
+  const unseen = b.seenByOwner === false;
+  return html`<li class="td-crow" data-stripe=${stripe || undefined} data-testid=${`needs-you-card-${b.id}`}>
+    <div class="td-crow__head">
+      <${Avatar} name=${b.customer.name} size=${32} class="td-crow__av" />
+      <a class="td-crow__name" href=${`#/bookings/${b.id}`} data-testid=${`needs-you-open-${b.id}`}><span><strong>${firstName(b.customer.name)}</strong>${outward ? ` · ${outward}` : ''}</span></a>
+      ${unseen ? html`<span class="u-sr-only">Not opened yet</span>` : null}
+      <span class="td-crow__pill">
+        ${b.urgent
+          ? html`<span class="ui-pill ui-pill--urgent ui-pill--compact"><${Icon} name="siren" size=${16} /><span class="ui-pill__label">URGENT</span></span>`
+          : outside ? html`<${OutsidePill} testid=${`needs-you-flag-${b.id}`} />`
+            : html`<${BookingPill} booking=${b} compact single />`}
+      </span>
+    </div>
+    <p class="td-crow__ctx">
+      ${showSla ? html`<${SlaChip} sla=${sla} class=${`td-need__sla td-crow__sla${outside ? ' sh-sla--neutral' : ''}`} data-testid=${`needs-you-sla-${b.id}`} />${' '}` : null}
+      ${install ? html`<span class="u-tabular td-crow__amount" data-testid=${`needs-you-amount-${b.id}`}>${gbp(total)}</span>${' · '}<span data-testid=${`needs-you-when-${b.id}`}>${isPencilled(b) ? 'Install pencilled in' : 'Install day'}, ${bookingWhen(b)}</span>` : null}
+      ${!install && enquiry ? html`<span data-testid=${`needs-you-answers-${b.id}`}>${ctx || 'Free survey visit'}</span>${' · '}<span data-testid=${`needs-you-when-${b.id}`}>${isPencilled(b) ? 'Survey ' : ''}${bookingWhen(b)}</span>` : null}
+      ${!install && !enquiry ? html`<span data-testid=${`needs-you-when-${b.id}`}>${ctx}${' · '}${bookingWhen(b)}</span>` : null}
+    </p>
+    <div class="td-crow__acts">
+      <${NeedsYouActions} booking=${b} compact />
+      <${NeedsYouMenu} booking=${b} />
+    </div>
+  </li>`;
+}
+
+function NeedsYou({ state, items, autoConfirm, nowStamp, replyHours, rows }) {
+  const [all, setAll] = useState(false);
   if (items.length === 0) {
-    return html`<${Card} as="section" class="td-clear td-o1" data-testid="today-all-clear" aria-labelledby="td-clear-title">
+    return html`<${Card} as="section" class="td-clear td-o2" data-testid="today-all-clear" aria-labelledby="td-clear-title">
       <span class="td-clear__icon"><${Icon} name="circle-check" size=${28} /></span>
       <div class="td-clear__text">
         <h2 class="td-card-title" id="td-clear-title">All caught up</h2>
@@ -126,27 +203,52 @@ function NeedsYou({ state, items, autoConfirm, nowStamp, replyHours }) {
       </div>
     <//>`;
   }
-  const rows = items.map((b) => {
-    const sla = slaFor(b, replyHours, nowStamp);
-    return { b, sla, rank: needRank(b, sla), quote: isQuotedInstall(b) ? state.quotes[b.quoteId] || null : null };
-  }).sort((x, y) => x.rank - y.rank || (x.b.createdAt < y.b.createdAt ? -1 : x.b.createdAt > y.b.createdAt ? 1 : 0));
-  const overdue = rows.filter((r) => r.sla && r.sla.state === 'overdue').length;
+  const cards = rows.slice(0, FULL_CARDS);
+  const rest = rows.slice(FULL_CARDS);
+  const shown = all ? rest : rest.slice(0, ROW_LIMIT);
+  const urgent = rows.filter((r) => r.b.urgent).length;
   const accepted = rows.filter((r) => isQuotedInstall(r.b)).length;
   const enquiries = rows.filter((r) => isEnquiry(r.b)).length;
-  return html`<section class="db-section td-section td-o1" data-testid="needs-you" aria-labelledby="td-needs-title">
+  const other = rows.length - urgent - accepted - enquiries;
+  // The parts add up to the number in the header: every item is in exactly one of them.
+  const parts = [
+    urgent > 0 ? plural(urgent, 'emergency', 'emergencies') : '',
+    enquiries > 0 ? plural(enquiries, 'new enquiry', 'new enquiries') : '',
+    accepted > 0 ? `${accepted} accepted ${accepted === 1 ? 'quote' : 'quotes'}` : '',
+    other > 0 ? plural(other, 'other request', 'other requests') : ''
+  ].filter(Boolean);
+  return html`<section class="db-section td-section td-o2" data-testid="needs-you" aria-labelledby="td-needs-title">
     <h2 class="db-section__title" id="td-needs-title">
       <span>Needs you</span>
-      <span class="td-count" aria-label=${`${items.length} waiting`}>${items.length}</span>
+      <span class="td-count" aria-label=${`${items.length} waiting`} data-testid="needs-you-count">${items.length}</span>
     </h2>
-    <div class="sh-meta td-needs__sum" data-testid="needs-you-summary">
-      ${enquiries > 0 ? html`<${Chip} icon="bell">${plural(enquiries, 'enquiry', 'enquiries')}<//>` : null}
-      ${overdue > 0 ? html`<${Chip} tone="danger" icon="triangle-alert">${`${overdue} overdue`}<//>` : null}
-      ${accepted > 0 ? html`<${Chip} tone="ok" icon="badge-check">${`${accepted} accepted ${accepted === 1 ? 'quote' : 'quotes'}`}<//>` : null}
-    </div>
+    <p class="td-needs__sum" data-testid="needs-you-summary">${parts.join(' · ')}</p>
     <div class="td-needs">
-      ${rows.map((r) => html`<${NeedCard} key=${r.b.id} booking=${r.b} autoConfirm=${autoConfirm} nowStamp=${nowStamp} sla=${r.sla} quote=${r.quote} />`)}
+      ${cards.map((r) => html`<${NeedHero} key=${r.b.id} row=${r} autoConfirm=${autoConfirm} nowStamp=${nowStamp} />`)}
     </div>
+    ${shown.length > 0 ? html`<div class="td-rows" data-testid="needs-you-more">
+      <ul class="td-crows">
+        ${shown.map((r) => html`<${NeedRow} key=${r.b.id} row=${r} />`)}
+      </ul>
+    </div>` : null}
+    ${rest.length > ROW_LIMIT ? html`<button type="button" class="td-seeall" aria-expanded=${all ? 'true' : 'false'} onClick=${() => setAll(!all)} data-testid="needs-you-see-all">
+      <span>${all ? 'Show fewer' : `See all ${items.length}`}</span><${Icon} name=${all ? 'chevron-up' : 'chevron-down'} size=${18} />
+    </button>` : null}
   </section>`;
+}
+
+/** One row under the greeting when an in-Northern-Ireland enquiry has waited past the reply promise. */
+function LateBanner({ rows }) {
+  const late = rows.filter((r) => r.overdue && !r.b.urgent && isEnquiry(r.b));
+  if (late.length === 0) return null;
+  const top = late[0];
+  const first = firstName(top.b.customer.name);
+  const text = late.length === 1 ? `${first}: ${fmtSpan(top.sla.minutes)} overdue` : `${late.length} overdue, ${first} longest`;
+  return html`<div class="td-late" role="status" data-testid="today-late-banner">
+    <${Icon} name="triangle-alert" size=${20} />
+    <span class="td-late__text">${text}</span>
+    <${Button} size="sm" variant="secondary" class="td-late__btn" href=${`#/bookings/${top.b.id}`} data-testid="today-late-reply">Reply<//>
+  </div>`;
 }
 
 // ---------- Quotes to write ----------
@@ -154,7 +256,7 @@ function NeedsYou({ state, items, autoConfirm, nowStamp, replyHours }) {
 function QuotesToWrite({ items }) {
   if (items.length === 0) return null;
   const shown = items.slice(0, 3);
-  return html`<section class="db-section td-section td-o2" data-testid="today-quote-todo" aria-labelledby="td-todo-title">
+  return html`<section class="db-section td-section td-o3" data-testid="today-quote-todo" aria-labelledby="td-todo-title">
     <h2 class="db-section__title" id="td-todo-title">
       <span>Quotes to write</span>
       <span class="td-count td-count--quiet" aria-label=${`${items.length} to write`}>${items.length}</span>
@@ -164,7 +266,7 @@ function QuotesToWrite({ items }) {
         const draft = it.quoteStatus === 'draft';
         const href = draft && it.quoteId ? routeHref('quote-detail', { id: it.quoteId }) : routeHref('quote-detail', { id: 'new' }, { booking: it.bookingId });
         return html`<a class="db-list__item td-todo" key=${it.bookingId} href=${href} data-testid=${`today-quote-todo-${it.bookingId}`}>
-          <${Avatar} name=${it.customerName} size=${40} />
+          <${Avatar} name=${it.customerName} size=${36} />
           <span class="td-todo__text">
             <span class="td-todo__name">${firstName(it.customerName)} · ${outwardCode(it.postcode)}</span>
             <span class="td-todo__sub">${it.summary}</span>
@@ -179,28 +281,37 @@ function QuotesToWrite({ items }) {
 
 // ---------- Pipeline bar ----------
 
-function PipelineBar({ pipeline }) {
+function PipelineBar({ pipeline, insights }) {
   const total = pipeline.stages.reduce((t, s) => t + s.count, 0);
   const label = `Sales pipeline: ${pipeline.stages.map((s) => `${s.count} ${s.label.toLowerCase()}`).join(', ')}. Open it.`;
-  return html`<a class="td-pipe ui-card td-o3" href=${routeHref('pipeline')} data-testid="today-pipeline" aria-label=${label}>
-    <span class="td-pipe__head">
-      <span class="td-card-title td-pipe__title">Pipeline</span>
-      <span class="td-pipe__value u-tabular">${pipeline.openValue > 0 ? `${gbp(pipeline.openValue)} in play` : 'Nothing open'}</span>
-    </span>
-    <span class="td-pipe__bar" aria-hidden="true">
-      ${total === 0
-        ? html`<span class="td-pipe__seg td-pipe__seg--none" style="flex: 1 1 0"></span>`
-        : pipeline.stages.filter((s) => s.count > 0).map((s) => html`<span key=${s.id} class=${`td-pipe__seg td-pipe__seg--${s.id}`} style=${{ flex: `${s.count} 1 0` }}></span>`)}
-    </span>
-    <span class="td-pipe__legend" aria-hidden="true">
-      ${pipeline.stages.map((s) => html`<span key=${s.id} class="td-pipe__item" data-testid=${`today-pipeline-${s.id}`}>
-        <span class=${`td-pipe__dot td-pipe__seg--${s.id}`}></span>
-        <span class="td-pipe__n u-tabular">${s.count}</span>
-        <span class="td-pipe__l">${s.label}</span>
-      </span>`)}
-    </span>
-    <span class="td-pipe__go">Open pipeline<${Icon} name="chevron-right" size=${18} /></span>
-  </a>`;
+  return html`<div class="ui-card td-pipe td-o6">
+    <a class="td-pipe__link" href=${routeHref('pipeline')} data-testid="today-pipeline" aria-label=${label}>
+      <span class="td-pipe__head">
+        <span class="td-card-title td-pipe__title">Pipeline</span>
+        <span class="td-pipe__value u-tabular">${pipeline.openValue > 0 ? `${gbp(pipeline.openValue)} in play` : 'Nothing open'}<${Icon} name="chevron-right" size=${18} /></span>
+      </span>
+      <span class="td-pipe__bar" aria-hidden="true">
+        ${total === 0
+          ? html`<span class="td-pipe__seg td-pipe__seg--none" style="flex: 1 1 0"></span>`
+          : pipeline.stages.filter((s) => s.count > 0).map((s) => html`<span key=${s.id} class=${`td-pipe__seg td-pipe__seg--${s.id}`} style=${{ flex: `${s.count} 1 0` }}></span>`)}
+      </span>
+      <span class="td-pipe__legend" aria-hidden="true">
+        ${pipeline.stages.map((s) => html`<span key=${s.id} class="td-pipe__item" data-testid=${`today-pipeline-${s.id}`}>
+          <span class=${`td-pipe__dot td-pipe__seg--${s.id}`}></span>
+          <span class="td-pipe__n u-tabular">${s.count}</span>
+          <span class="td-pipe__l">${s.label}</span>
+        </span>`)}
+      </span>
+    </a>
+    <a class="td-collected" href=${routeHref('insights')} data-testid="stat-collected">
+      <span class="td-collected__text">
+        <span class="td-collected__label">Collected this month</span>
+        <span class="td-collected__hint">${insights.collectedMonthCount > 0 ? plural(insights.collectedMonthCount, 'paid job') : 'Nothing paid yet this month'}</span>
+      </span>
+      <span class="ui-stat__value td-collected__value">${gbp(insights.collectedMonth)}</span>
+      <${Icon} name="chevron-right" size=${18} />
+    </a>
+  </div>`;
 }
 
 // ---------- Next up ----------
@@ -225,123 +336,89 @@ function countdownFor(b, nowStamp, today) {
   return fmtRelativeDay(day, today);
 }
 
-function Tile({ icon, label, href, testid, external }) {
-  return html`<a class="td-tile" href=${href} data-testid=${testid}
-    target=${external ? '_blank' : undefined} rel=${external ? 'noopener noreferrer' : undefined}>
-    <${Icon} name=${icon} size=${22} />
-    <span class="td-tile__label">${label}</span>
-  </a>`;
-}
+/** "On my way" only becomes the main button on the day of the job, within this many minutes of the slot. */
+const ON_MY_WAY_MINUTES = 120;
 
-function NextUp({ booking: b, state, brand, nowStamp, today }) {
+/**
+ * Next up as a thin strip: who, when, town and Navigate. The primary is Navigate (or Confirm for a visit nobody has confirmed). "On my way" is only
+ * the primary on the day of the job within two hours of the slot (it opens a sheet that shows the exact message before anything is sent).
+ */
+function NextUp({ booking: b, nowStamp, today }) {
   if (!b) {
-    return html`<${Card} class="td-next td-next--empty td-o4">
+    return html`<${Card} class="td-next td-next--empty td-o1">
       <${EmptyState} icon="calendar-days" title="No visits or installs coming up. Go put the kettle on." data-testid="today-empty" />
     <//>`;
   }
   const first = firstName(b.customer.name);
-  const repeat = selectRepeatInfo(state, b).isRepeat;
-  const addressText = [b.address.line1, b.address.postcode].filter(Boolean).join(', ');
-  const hello = `Hi ${first}, it's ${brand.ownerFirst} from ${brand.name} about your ${isEnquiry(b) ? 'enquiry' : 'booking'} ${b.ref}.`;
-  return html`<${Card} as="section" class="td-next td-o4" data-testid="next-up" aria-labelledby="td-next-title">
-    <div class="td-next__top">
-      <h2 class="td-next__eyebrow" id="td-next-title">Next up</h2>
-      <span class="td-next__count">${countdownFor(b, nowStamp, today)}</span>
+  const outward = outwardCode(b.address.postcode);
+  const sameDay = stampDay(b.start) === today;
+  const soon = b.status === 'confirmed' && !b.urgent && sameDay && minutesBetween(nowStamp, b.start) <= ON_MY_WAY_MINUTES;
+  const bar = b.status === 'on_the_way' || b.status === 'new' || b.urgent || soon;
+  const service = b.serviceId === 'ev_quote' ? '' : `${b.serviceName}${b.variantLabel ? ` (${b.variantLabel})` : ''}`;
+  const nav = html`<${Button} variant="secondary" size="sm" icon="navigation" class="td-next__nav" aria-label=${`Navigate to ${first}`} href=${mapsLink(b.address.line1, b.address.postcode)} data-testid="next-up-navigate">Navigate<//>`;
+  const where = [bookingWindowLabel(b), outward, service].filter(Boolean).join(' · ');
+  return html`<${Card} as="section" class=${`td-next td-o1${bar ? ' td-next--bar' : ''}`} data-testid="next-up" aria-labelledby="td-next-title">
+    <div class="td-next__text">
+      <div class="td-next__top">
+        <h2 class="td-next__eyebrow" id="td-next-title">Next up</h2>
+        <span class="td-next__count">${countdownFor(b, nowStamp, today)}</span>
+      </div>
+      <a class="td-next__who" href=${`#/bookings/${b.id}`} data-testid="next-up-details">
+        <strong>${b.customer.name}</strong>
+        <span class="td-next__where">${where}</span>
+      </a>
     </div>
-    <p class="td-next__window">${bookingWindowLabel(b)}</p>
-    <p class="td-next__service">${b.serviceName}${b.variantLabel ? html`<span class="td-next__variant"> · ${b.variantLabel}</span>` : null}</p>
-    <div class="td-next__who">
-      <${Avatar} name=${b.customer.name} size=${36} />
-      <span class="td-next__name">${b.customer.name}</span>
-      ${repeat ? html`<${Chip} tone="accent">Repeat customer<//>` : null}
-      ${isEnquiry(b) ? html`<${LeadChip} booking=${b} />` : null}
-    </div>
-    <a class="td-next__addr" href=${mapsLink(b.address.line1, b.address.postcode)} target="_blank" rel="noopener noreferrer">
-      <${Icon} name="map-pin" size=${20} />
-      <span>${addressText}</span>
-    </a>
-    ${b.notes ? html`<p class="td-next__note">“${b.notes}”</p>` : null}
-    <${AnswerChips} booking=${b} />
-    <p class="td-next__price">${priceLabel(b)}</p>
-    <div class="td-next__tiles">
-      <${Tile} icon="navigation" label="Navigate" href=${mapsLink(b.address.line1, b.address.postcode)} testid="next-up-navigate" external />
-      <${Tile} icon="phone" label="Call" href=${telLink(b.customer.phone)} testid="next-up-call" />
-      <${Tile} icon="message-circle" label="WhatsApp" href=${waLink(b.customer.phone, hello, brand.demoPhoneDigits)} testid="next-up-whatsapp" external />
-      <${Tile} icon="file-text" label="Details" href=${`#/bookings/${b.id}`} testid="next-up-details" />
-    </div>
-    <div class="td-next__actions"><${JobActionBar} booking=${b} variant="card" /></div>
+    ${bar
+      ? html`<div class="td-next__acts">${nav}<${JobActionBar} booking=${b} variant="compact" /></div>`
+      : html`<div class="td-next__acts td-next__acts--one">${nav}</div>`}
   <//>`;
 }
 
-// ---------- Money strip and reply promise ----------
+// ---------- Numbers ----------
 
-function MoneyStrip({ insights, quoteStats }) {
-  return html`<section class="td-money td-o5" aria-label="Money" data-testid="today-money">
-    <${Stat} label="Collected this month" value=${gbp(insights.collectedMonth)}
-      hint=${insights.collectedMonthCount > 0 ? `${plural(insights.collectedMonthCount, 'paid job')}` : 'Nothing paid yet this month'} data-testid="stat-collected" />
-    <${Stat} label="Owed to you" value=${gbp(insights.owedTotal)} hint=${plural(insights.owedCount, 'job')} tone=${insights.owedCount > 0 ? 'accent' : undefined}
-      href=${routeHref('insights')} data-testid="stat-owed" />
-    <${Stat} class="td-money__wide" label="Quotes out" value=${gbp(quoteStats.waitingValue)}
-      hint=${quoteStats.waitingCount > 0 ? `${plural(quoteStats.waitingCount, 'quote')} waiting on customers` : 'No quotes waiting on a customer'}
-      href=${routeHref('quotes', {}, { f: 'waiting' })} data-testid="stat-quotes-out" />
+/** A tappable number: label, value, a hint and a chevron so it reads as a button. */
+function Tile({ label, value, hint, hintPill, tone, href, onClick, testid }) {
+  return html`<a class=${`ui-stat ui-stat--link td-stat${tone ? ` ui-stat--${tone}` : ''}`} href=${href} onClick=${onClick} data-testid=${testid}>
+    <span class="ui-stat__label">${label}</span>
+    <span class="td-stat__chev" aria-hidden="true"><${Icon} name="chevron-right" size=${16} /></span>
+    <span class="ui-stat__value">${value}</span>
+    ${hint ? html`<span class=${`ui-stat__hint${hintPill ? ' td-stat__pill' : ''}`}>${hint}</span>` : null}
+  </a>`;
+}
+
+/** Owed, Quotes out and Replied in 24 h: the three numbers Daniel opens the app for, in one thin row at the top. */
+function Tiles({ insights, quoteStats, sla }) {
+  const pct = sla.withinTargetPct;
+  const tone = replyTone(pct);
+  const go = (hash, id) => (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); jumpTo(hash, id); };
+  return html`<section class="td-tiles" aria-label="Money and replies" data-testid="today-money">
+    <${Tile} label="Owed" value=${gbp(insights.owedTotal)} hint=${insights.owedCount > 0 ? plural(insights.owedCount, 'job') : 'Nothing due'} hintPill=${insights.owedCount > 0}
+      href=${routeHref('insights')} onClick=${go(routeHref('insights'), 'in-h-owed')} testid="stat-owed" />
+    <${Tile} label="Quotes out" value=${gbp(quoteStats.waitingValue)}
+      hint=${quoteStats.waitingCount > 0 ? plural(quoteStats.waitingCount, 'quote') : 'None waiting'}
+      href=${routeHref('quotes', {}, { f: 'waiting' })} testid="stat-quotes-out" />
+    <${Tile} label=${`Replied in ${sla.replyHours} h`} value=${pct === null ? '—' : `${pct}%`}
+      hint=${pct === null ? 'No replies yet' : 'answered in time'} tone=${tone === 'neutral' ? undefined : tone}
+      href=${routeHref('insights')} onClick=${go(routeHref('insights'), 'in-h-reply')} testid="stat-replied" />
   </section>`;
 }
 
-function ReplyPromise({ sla }) {
-  const pct = sla.withinTargetPct;
-  const tone = pct === null ? 'neutral' : pct >= 80 ? 'ok' : pct >= 50 ? 'warn' : 'danger';
-  return html`<${Card} as="section" class="td-sla td-o6" data-testid="today-sla" aria-labelledby="td-sla-title">
-    <div class="td-sla__head">
-      <h2 class="td-card-title" id="td-sla-title">Your reply promise</h2>
-      <span class="td-sla__hours">${sla.replyHours} h</span>
-    </div>
-    ${pct === null
-      ? html`<p class="td-sla__text">Reply to your first enquiry and this starts measuring how fast you answer.</p>`
-      : html`<${Meter} label=${`Replied within ${sla.replyHours} hours`} value=${pct} max=${100} valueText=${`${pct}%`} tone=${tone} showValue />
-        <p class="td-sla__text" data-testid="today-sla-avg">${sla.avgReplyMinutes === null ? '' : `You reply in about ${fmtSpan(sla.avgReplyMinutes)} on average. `}${sla.waitingCount > 0 ? `${plural(sla.waitingCount, 'enquiry', 'enquiries')} waiting now.` : 'Nothing is waiting for a reply.'}</p>`}
-  <//>`;
-}
+// ---------- Availability: one row ----------
 
-// ---------- Availability ----------
-
-function Availability({ settings, today, jobsToday, nextFree }) {
-  const tomorrow = addDays(today, 1);
+function Availability({ settings, today, nextFree }) {
   const closedToday = isClosedDay(settings, today);
   const taking = !closedToday && !settings.fullDays.includes(today);
-  const tomorrowOff = isClosedDay(settings, tomorrow);
-  const nextWeek = weekDates(addDays(weekStart(today), 7));
-  const weekOff = nextWeek.every((d) => settings.daysOff.some((o) => o.date === d));
-
   const onToggle = (checked) => {
     const res = setDayFull(today, !checked);
     if (!res.ok) { failToast(res); return; }
     doneToast(checked ? 'Taking bookings again today.' : 'Marked full for today. No new survey visits will be pencilled in today.', res.undoToken);
   };
-  const takeTomorrow = () => {
-    const res = addDaysOff([tomorrow], 'Day off');
-    if (!res.ok) { failToast(res); return; }
-    doneToast(`Tomorrow marked as a day off. Nothing new can be pencilled in.${res.bookedCount > 0 ? bookedJobsNote(res.bookedCount) : ''}`, res.undoToken);
-  };
-  const takeWeek = () => {
-    const res = addDaysOff(nextWeek, 'Holiday');
-    if (!res.ok) { failToast(res); return; }
-    doneToast(`Next week marked as days off.${res.bookedCount > 0 ? bookedJobsNote(res.bookedCount) : ''}`, res.undoToken);
-  };
-
-  return html`<${Card} as="section" class="td-avail td-o9" data-testid="today-availability" aria-labelledby="td-avail-title">
-    <h2 class="td-card-title" id="td-avail-title">Availability</h2>
+  const description = closedToday ? 'Today is closed.'
+    : !taking ? 'Full today. No new survey visits.'
+      : nextFree ? `Next free: ${nextFree.human}` : 'No free survey slot soon';
+  return html`<${Card} as="section" class="td-avail td-o8" data-testid="today-availability" aria-label="Availability">
     <${Switch} id="td-taking-bookings" data-testid="today-taking-bookings" checked=${taking} disabled=${closedToday}
-      label="Taking bookings today"
-      description=${closedToday ? 'Today is closed.' : taking ? 'Survey visits can be pencilled into your free windows today.' : undefined}
-      onChange=${onToggle} />
-    ${!closedToday && !taking
-      ? html`<${Banner} tone="warn">Full today. No new survey visits can be pencilled in today.${jobsToday === 0 ? '' : jobsToday === 1 ? ' Your 1 job stays in your diary.' : ` Your ${jobsToday} jobs stay in your diary.`}<//>`
-      : null}
-    <p class="td-avail__next" data-testid="stat-next-free"><${Icon} name="calendar-clock" size=${18} /><span>Next free survey slot: <strong>${nextFree ? nextFree.human : 'none free'}</strong></span></p>
-    <div class="td-btnrow">
-      <${Button} size="sm" icon="calendar-x" disabled=${tomorrowOff} onClick=${takeTomorrow} data-testid="today-take-tomorrow-off">${tomorrowOff ? 'Tomorrow is off' : 'Take tomorrow off'}<//>
-      <${Button} size="sm" icon="calendar-x" disabled=${weekOff} onClick=${takeWeek} data-testid="today-take-week-off">${weekOff ? 'Next week is off' : 'Take next week off'}<//>
-    </div>
+      label="Taking bookings today" description=${description} onChange=${onToggle} />
   <//>`;
 }
 
@@ -350,14 +427,22 @@ function Availability({ settings, today, jobsToday, nextFree }) {
 function JobRow({ booking: b, compact }) {
   const meta = [firstName(b.customer.name), outwardCode(b.address.postcode), priceLabel(b)].filter(Boolean);
   if (b.urgent && b.etaAt && b.status !== 'done') meta.push(`ETA ${fmtClock(b.etaAt)}`);
-  return html`<a class=${`td-row${compact ? ' td-row--compact' : ''}`} href=${`#/bookings/${b.id}`} data-testid=${compact ? undefined : `today-job-${b.id}`}>
-    <span class="td-row__head">
-      <span class="td-row__when">${bookingWindowLabel(b)}</span>
-      <${BookingPill} booking=${b} compact />
-    </span>
-    <span class="td-row__svc">${b.serviceName}</span>
-    <span class="td-row__meta">${meta.join(' · ')}</span>
-  </a>`;
+  // A finished job nobody has paid for yet: collect it here instead of a trip to Insights.
+  const owed = !compact && b.status === 'done' && !b.paid && !isEnquiry(b);
+  return html`<div class=${`td-job${owed ? ' td-job--owed' : ''}`}>
+    <a class=${`td-row${compact ? ' td-row--compact' : ''}`} href=${`#/bookings/${b.id}`} data-testid=${compact ? undefined : `today-job-${b.id}`}>
+      <span class="td-row__head">
+        <span class="td-row__when">${bookingWindowLabel(b)}</span>
+        <${BookingPill} booking=${b} compact single />
+      </span>
+      <span class="td-row__svc">${b.serviceName}</span>
+      <span class="td-row__meta">${meta.join(' · ')}</span>
+    </a>
+    ${owed ? html`<div class="td-job__acts" data-testid=${`today-owed-actions-${b.id}`}>
+      <${PaidButton} booking=${b} size="sm" variant="secondary" />
+      <${NudgeButton} booking=${b} size="sm" />
+    </div>` : null}
+  </div>`;
 }
 
 /** The day's rows in window order: accepted emergencies first, then each window as a job, a free row or a block. */
@@ -407,7 +492,7 @@ function Diary({ state, nowDate, today, closedToday, jobsCount }) {
       </div>`);
     }
   });
-  return html`<section class="db-section td-section td-o7" aria-labelledby="td-diary-title">
+  return html`<section class="db-section td-section td-o4" aria-labelledby="td-diary-title">
     <h2 class="db-section__title" id="td-diary-title">
       <span>Today's diary</span>
       <${Chip} data-testid="stat-jobs-today">${plural(jobsCount, 'job')}<//>
@@ -420,13 +505,22 @@ function Diary({ state, nowDate, today, closedToday, jobsCount }) {
 
 // ---------- Tomorrow ----------
 
-function Tomorrow({ state, nowDate, today }) {
+function Tomorrow({ state, nowDate, today, nextUpId }) {
   const tomorrow = addDays(today, 1);
   const day = selectNextOpenDay(state, today) || tomorrow;
   const jobs = selectBookingsOn(state, day);
+  // The job already shown as Next up is not listed a second time.
+  const others = jobs.filter((b) => b.id !== nextUpId);
   const free = getDayLoad(state, day, { now: nowDate }).free;
-  const shown = jobs.slice(0, 4);
-  return html`<section class="db-section td-section td-o8" data-testid="tomorrow-list" aria-labelledby="td-tomorrow-title">
+  const shown = others.slice(0, 4);
+  if (shown.length === 0 && jobs.length > 0) {
+    return html`<a class="ui-card td-thin td-o5" href=${`#/calendar/${day}`} data-testid="tomorrow-list">
+      <span class="td-thin__text"><strong>${day === tomorrow ? 'Tomorrow' : fmtDayShort(day)}</strong> · nothing else yet</span>
+      <span class="td-thin__free">${free > 0 ? `${free} ${free === 1 ? 'slot' : 'slots'} free` : 'Fully booked'}</span>
+      <${Icon} name="chevron-right" size=${18} />
+    </a>`;
+  }
+  return html`<section class="db-section td-section td-o5" data-testid="tomorrow-list" aria-labelledby="td-tomorrow-title">
     <h2 class="db-section__title" id="td-tomorrow-title">
       <span>${day === tomorrow ? 'Tomorrow' : fmtDayShort(day)}</span>
       <${Chip} tone=${free > 0 ? 'ok' : 'neutral'}>Free windows: ${free}<//>
@@ -437,31 +531,10 @@ function Tomorrow({ state, nowDate, today }) {
         : html`<p class="td-quiet">Nothing booked yet.</p>`}
     </div>
     <div class="td-tomorrow__foot">
-      ${jobs.length > shown.length ? html`<span class="td-quiet">${`and ${jobs.length - shown.length} more`}</span>` : html`<span></span>`}
+      ${others.length > shown.length ? html`<span class="td-quiet">${`and ${others.length - shown.length} more`}</span>` : html`<span></span>`}
       <${Button} variant="ghost" size="sm" iconRight="chevron-right" href=${`#/calendar/${day}`}>Open calendar<//>
     </div>
   </section>`;
-}
-
-// ---------- Share ----------
-
-function Share({ brand }) {
-  const url = `${SITE_BASE_URL}index.html`;
-  const text = `Get a home EV charger quote from ${brand.name}: ${url}`;
-  const onCopy = async () => {
-    const ok = await copyText(url);
-    toast({ message: ok ? 'Link copied' : 'Could not copy. Select the link and copy it.', tone: ok ? 'default' : 'danger' });
-  };
-  return html`<${Card} as="section" class="td-share td-o10" data-testid="share-card" aria-labelledby="td-share-title">
-    <h2 class="td-card-title" id="td-share-title">Share and promote</h2>
-    <p class="td-share__text">Your enquiry page, a QR code for the van and flyers, and a tracked link for each ad.</p>
-    <p class="td-share__url u-mono">${url}</p>
-    <div class="td-btnrow">
-      <${Button} size="sm" icon="send" href=${waShareLink(text)} data-testid="share-whatsapp">Send on WhatsApp<//>
-      <${Button} size="sm" icon="copy" onClick=${onCopy} data-testid="share-copy">Copy link<//>
-    </div>
-    <${Button} variant="primary" size="sm" icon="qr-code" href=${routeHref('share')} data-testid="share-open">QR code and campaign links<//>
-  <//>`;
 }
 
 // ---------- The view ----------
@@ -485,26 +558,28 @@ export default function TodayView() {
   const quoteStats = selectQuoteStats(state, 'all', nowStamp);
   const quote = pipeline.stages.find((s) => s.id === 'quote');
   const toWrite = quote ? quote.items.filter((it) => !it.quoteStatus || it.quoteStatus === 'draft') : [];
+  const rows = needRows(needs, state, sla.replyHours, nowStamp);
 
   const needText = needs.length === 1 ? '1 needs you' : `${needs.length} need you`;
   const subtitle = `${fmtDayShort(today)} · ${plural(jobsToday.length, 'job')} today · ${needText}`;
 
+  // Phone order (the .td-o* numbers): greeting, late banner, the three numbers, next up, what needs him, quotes to write, the diary, tomorrow,
+  // then the housekeeping. From 1100px two columns: Needs you and Quotes to write on the left, everything about the day on the right.
   return html`<div class="db-page td-page" data-testid="today-view">
     <${PageHeader} title=${`${greeting(nowDate)}, ${brand.ownerFirst}`} subtitle=${subtitle} />
+    <${LateBanner} rows=${rows} />
+    <${Tiles} insights=${insights} quoteStats=${quoteStats} sla=${sla} />
     <div class="td-layout">
       <div class="td-col td-col--left">
-        <${NeedsYou} state=${state} items=${needs} autoConfirm=${state.settings.autoConfirm} nowStamp=${nowStamp} replyHours=${sla.replyHours} />
+        <${NeedsYou} state=${state} items=${needs} rows=${rows} autoConfirm=${state.settings.autoConfirm} nowStamp=${nowStamp} replyHours=${sla.replyHours} />
         <${QuotesToWrite} items=${toWrite} />
-        <${NextUp} booking=${nextUp} state=${state} brand=${brand} nowStamp=${nowStamp} today=${today} />
-        <${Diary} state=${state} nowDate=${nowDate} today=${today} closedToday=${closedToday} jobsCount=${jobsToday.length} />
-        <${Tomorrow} state=${state} nowDate=${nowDate} today=${today} />
       </div>
       <div class="td-col td-col--right">
-        <${PipelineBar} pipeline=${pipeline} />
-        <${MoneyStrip} insights=${insights} quoteStats=${quoteStats} />
-        <${ReplyPromise} sla=${sla} />
-        <${Availability} settings=${state.settings} today=${today} jobsToday=${jobsToday.length} nextFree=${nextFree} />
-        <${Share} brand=${brand} />
+        <${NextUp} booking=${nextUp} nowStamp=${nowStamp} today=${today} />
+        <${Diary} state=${state} nowDate=${nowDate} today=${today} closedToday=${closedToday} jobsCount=${jobsToday.length} />
+        <${Tomorrow} state=${state} nowDate=${nowDate} today=${today} nextUpId=${nextUp ? nextUp.id : ''} />
+        <${PipelineBar} pipeline=${pipeline} insights=${insights} />
+        <${Availability} settings=${state.settings} today=${today} nextFree=${nextFree} />
       </div>
     </div>
   </div>`;

@@ -61,7 +61,7 @@ function SourcesPanel({ state }) {
       : html`<${EmptyState} icon="megaphone" title="No enquiries yet" body="Once enquiries come in you will see here whether they came from Facebook, Instagram, Google or word of mouth." data-testid="k1-sources-empty" />`}
     <p class="k1-small">Each enquiry is filed by the tag on the link it came from. The Share and promote screen builds tagged links for your ads.</p>
     <div class="k1-actions">
-      <${Button} variant="secondary" size="sm" iconRight="arrow-right" href=${routeHref('insights')} data-testid="k1-sources-insights">See it in Insights<//>
+      <${Button} variant="secondary" size="sm" iconRight="arrow-right" href=${routeHref('insights')} data-testid="k1-sources-insights">See it in Money<//>
       <${Button} variant="ghost" size="sm" href=${routeHref('share')} data-testid="k1-sources-share">Build a tagged link<//>
     </div>
   </section>`;
@@ -140,7 +140,7 @@ export default function TrackingView() {
       eyebrow="Connections" title="Ad tracking"
       subtitle="Tell Facebook and Google which ads brought you an enquiry, so you can see what is worth paying for."
     />
-    <${SimBanner}>Your IDs are only saved here. Nothing is sent to Meta or Google.<//>
+    <${SimBanner} compact />
     <${StorageNote} />
 
     <div class="k1-split k1-split--even">
@@ -150,7 +150,7 @@ export default function TrackingView() {
             <span class="k1-panel__icon" aria-hidden="true"><${Icon} name="megaphone" size=${22} /></span>
             <div>
               <h2 class="k1-panel__title" id="k1-ids-title">Your tracking IDs</h2>
-              <p class="k1-panel__sub">Add one or both. Leave a box empty if you do not use it.</p>
+              <p class="k1-panel__sub">Add one or both. Leave a box empty if you do not use it. Saved here only: nothing is sent to Meta or Google.</p>
             </div>
             <${ConnectionBadge} status=${hasAny ? 'connected' : 'off'} label=${hasAny ? 'Saved' : 'Not set up'} data-testid="k1-track-badge" />
           </div>

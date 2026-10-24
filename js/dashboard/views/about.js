@@ -20,6 +20,7 @@ const realItems = () => [
   'The availability engine and diary, shared with the website: arrival windows, notice, days off, blocked times and "full today"',
   'Booking creation with double-booking protection, then confirm, reschedule, cancel and Undo',
   'Live sync between the website, the quote page and this dashboard across tabs of one browser',
+  'The loop between two phones, with no server: the customer\'s WhatsApp message is a real wa.me link that carries their enquiry, so opening it on your phone shows exactly what they entered and one tap adds it. A quote you send, and the customer\'s accept or decline, come back the same way inside the link. You always see what will be added before you tap',
   'Campaign links with utm tags and QR codes that really encode your link, a printable QR card, and tap-to-call and WhatsApp links with the exact message filled in (they open your own WhatsApp, or the demo number when one is set)',
   'Real Google Maps search links, email links and a downloadable calendar file (.ics)',
   'Light and dark themes (dark is the default, like your site)'
@@ -27,10 +28,10 @@ const realItems = () => [
 
 const simulatedItems = (owner) => [
   'Every WhatsApp message and email. The outbox shows the exact text a real system would send, marked "Sent (simulated)" or "Scheduled (simulated)"',
-  `The arrival of those messages on ${owner}'s phone, and on your customer's`,
+  `The automatic arrival of those messages on ${owner}'s phone, and on your customer's. The outbox only shows them: nothing arrives by itself`,
   'Every connection: your domain, the website webhook, ad tracking, WhatsApp, Google Calendar and Gmail. Each wizard works, saves on this device and says "Simulated in this prototype"',
   'The Google Calendar busy times, which are made-up sample blocks labelled "Google Calendar"',
-  'The customer quote page works in this browser only. A customer on another phone cannot open it yet',
+  'Delivery between phones. An enquiry reaches your phone only when the customer taps send on the WhatsApp message built for them, and a quote reply only when they do the same. A quote link opens on any phone, but what a customer taps (accept or decline) is saved on the phone they tapped it on, until a real server exists, and you are not told it was viewed. A live build does all of this by itself, through your website webhook and a database',
   'Reminders firing at a set time (they are worked out from the scheduled time, with no timers)',
   'Payments: only a Paid flag is kept (no card, no deposit)',
   'All customers, enquiries, quotes and payments you see: invented names, made-up BT streets, Ofcom drama phone numbers, and sample prices that are not yours',
@@ -55,9 +56,11 @@ const CONNECTION_ROWS = [
 ].map(([feature, prototype, real, effort]) => ({ feature, prototype, real, effort }));
 
 const BUILD_ROWS = [
-  ['Database and multi-device sync', '`localStorage`, one browser, tabs of that browser stay in step',
-    'Hosted database and API with server-side slot locking, so two customers on two phones cannot take the same survey or install day. This is also what lets a quote link open on the customer\'s phone', 'M'],
-  ['The customer quote page', 'Opens in the same browser as the dashboard. Accepting books a pencilled install through the real slot engine',
+  ['Delivery between phones (WhatsApp link and payload)', 'Real wa.me links and real data: the enquiry, the quote and the customer\'s accept or decline travel inside the link (the part after the #, which no server ever sees). A checksum catches a cut-off link and you tap to add. Each phone keeps its own copy, and anyone who knows the format could make a link',
+    'The funnel webhook posts each enquiry to your backend, which stores it and alerts you, with no tapping. Quotes live in a database behind a private link, and acceptances are recorded on the server with a time, signed so they cannot be forged', 'M'],
+  ['Database and multi-device sync', '`localStorage`, one browser, tabs of that browser stay in step. A second phone has its own separate copy',
+    'Hosted database and API with server-side slot locking, so two customers on two phones cannot take the same survey or install day, and your phone and the customer\'s always agree without a link carrying the data', 'M'],
+  ['The customer quote page', 'Opens on any phone, because the quote travels inside its link. On your own phone, accepting books a pencilled install through the real slot engine; on a customer\'s phone it opens a WhatsApp reply to you',
     'The same page served from your hosting, reading the quote from the database, with a private link for each quote, a PDF copy and the customer\'s acceptance recorded with a time', 'M'],
   ['Owner login and security', 'None', 'Passkey or magic-link login, access control, backups, audit trail', 'M'],
   ['Photos from customers', 'Small copies kept in this browser (up to three per enquiry)', 'Photo upload on the funnel, file storage, size and type checks, attached to the job card', 'M'],
@@ -206,7 +209,7 @@ export default function AboutView() {
         <//>
       </section>
 
-      <p class="ab-privacy" data-testid="about-privacy"><${Icon} name="lock" size=${20} /><span>Nothing you type leaves this phone. This prototype has no server. The only outside requests are your own photos, loaded from your current website.</span></p>
+      <p class="ab-privacy" data-testid="about-privacy"><${Icon} name="lock" size=${20} /><span>This prototype has no server, and nothing you type is sent to one. The only time details leave a phone is when a person taps send on a WhatsApp message built for them: it carries the data inside its link. The only outside requests the pages make are your own photos, loaded from your current website.</span></p>
 
       <div class="ab-links">
         <${Button} variant="primary" icon="external-link" href=${pageHref('index.html')} target=${pageTarget('index.html')} data-testid="about-site-link">Back to the customer site<//>

@@ -5,9 +5,9 @@ import {
 } from './config.js';
 import { nowStamp } from './clock.js';
 import { addDays, addMinutes, fmtDayShort, isDayKey, minutesBetween, monthKeyOf, stampDay } from './dates.js';
-import { bookingEndStamp, bookingWhen, isUnscheduled } from './availability.js';
+import { bookingEndStamp, bookingWhen, bookingWhenArrival, isUnscheduled } from './availability.js';
 import { addressLine, firstName, gbp, toWaDigits } from './format.js';
-import { latestQuoteFor, quoteExpiresInDays, quoteStatus, quoteLineTotal, quoteTotal, quotesFor } from './quotes.js';
+import { latestQuoteFor, quoteExpiresInDays, quoteStatus, quoteTotal, quotesFor, splitLines } from './quotes.js';
 
 const priceOf = (b) => (b.finalPrice === null || b.finalPrice === undefined ? b.quotedPrice : b.finalPrice);
 
@@ -514,7 +514,8 @@ export function selectQuoteDetail(state, id, nowStampStr = nowStamp()) {
     quote,
     status,
     total: quoteTotal(quote),
-    lines: quote.lines.map((line) => ({ ...line, lineTotal: quoteLineTotal(line) })),
+    // `lines` = the FIXED lines (what `total` adds up), `extras` = the possible extras (optional lines, never counted), `allLines` = every line in order.
+    ...splitLines(quote),
     customerFirst: firstName(quote.customerName),
     ref: booking ? booking.ref : '',
     address: booking ? addressLine(booking.address) : '',
@@ -525,6 +526,6 @@ export function selectQuoteDetail(state, id, nowStampStr = nowStamp()) {
     canDecline: open,
     isExpired: status === 'expired',
     installBooking: install,
-    installWhen: install ? bookingWhen(install) : ''
+    installWhen: install ? bookingWhenArrival(install) : '' // the customer's quote page: the arrival window, as in their messages
   };
 }

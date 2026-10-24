@@ -9,9 +9,13 @@ import { initials, hashHue } from '../core/format.js';
 const DEV = typeof location !== 'undefined' && /^(localhost|127\.|\[::1\])/.test(location.hostname);
 const warned = new Set();
 
+// T11: 'message-circle' now only ever means "chat with the customer" (WhatsApp, Reply), so it is drawn with a handset in the bubble.
+// Messages (the inbox) uses 'message-square-text' instead, so the two are never the same shape.
+const ICON_ALIAS = { 'message-circle': 'whatsapp' };
+
 /** An svg icon from ICONS data, drawn through h() (never as an HTML string). Decorative unless `title` is given. */
 export function Icon({ name, size = 24, title, class: cls, ...rest }) {
-  const nodes = ICONS[name];
+  const nodes = ICONS[ICON_ALIAS[name] || name];
   if (!nodes) {
     if (DEV && !warned.has(name)) { warned.add(name); console.warn('Icon: unknown name', name); }
     return h('span', { class: cx('ui-icon ui-icon--missing', cls), style: { width: size + 'px', height: size + 'px' }, 'aria-hidden': 'true' });

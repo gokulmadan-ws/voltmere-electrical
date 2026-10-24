@@ -155,24 +155,54 @@ async function pipelinePhone(browser) {
     const c = Number(await text(page, T(`p1-stage-count-${id}`)));
     check(`pipeline: ${id} stage count is ${SEED_COUNTS[id]}`, c === SEED_COUNTS[id], String(c));
   }
-  check('pipeline: Quote stage value is the sum of its quotes (£6,403)', pounds(await text(page, T('p1-stage-value-quote'))) === 6403, await text(page, T('p1-stage-value-quote')));
-  check('pipeline: Done stage value is the money earned (£9,191)', pounds(await text(page, T('p1-stage-value-done'))) === 9191, await text(page, T('p1-stage-value-done')));
+  check('pipeline: Quote stage value is the sum of its quotes, fixed lines only (£5,983)', pounds(await text(page, T('p1-stage-value-quote'))) === 5983, await text(page, T('p1-stage-value-quote')));
+  check('pipeline: Done stage value is the money earned (£8,771)', pounds(await text(page, T('p1-stage-value-done'))) === 8771, await text(page, T('p1-stage-value-done')));
   check('pipeline: an enquiry with no quote reads "Not quoted yet"', /Not quoted yet/.test(await text(page, T('p1-stage-value-enquiry'))));
-  check('pipeline: header says how much is still to earn', /£14,366 still to earn/.test(await text(page, '.ui-page-header__sub')), await text(page, '.ui-page-header__sub'));
+  check('pipeline: header says how much is still to earn', /£13,526 still to earn/.test(await text(page, '.ui-page-header__sub')), await text(page, '.ui-page-header__sub'));
   check('pipeline: the strip is a tablist of six tabs', (await count(page, `${T('p1-strip')}[role="tablist"] [role="tab"]`)) === 6);
 
   // The first stage with something in it opens first; its cards are shown.
   check('pipeline: opens on the Enquiry stage', (await page.locator(`${T('p1-stage-enquiry')}[aria-selected="true"]`).count()) === 1);
   check('pipeline: Enquiry stage lists its two cards', (await count(page, `${T('p1-list')} > li`)) === 2);
 
-  // SLA: Conor Brennan (bk_seed_11) is past the 24 hour promise.
-  check('pipeline: SLA banner names the overdue enquiry', /Conor Brennan/.test(await text(page, T('p1-sla-banner'))) && /24 hour/.test(await text(page, T('p1-sla-banner'))), await text(page, T('p1-sla-banner')));
-  check('pipeline: the overdue card carries an "Overdue by 6 h" badge', /Overdue by 6 h/.test(await text(page, T('p1-sla-bk_seed_11'))), await text(page, T('p1-sla-bk_seed_11')));
-  check('pipeline: the Enquiry tile flags 1 overdue', /1 overdue/.test(await text(page, T('p1-stage-enquiry'))));
+  // SLA: Conor Brennan (bk_seed_11) is past the 24 hour promise but lives outside Northern Ireland: he gets the badge, never the alarm.
+  check('pipeline: no reply reminder row for an overdue enquiry from outside Northern Ireland', (await count(page, T('p1-sla-banner'))) === 0);
+  check('pipeline: the overdue card still carries an "Overdue by 6 h" badge', /Overdue by 6 h/.test(await text(page, T('p1-sla-bk_seed_11'))), await text(page, T('p1-sla-bk_seed_11')));
+  check('pipeline: an outside-NI card has no urgency stripe and the Enquiry tile has no overdue dot', (await count(page, '.pl-card.is-overdue')) === 0 && !/overdue/.test(await text(page, T('p1-stage-enquiry'))), await text(page, T('p1-stage-enquiry')));
   check('pipeline: a fresh enquiry has a reply-due badge, not an overdue one', /Reply due in 23 h/.test(await text(page, T('p1-sla-bk_seed_07'))), await text(page, T('p1-sla-bk_seed_07')));
-  check('pipeline: the SLA banner reply button opens that enquiry', (await page.locator(T('p1-sla-reply')).getAttribute('href')) === '#/bookings/bk_seed_11');
-  check('pipeline: the overdue card action is "Reply now" into the booking', /Reply now/.test(await text(page, T('p1-action-bk_seed_11'))) && (await page.locator(T('p1-action-bk_seed_11')).getAttribute('href')) === '#/bookings/bk_seed_11');
+  check('pipeline: the whole card is the link, into the booking (next step: reply)', /Reply now/.test(await text(page, T('p1-action-bk_seed_11'))) && (await page.locator(T('p1-action-bk_seed_11')).getAttribute('href')) === '#/bookings/bk_seed_11');
   check('pipeline: a card outside Northern Ireland says so', /Outside Northern Ireland/.test((await page.locator(T('p1-card-bk_seed_11')).textContent()) || ''));
+
+  // The first screen is the work, not chrome: six whole tiles without sideways scrolling, and the first card high up.
+  const first = await page.evaluate(() => {
+    const strip = document.querySelector('[data-testid="p1-strip"]');
+    const tiles = [...strip.querySelectorAll('[role="tab"]')].map((t) => t.getBoundingClientRect());
+    const card = document.querySelector('[data-testid="p1-list"] > li').getBoundingClientRect();
+    return {
+      fit: tiles.every((r) => r.left >= 0 && r.right <= innerWidth && r.width > 60),
+      noScroll: strip.scrollWidth <= strip.clientWidth + 1,
+      rows: new Set(tiles.map((r) => Math.round(r.top))).size,
+      tileHeight: Math.max(...tiles.map((r) => r.height)),
+      cardTop: Math.round(card.top)
+    };
+  });
+  check('pipeline: all six stage tiles are whole on screen in two rows, with no sideways scrolling', first.fit && first.noScroll && first.rows === 2, JSON.stringify(first));
+  check('pipeline: the first card starts above y=420', first.cardTop < 420, String(first.cardTop));
+  check('pipeline: each tile shows its count and its £ (or a dash) in a compact tile', (await Promise.all(STAGES.map((id) => text(page, T(`p1-stage-value-${id}`))))).every((t) => /£[\d,]+|Not quoted yet/.test(t)) && first.tileHeight < 80, JSON.stringify(first));
+  const sel = await page.evaluate(() => { const t = document.querySelector('.pl-tile.is-selected'); const cs = getComputedStyle(t); return { border: cs.borderTopColor, text: getComputedStyle(document.body).color, bg: cs.backgroundColor }; });
+  check('pipeline: the selected tile is neutral (an ink border), not brand red', sel.border === sel.text && !/^rgb\(2[0-9]{2}, [0-9]{1,2}, [0-9]{1,2}\)$/.test(sel.bg), JSON.stringify(sel));
+  const cardShape = await page.evaluate(() => {
+    const links = [...document.querySelectorAll('.pl-card')];
+    const sums = [...document.querySelectorAll('.pl-card__summary')];
+    return {
+      footers: document.querySelectorAll('.pl-card__action').length,
+      chevrons: links.filter((c) => c.querySelector('a.pl-card__link .pl-card__chev')).length,
+      cards: links.length,
+      clipped: sums.filter((e) => { const cs = getComputedStyle(e); return cs.whiteSpace === 'nowrap' || cs.textOverflow === 'ellipsis'; }).length
+    };
+  });
+  check('pipeline: a card is one link with a chevron and has no "Open" footer', cardShape.footers === 0 && cardShape.cards > 0 && cardShape.chevrons === cardShape.cards, JSON.stringify(cardShape));
+  check('pipeline: the detail line wraps (up to two lines) and is never cut mid-word', cardShape.clipped === 0, JSON.stringify(cardShape));
 
   // Pick a stage by tap: cards, URL, reload.
   await page.click(T('p1-stage-quote'));
@@ -193,6 +223,9 @@ async function pipelinePhone(browser) {
   await until(page, () => document.querySelector('[data-testid="p1-stage-accepted"]').getAttribute('aria-selected') === 'true');
   check('pipeline: ArrowRight moves to the next stage and focuses it', (await page.locator(`${T('p1-stage-accepted')}[aria-selected="true"]`).count()) === 1 && (await page.evaluate(() => document.activeElement.getAttribute('data-testid'))) === 'p1-stage-accepted');
   check('pipeline: an accepted job offers to confirm the install day', /Confirm the install day/.test(await text(page, T('p1-action-bk_seed_21'))) && (await page.locator(T('p1-action-bk_seed_21')).getAttribute('href')) === '#/bookings/bk_seed_34');
+  await page.keyboard.press('ArrowDown');
+  await until(page, () => document.querySelector('[data-testid="p1-stage-install"]').getAttribute('aria-selected') === 'false' && document.querySelector('[data-testid="p1-stage-enquiry"]').getAttribute('aria-selected') === 'true');
+  check('pipeline: ArrowDown moves a row in the 3 x 2 grid (Accepted goes up to Enquiry)', (await page.locator(`${T('p1-stage-enquiry')}[aria-selected="true"]`).count()) === 1);
   await page.keyboard.press('End');
   await until(page, () => document.querySelector('[data-testid="p1-stage-done"]').getAttribute('aria-selected') === 'true');
   check('pipeline: End goes to the Done stage', (await page.locator(`${T('p1-stage-done')}[aria-selected="true"]`).count()) === 1);
@@ -209,6 +242,10 @@ async function pipelinePhone(browser) {
 
   // The List | Pipeline control.
   check('pipeline: List | Pipeline control has Pipeline selected', (await page.locator(`${T('p1-view-pipeline')}[aria-checked="true"]`).count()) === 1);
+  check('pipeline: the switcher offers List | Pipeline | Customers, the same three as Bookings', (await page.locator(`${T('p1-view-toggle')} [role="radio"]`).allTextContents()).map((t) => t.trim()).join('|') === 'List|Pipeline|Customers');
+  await page.click(T('p1-stage-quote'));
+  await sleep(300);
+  check('pipeline: a quote on a card wears the same pill as the Quotes list (viewed is amber, sent is blue)', (await page.locator('[data-testid^="p1-qpill-"].q1-pill--viewed').count()) >= 1 && (await page.locator('[data-testid^="p1-qpill-"].q1-pill--sent').count()) >= 1);
   await page.click(T('p1-view-list'));
   await until(page, () => location.hash.startsWith('#/bookings'));
   await page.waitForLoadState('networkidle');
@@ -240,17 +277,39 @@ async function pipelinePhone(browser) {
 // ---------- 2. Pipeline on a wide screen ----------
 
 async function pipelineWide(browser) {
-  for (const w of [1100, 1280, 1440]) {
+  // From 1260px the six columns sit side by side (about 150px each) and nothing scrolls; below that the stage tiles and one list are used.
+  for (const w of [1280, 1440, 1600]) {
     const ctx = await newContext(browser, { w, h: 900, scheme: 'dark' });
     const page = await ctx.newPage();
     const bag = [];
     watch(page, bag)(`pipeline ${w}`);
     await gotoDash(page, '#/pipeline');
-    check(`pipeline (${w}px): shows the kanban board with six columns and no stage strip`, (await count(page, `${T('p1-board')} > section`)) === 6 && (await count(page, T('p1-strip'))) === 0);
+    check(`pipeline (${w}px): shows the kanban board with six columns and no stage tiles`, (await count(page, `${T('p1-board')} > section`)) === 6 && (await count(page, T('p1-strip'))) === 0);
     check(`pipeline (${w}px): column counts match the seed`, (await Promise.all(STAGES.map(async (id) => Number(await text(page, `${T(`p1-col-${id}`)} ${T(`p1-stage-count-${id}`)}`))))).join() === STAGES.map((id) => SEED_COUNTS[id]).join());
     check(`pipeline (${w}px): no horizontal overflow of the page`, (await overflowOf(page)) <= 0, String(await overflowOf(page)));
+    const geo = await page.evaluate(() => {
+      const cols = [...document.querySelectorAll('.pl-col')].map((c) => c.getBoundingClientRect());
+      const board = document.querySelector('.pl-board');
+      const counts = [...document.querySelectorAll('.pl-col__count')].map((c) => { const r = c.getBoundingClientRect(); const p = c.closest('.pl-col').getBoundingClientRect(); return r.right <= p.right + 0.5 && r.left >= p.left; });
+      return { fit: cols.every((r) => r.left >= 0 && r.right <= innerWidth + 0.5), widths: cols.map((r) => Math.round(r.width)), equal: new Set(cols.map((r) => Math.round(r.height))).size === 1, noScroll: board.scrollWidth <= board.clientWidth + 1, counts: counts.every(Boolean) };
+    });
+    check(`pipeline (${w}px): all six columns are whole on screen, about 150px or more each, with no sideways scroll and no clipped count`, geo.fit && geo.noScroll && geo.counts && Math.min(...geo.widths) >= 145, JSON.stringify(geo));
+    check(`pipeline (${w}px): the lanes are the same height, so unequal piles read as intended`, geo.equal, JSON.stringify(geo));
     check(`pipeline (${w}px): cards sit inside their column`, await page.evaluate(() => [...document.querySelectorAll('.pl-col')].every((col) => [...col.querySelectorAll('.pl-card')].every((c) => c.getBoundingClientRect().right <= col.getBoundingClientRect().right + 1))));
+    const compact = await page.evaluate(() => { const c = document.querySelector('[data-testid="p1-card-bk_seed_18"]'); return { chips: getComputedStyle(c.querySelector('.pl-card__badges')).display, glyph: getComputedStyle(c.querySelector('.pl-card__glyph')).display, h: Math.round(c.getBoundingClientRect().height) }; });
+    if (w < 1600) check(`pipeline (${w}px): a board card is compact (name, £, one status icon), not the full phone card`, compact.chips === 'none' && compact.glyph !== 'none' && compact.h < 140, JSON.stringify(compact));
     if (w === 1280) {
+      await page.setViewportSize({ width: 1280, height: 560 });
+      const stick = await page.evaluate(async () => {
+        const head = document.querySelector('.pl-col__head');
+        const before = head.getBoundingClientRect().top;
+        window.scrollTo(0, 300);
+        await new Promise((r) => setTimeout(r, 150));
+        return { position: getComputedStyle(head).position, before: Math.round(before), after: Math.round(head.getBoundingClientRect().top) };
+      });
+      check('pipeline (1280px): the column headers are sticky under the page header', stick.position === 'sticky' && stick.after > 40 && stick.after < 90 && stick.after < stick.before, JSON.stringify(stick));
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.evaluate(() => window.scrollTo(0, 0));
       const small = await smallTargets(page);
       check('pipeline (1280px): every tap target is at least 44px', small.length === 0, small.slice(0, 5).join(', '));
       await axeCheck(page, 'pipeline board (dark)');
@@ -260,6 +319,58 @@ async function pipelineWide(browser) {
     check(`pipeline (${w}px): clean console and requests`, bag.length === 0, bag.slice(0, 3).join(' || '));
     await ctx.close();
   }
+  // 1100: the sidebar leaves too little room for six columns, so the tablet layout is used (no clipped column, no hidden ones).
+  {
+    const ctx = await newContext(browser, { w: 1100, h: 900, scheme: 'dark' });
+    const page = await ctx.newPage();
+    const bag = [];
+    watch(page, bag)('pipeline 1100');
+    await gotoDash(page, '#/pipeline');
+    check('pipeline (1100px): uses the six stage tiles in one row, no board to clip', (await count(page, `${T('p1-strip')} [role="tab"]`)) === 6 && (await count(page, T('p1-board'))) === 0);
+    check('pipeline (1100px): no horizontal overflow of the page', (await overflowOf(page)) <= 0, String(await overflowOf(page)));
+    check('pipeline (1100px): the tiles fit in one row', await page.evaluate(() => { const t = [...document.querySelectorAll('[data-testid="p1-strip"] [role="tab"]')].map((x) => x.getBoundingClientRect()); return new Set(t.map((r) => Math.round(r.top))).size === 1 && t.every((r) => r.right <= innerWidth); }));
+    check('pipeline (1100px): clean console and requests', bag.length === 0, bag.slice(0, 3).join(' || '));
+    await ctx.close();
+  }
+}
+
+// ---------- 2b. The reply reminder: one slim, dismissible row, only for an enquiry inside Northern Ireland ----------
+
+async function pipelineSla(browser) {
+  const ctx = await newContext(browser, { scheme: 'dark' });
+  const page = await ctx.newPage();
+  const bag = [];
+  watch(page, bag)('pipeline sla');
+  await gotoDash(page, '#/pipeline');
+  // Make Sinead Doherty (BT42, inside the area) a day and a half old with no reply.
+  const age = () => page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('vm_state_v1'));
+    raw.bookings.find((b) => b.id === 'bk_seed_07').createdAt = '2026-10-22T10:00';
+    raw.rev = (raw.rev || 0) + 3; raw.meta = { ...(raw.meta || {}), rev: ((raw.meta && raw.meta.rev) || 0) + 3 };
+    localStorage.setItem('vm_state_v1', JSON.stringify(raw));
+  });
+  await age();
+  await gotoDash(page, '#/pipeline');
+  check('sla: one slim row names the overdue enquiry inside Northern Ireland', /Sinead/.test(await text(page, T('p1-sla-banner'))) && /10 h/.test(await text(page, T('p1-sla-banner'))), await text(page, T('p1-sla-banner')));
+  const box = await page.locator(T('p1-sla-banner')).boundingBox();
+  check('sla: the row is at most 56px tall', box && box.height <= 56 && box.height >= 44, JSON.stringify(box));
+  check('sla: the reply button opens that enquiry', (await page.locator(T('p1-sla-reply')).getAttribute('href')) === '#/bookings/bk_seed_07');
+  check('sla: the overdue card has the urgency stripe and the Enquiry tile an overdue dot', (await count(page, '.pl-card.is-overdue')) === 1 && /1 overdue/.test(await text(page, T('p1-stage-enquiry'))));
+  const small = await smallTargets(page);
+  check('sla: its buttons are at least 44px', small.length === 0, small.join(', '));
+  await page.click(T('p1-sla-dismiss'));
+  await until(page, () => !document.querySelector('[data-testid="p1-sla-banner"]'));
+  check('sla: dismissing puts the row away', (await count(page, T('p1-sla-banner'))) === 0);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector(T('p1-strip'));
+  check('sla: it stays away for the rest of the session', (await count(page, T('p1-sla-banner'))) === 0);
+  check('sla: the card still shows its overdue badge and stripe', /Overdue by 10 h/.test(await text(page, T('p1-sla-bk_seed_07'))) && (await count(page, '.pl-card.is-overdue')) === 1);
+  // A reply clears the badge and the stripe too.
+  await store(page, (s) => s.confirmBooking('bk_seed_07'));
+  await until(page, () => !document.querySelector('.pl-card.is-overdue'));
+  check('sla: once the enquiry is answered the stripe is gone', (await count(page, '.pl-card.is-overdue')) === 0);
+  check('sla: clean console and requests', bag.length === 0, bag.slice(0, 3).join(' || '));
+  await ctx.close();
 }
 
 // ---------- 3. Live updates, two tabs, and the empty state ----------
@@ -282,11 +393,6 @@ async function pipelineLive(browser) {
   const movedB = await until(b, () => document.querySelector('[data-testid="p1-stage-count-survey"]').textContent.trim() === '4', undefined, 4000);
   check('live: a second tab shows the same change without a reload', !!movedB, await text(b, T('p1-stage-count-survey')));
   check('live: the second tab lists the new survey card', (await count(b, `${T('p1-list')} > li`)) === 4);
-
-  // Replying to the overdue one clears the banner.
-  await store(a, (s) => s.confirmBooking('bk_seed_11'));
-  const bannerGone = await until(a, () => !document.querySelector('[data-testid="p1-sla-banner"]'));
-  check('live: once the overdue enquiry is answered the SLA banner goes', !!bannerGone);
 
   // Empty state: a saved state with no bookings and no quotes.
   const ectx = await newContext(browser, { scheme: 'dark' });
@@ -324,51 +430,119 @@ async function insightsPhone(browser) {
   setWhere('insights');
   await gotoDash(page, '#/insights');
 
-  check('insights: shows its own title', (await text(page, T('view-title'))) === 'Insights');
+  // The figures the screen should show, worked out from the same store (so a change to the sample data never makes this test lie).
+  const calc = await page.evaluate(async () => {
+    const sel = await import('/js/core/selectors.js');
+    const st = await import('/js/core/store.js');
+    const state = st.getState();
+    const now = '2026-10-23T20:30';
+    const src = sel.selectLeadSources(state, 'month', now);
+    const all = sel.selectLeadSources(state, 'all', now);
+    return { ins: sel.selectInsights(state, now), q: sel.selectQuoteStats(state, '90d', now), sla: sel.selectSla(state, now), fb: src.sources.find((x) => x.id === 'facebook'), month: src, all };
+  });
+  const money = (n) => `£${Math.round(n).toLocaleString('en-GB')}`;
+
+  check('insights: the page and its tab are called Money', (await text(page, T('view-title'))) === 'Money' && /Money/.test(await text(page, T('tab-insights'))) && !/Insights/.test(await text(page, T('tab-insights'))), `${await text(page, T('view-title'))} | ${await text(page, T('tab-insights'))}`);
   check('insights: no horizontal overflow at 375px', (await overflowOf(page)) <= 0, String(await overflowOf(page)));
 
-  // Headline row.
-  check('insights: collected this month is £3,038 from 5 jobs', pounds(await text(page, `${T('insights-collected')} .ui-stat__value`)) === 3038 && /5 jobs/.test(await text(page, `${T('insights-collected')} .ui-stat__hint`)), await text(page, T('insights-collected')));
-  check('insights: owed is £3,609 across 4 jobs', pounds(await text(page, `${T('insights-owed')} .ui-stat__value`)) === 3609 && /4 jobs/.test(await text(page, T('insights-owed'))), await text(page, T('insights-owed')));
-  check('insights: quotes out is £5,009 with 3 waiting', pounds(await text(page, `${T('p1-quotes-out')} .ui-stat__value`)) === 5009 && /3 quotes with customers/.test(await text(page, T('p1-quotes-out'))), await text(page, T('p1-quotes-out')));
-  check('insights: quotes out links to the waiting quotes', (await page.locator(T('p1-quotes-out')).getAttribute('href')) === '#/quotes?f=waiting');
-  check('insights: win rate is 85% (11 won of 13 decided)', /85%/.test(await text(page, T('p1-win-rate'))) && /11 won of 13/.test(await text(page, T('p1-win-rate'))), await text(page, T('p1-win-rate')));
-  check('insights: the old booked-next-14-days and average-job tiles are still there', (await count(page, T('insights-booked-next'))) === 1 && (await count(page, T('insights-avg'))) === 1);
-  check('insights: a free survey is not counted in the average job (£826)', pounds(await text(page, `${T('insights-avg')} .ui-stat__value`)) === 826, await text(page, T('insights-avg')));
-  check('insights: free surveys are listed as free, not as £0', /Free surveys/.test(await text(page, T('insights-by-service'))) && /Free/.test(await text(page, T('insights-by-service'))) && !/£0/.test(await text(page, T('insights-by-service'))));
+  // Order: what he is owed, then what he collected, then the small tiles, then the detail.
+  const order = await page.evaluate(() => {
+    const top = (sel) => { const el = document.querySelector(sel); return el ? Math.round(el.getBoundingClientRect().top) : -1; };
+    return { title: top('[data-testid="view-title"]'), owed: top('[data-testid="insights-owed"]'), list: top('[data-testid="owed-list"]'), hero: top('[data-testid="insights-collected"]'), tiles: top('[data-testid="p1-headline"]'), reply: top('[data-testid="p1-reply"]'), firstNudge: top('[data-testid^="owed-nudge-"]'), firstPaid: top('[data-testid^="owed-mark-paid-"]') };
+  });
+  check('insights: the first thing under the title is "Owed to you", with Nudge and Mark paid on its first row', order.owed > order.title && order.owed < order.hero && order.firstNudge > 0 && order.firstNudge < 700 && order.firstPaid > 0 && order.firstPaid < 700, JSON.stringify(order));
+  check('insights: then the hero (collected), then the tiles, then the reply card', order.hero < order.tiles && order.tiles < order.reply, JSON.stringify(order));
+  const ot = await page.evaluate(() => { const t = document.querySelector('[data-testid="insights-owed-total"]'); const c = document.querySelector('[data-testid="insights-owed-count"]'); return { total: getComputedStyle(t).color, body: getComputedStyle(document.body).color, count: getComputedStyle(c).color }; });
+  check('insights: owed to you is ink with an amber count, not red', ot.total === ot.body && !/^rgb\((2[0-9]{2}|1[89][0-9]), ?[0-9]{1,2}, ?[0-9]{1,2}\)$/.test(ot.count), JSON.stringify(ot));
 
-  // Owed list (existing behaviour).
-  check('insights: owed list has four rows with Nudge and Mark paid', (await count(page, `${T('owed-list')} > li`)) === 4 && (await count(page, '[data-testid^="owed-nudge-"]')) === 4 && (await count(page, '[data-testid^="owed-mark-paid-"]')) === 4);
+  // The numbers.
+  check(`insights: owed is ${money(calc.ins.owedTotal)} across ${calc.ins.owedCount} jobs`, pounds(await text(page, T('insights-owed-total'))) === Math.round(calc.ins.owedTotal) && new RegExp(`${calc.ins.owedCount} jobs`).test(await text(page, T('insights-owed-count'))), await text(page, T('insights-owed')));
+  check(`insights: the hero says collected this month is ${money(calc.ins.collectedMonth)} from ${calc.ins.collectedMonthCount} jobs, and draws a sparkline of the weeks`, pounds(await text(page, T('insights-collected-value'))) === Math.round(calc.ins.collectedMonth) && new RegExp(`${calc.ins.collectedMonthCount} jobs`).test(await text(page, T('insights-collected'))) && (await count(page, `${T('insights-spark')} svg polyline`)) >= 2, await text(page, T('insights-collected')));
+  check(`insights: quotes out is ${money(calc.q.waitingValue)} with ${calc.q.waitingCount} waiting`, pounds(await text(page, T('p1-quotes-out-value'))) === Math.round(calc.q.waitingValue) && new RegExp(`${calc.q.waitingCount} quotes? waiting`).test(await text(page, T('p1-quotes-out'))), await text(page, T('p1-quotes-out')));
+  check('insights: quotes out links to the waiting quotes', (await page.locator(T('p1-quotes-out')).getAttribute('href')) === '#/quotes?f=waiting');
+  const wantWin = calc.q.sent ? Math.round((100 * calc.q.accepted) / calc.q.sent) : null;
+  const headText = await page.evaluate(() => document.querySelector('.in-top').innerText);
+  check(`insights: ONE win rate, "Accepted ${wantWin}% of quotes sent", and no second conversion figure in the headline area`, (await text(page, T('p1-win-rate-value'))) === `${wantWin}%` && (headText.match(/\d+%/g) || []).filter((p) => p !== `${wantWin}%`).join('') === `${calc.sla.withinTargetPct}%` && !/win rate|decided|of enquiries/i.test(headText), headText.replace(/\s+/g, ' ').slice(0, 400));
+  const defBefore = await count(page, T('p1-win-rate-def'));
+  await page.click(T('p1-win-rate-info'));
+  await until(page, () => !!document.querySelector('[data-testid="p1-win-rate-def"]'));
+  check('insights: tapping the info button gives the definition', defBefore === 0 && /count as not accepted yet/.test(await text(page, T('p1-win-rate-def'))), await text(page, T('p1-win-rate-def')));
+  check('insights: next 14 days and average job are tiles (a free survey is not in the average)', (await count(page, T('insights-booked-next'))) === 1 && pounds(await text(page, T('insights-avg-value'))) === Math.round(calc.ins.avgJob) && pounds(await text(page, T('insights-booked-next-value'))) === Math.round(calc.ins.bookedNext14), `${await text(page, T('insights-avg'))} ${await text(page, T('insights-booked-next'))}`);
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('.in-tile')].map((t) => {
+    const r = t.getBoundingClientRect(); const l = t.querySelector('.in-tile__label').getBoundingClientRect(); const v = t.querySelector('.in-tile__value').getBoundingClientRect();
+    return { n: t.querySelector('.in-tile__label').textContent.trim(), labelH: Math.round(l.height), valueY: Math.round(v.top - r.top), oneLine: t.querySelector('.in-tile__label').scrollWidth <= t.querySelector('.in-tile__label').clientWidth + 1, capLines: Math.round(t.querySelector('.in-tile__caption').getBoundingClientRect().height / parseFloat(getComputedStyle(t.querySelector('.in-tile__caption')).lineHeight)) };
+  }));
+  check('insights: the four small tiles have one-line labels of the same height, values at the same height and captions of at most two lines', tiles.length === 4 && new Set(tiles.map((t) => t.labelH)).size === 1 && new Set(tiles.map((t) => t.valueY)).size === 1 && tiles.every((t) => t.oneLine && t.capLines <= 2), JSON.stringify(tiles));
+  check('insights: sample-driven figures carry a small Sample tag', (await count(page, `${T('insights-collected')} .ui-tag-sample`)) === 1 && (await count(page, '.in-tile .ui-tag-sample')) >= 1);
+  check('insights: free surveys are listed as free, not as £0', /Free surveys/.test(await text(page, T('insights-by-service'))) && /Free/.test(await text(page, T('insights-by-service'))) && !/£0/.test(await text(page, T('insights-by-service'))));
+  const figs = await page.evaluate(() => ['.in-hero__value', '.in-tile__value', '.in-owedhead__total'].map((q) => getComputedStyle(document.querySelector(q)).fontVariantNumeric));
+  check('insights: display figures use proportional numerals, not tabular', figs.every((f) => /proportional-nums/.test(f) && !/tabular-nums/.test(f)), figs.join(' | '));
+
+  // Owed list.
+  check(`insights: owed list has ${calc.ins.owedCount} rows with Nudge and Mark paid`, (await count(page, `${T('owed-list')} > li`)) === calc.ins.owedCount && (await count(page, '[data-testid^="owed-nudge-"]')) === calc.ins.owedCount && (await count(page, '[data-testid^="owed-mark-paid-"]')) === calc.ins.owedCount);
 
   // Reply time vs the promise.
-  check('insights: 89% were answered inside the 24 hour promise', /89%/.test(await text(page, T('p1-reply-pct'))), await text(page, T('p1-reply-pct')));
+  const pctWant = calc.sla.withinTargetPct;
+  check(`insights: ${pctWant}% were answered inside the 24 hour promise (the ring says ${pctWant}%, the sentence does not repeat it)`, new RegExp(`${pctWant}%`).test(await text(page, T('p1-reply-ring'))) && /24 hours/.test(await text(page, T('p1-reply-pct'))) && !new RegExp(String(pctWant)).test(await text(page, T('p1-reply-pct'))), `${await text(page, T('p1-reply-ring'))} | ${await text(page, T('p1-reply-pct'))}`);
+  check('insights: the reply-rate tile agrees with the ring', (await text(page, T('p1-reply-rate-value'))) === `${pctWant}%`);
   check('insights: the average reply is 4 h 14 min', /4 h 14 min/.test(await text(page, T('p1-reply-avg'))), await text(page, T('p1-reply-avg')));
   check('insights: the overdue enquiry is listed with a Reply link', /Conor Brennan/.test(await text(page, T('p1-wait-bk_seed_11'))) && /Overdue by 6 h/.test(await text(page, T('p1-wait-bk_seed_11'))) && (await page.locator(T('p1-wait-reply-bk_seed_11')).getAttribute('href')) === '#/bookings/bk_seed_11');
-  check('insights: the reply ring is a labelled meter', (await page.locator(`${T('p1-reply-ring')}[role="meter"]`).getAttribute('aria-valuenow')) === '89');
+  check('insights: the reply ring is a labelled meter', (await page.locator(`${T('p1-reply-ring')}[role="meter"]`).getAttribute('aria-valuenow')) === String(pctWant));
 
   // Where enquiries come from: This month, then All time.
-  check('sources: this month Facebook has 11 enquiries and £3,364 in', Number(await text(page, T('p1-source-n-facebook'))) === 11 && pounds(await text(page, T('p1-source-rev-facebook'))) === 3364, `${await text(page, T('p1-source-n-facebook'))} ${await text(page, T('p1-source-rev-facebook'))}`);
+  check(`sources: this month Facebook has ${calc.fb.enquiries} enquiries and ${money(calc.fb.revenue)} in`, Number(await text(page, T('p1-source-n-facebook'))) === calc.fb.enquiries && pounds(await text(page, T('p1-source-rev-facebook'))) === Math.round(calc.fb.revenue), `${await text(page, T('p1-source-n-facebook'))} ${await text(page, T('p1-source-rev-facebook'))}`);
   check('sources: sources with no enquiries are not listed', (await count(page, T('p1-source-other'))) === 0);
   check('sources: no money yet is said plainly', /No money in yet/.test(await text(page, T('p1-source-rev-instagram'))));
+  const monthN = Object.fromEntries(calc.month.sources.map((x) => [x.id, x.enquiries]));
   const widths = await page.evaluate(() => ['facebook', 'instagram', 'google'].map((id) => { const f = document.querySelector(`[data-testid="p1-source-${id}"] .in-bar__fill`).getBoundingClientRect().width; const t = document.querySelector(`[data-testid="p1-source-${id}"] .in-bar`).getBoundingClientRect().width; return f / t; }));
-  check('sources: bars are drawn to scale (Facebook full, Instagram 3 of 11, Google 1 of 11)', Math.abs(widths[0] - 1) < 0.02 && Math.abs(widths[1] - 3 / 11) < 0.03 && Math.abs(widths[2] - 1 / 11) < 0.03, widths.map((w) => w.toFixed(3)).join(' '));
+  check('sources: bars are drawn to scale (Facebook full, Instagram and Google in proportion)', Math.abs(widths[0] - 1) < 0.02 && Math.abs(widths[1] - monthN.instagram / monthN.facebook) < 0.03 && Math.abs(widths[2] - monthN.google / monthN.facebook) < 0.03, widths.map((w) => w.toFixed(3)).join(' '));
+  // Cost and funnel are folded into one closed section.
+  check('insights: "Ads and results" is closed to start with, and holds the cost per enquiry and the funnel', !(await page.locator(T('p1-ads-results')).evaluate((el) => el.open)) && (await count(page, `${T('p1-ads-results')} ${T('p1-costs')}`)) === 1 && (await count(page, `${T('p1-ads-results')} ${T('p1-funnel')}`)) === 1 && !(await page.locator(T('p1-costs')).isVisible()));
+  await page.click(`${T('p1-ads-results')} summary`);
+  await until(page, () => document.querySelector('[data-testid="p1-ads-results"]').open);
+  check('insights: opening it shows the cost per enquiry', await page.locator(T('p1-cost-enquiry')).isVisible());
+  await page.click(`${T('p1-ads-results')} summary`);
+  const fbAll = calc.all.sources.find((x) => x.id === 'facebook').enquiries;
   await page.click(T('p1-period-all'));
-  await until(page, () => document.querySelector('[data-testid="p1-source-n-facebook"]').textContent.trim() === '13');
-  check('sources: All time shows 13 Facebook enquiries and the choice is in the address', Number(await text(page, T('p1-source-n-facebook'))) === 13 && /p=all/.test(await hashOf(page)), await hashOf(page));
-  check('funnel: follows the same period (24 enquiries, 16 quotes, 11 accepted, 6 installed)', (await Promise.all(['enquiries', 'quotes', 'accepted', 'installs'].map((id) => text(page, `${T(`p1-funnel-${id}`)} strong`)))).join() === '24,16,11,6');
+  await until(page, (n) => document.querySelector('[data-testid="p1-source-n-facebook"]').textContent.trim() === String(n), fbAll);
+  check(`sources: All time shows ${fbAll} Facebook enquiries and the choice is in the address`, Number(await text(page, T('p1-source-n-facebook'))) === fbAll && /p=all/.test(await hashOf(page)), await hashOf(page));
+  check('funnel: follows the same period (all time)', (await Promise.all(['enquiries', 'quotes', 'accepted', 'installs'].map((id) => text(page, `${T(`p1-funnel-${id}`)} strong`)))).join() === [calc.all.total.enquiries, calc.all.total.quotes, calc.all.total.accepted, calc.all.total.installs].join());
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForSelector(T('p1-sources'));
   check('sources: after a reload the period is still All time', (await page.locator(`${T('p1-period-all')}[aria-checked="true"]`).count()) === 1);
   await page.click(T('p1-period-month'));
-  await until(page, () => document.querySelector('[data-testid="p1-source-n-facebook"]').textContent.trim() === '11');
+  await until(page, (n) => document.querySelector('[data-testid="p1-source-n-facebook"]').textContent.trim() === String(n), calc.fb.enquiries);
+  await page.click(`${T('p1-ads-results')} summary`);
+  await until(page, () => document.querySelector('[data-testid="p1-ads-results"]').open);
   const fw = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="p1-funnel-"] .in-bar__fill')].map((el) => el.getBoundingClientRect().width / el.parentElement.getBoundingClientRect().width));
-  check('funnel: bars are drawn to scale (19, 11, 7, 2)', fw.length === 4 && Math.abs(fw[0] - 1) < 0.02 && Math.abs(fw[1] - 11 / 19) < 0.03 && Math.abs(fw[2] - 7 / 19) < 0.03 && Math.abs(fw[3] - 2 / 19) < 0.03, fw.map((w) => w.toFixed(3)).join(' '));
-  await page.click(`${T('p1-sources-table')} summary`);
-  check('sources: the table twin opens and lists every source', (await count(page, `${T('p1-sources-table')} tbody tr`)) === 6, String(await count(page, `${T('p1-sources-table')} tbody tr`)));
+  const ft = calc.month.total;
+  const fmax = Math.max(1, ft.enquiries, ft.quotes, ft.accepted, ft.installs);
+  check(`funnel: bars are drawn to scale (${ft.enquiries}, ${ft.quotes}, ${ft.accepted}, ${ft.installs})`, fw.length === 4 && [ft.enquiries, ft.quotes, ft.accepted, ft.installs].every((n, i) => Math.abs(fw[i] - n / fmax) < 0.03), fw.map((w) => w.toFixed(3)).join(' '));
+  check('funnel: the old paragraph that reconciled two conversion figures is gone', !(await count(page, T('p1-funnel-note'))));
+  await page.click(`${T('p1-ads-results')} summary`);
+  // "View as a table" is a small text toggle in the card header (it was a heavy full-width row under every chart).
+  const tog = await page.locator(T('p1-sources-toggle')).boundingBox();
+  check('sources: "View as a table" is a small text toggle in the header, not a full-width button', tog && tog.width < 220 && tog.height <= 48, JSON.stringify(tog));
+  await page.click(T('p1-sources-toggle'));
+  check('sources: the table twin replaces the chart and lists every source', (await count(page, `${T('p1-sources-table')} tbody tr`)) === calc.month.sources.filter((x) => x.enquiries > 0).length + 1 && (await count(page, T('p1-sources-list'))) === 0, String(await count(page, `${T('p1-sources-table')} tbody tr`)));
+  check('sources: the toggle then offers the chart again', /chart/.test(await text(page, T('p1-sources-toggle'))));
+  await page.click(T('p1-sources-toggle'));
 
   // Weekly money.
   check('weekly: six bars, oldest first, the current week last', (await count(page, '[data-testid^="insights-weekbar-"]')) === 6 && (await count(page, T('insights-weekbar-5'))) === 1);
-  check('weekly: the busiest week reads £1,684', /£1,684/.test(await text(page, T('insights-weekbar-2'))), await text(page, T('insights-weekbar-2')));
+  const wk = calc.ins.weeks;
+  const best = wk.reduce((bi, w, i) => (w.total > wk[bi].total ? i : bi), 0);
+  check(`weekly: the busiest week reads ${money(wk[best].total)}`, (await text(page, T(`insights-weekbar-${best}`))).includes(money(wk[best].total)), await text(page, T(`insights-weekbar-${best}`)));
+  const zero = wk.findIndex((w) => w.total === 0);
+  if (zero >= 0) {
+    const zs = await page.evaluate((i) => { const li = document.querySelector(`[data-testid="insights-weekbar-${i}"]`); const stub = li.querySelector('.in-bar__stub'); return { label: li.querySelector('.in-bar__val').textContent.trim(), dashed: stub ? getComputedStyle(stub).borderTopStyle : '' }; }, zero);
+    check('weekly: a week with nothing in it is a dashed bar labelled £0, not a bare stub', zs.label === '£0' && zs.dashed === 'dashed', JSON.stringify(zs));
+  }
+  const cs = await page.evaluate(() => { const li = document.querySelector('[data-testid="insights-weekbar-5"]'); const prev = document.querySelector('[data-testid="insights-weekbar-4"] .in-bar__fill'); const f = li.querySelector('.in-bar__fill'); return { label: li.querySelector('.in-bar__val').textContent.trim(), opacity: f ? Number(getComputedStyle(f).opacity) : 1, prev: prev ? Number(getComputedStyle(prev).opacity) : 1 }; });
+  check('weekly: this week is drawn lighter and says "so far"', /so far/.test(cs.label) && cs.opacity < cs.prev, JSON.stringify(cs));
+  await page.click(T('p1-weeks-toggle'));
+  check('weekly: the table twin lists the six weeks and marks this one "so far"', (await count(page, `${T('p1-weeks-table')} tbody tr`)) === 6 && /so far/.test(await text(page, `${T('p1-weeks-table')} tbody tr:last-child`)));
+  await page.click(T('p1-weeks-toggle'));
 
   const small = await smallTargets(page);
   check('insights: every tap target is at least 44px', small.length === 0, small.slice(0, 6).join(', '));
@@ -383,7 +557,7 @@ async function insightsPhone(browser) {
     watch(p2, b2)(`insights ${w}`);
     await gotoDash(p2, '#/insights');
     check(`insights (${scheme}, ${w}px): no horizontal overflow`, (await overflowOf(p2)) <= 0, String(await overflowOf(p2)));
-    check(`insights (${scheme}, ${w}px): the period control never clips an option`, await p2.evaluate(() => { const el = document.querySelector('[data-testid="p1-period"]'); return el.scrollWidth <= el.clientWidth + 1 || getComputedStyle(el).display === 'grid'; }));
+    check(`insights (${scheme}, ${w}px): the period control is one row (and scrolls, with a fade, if the phone is too narrow)`, await p2.evaluate(() => { const el = document.querySelector('[data-testid="p1-period"]'); const tops = new Set([...el.querySelectorAll('.ui-seg__opt')].map((o) => Math.round(o.getBoundingClientRect().top))); return tops.size === 1 && getComputedStyle(el).display !== 'grid' && (el.scrollWidth <= el.clientWidth + 1 || getComputedStyle(el).overflowX === 'auto'); }));
     if (w === 320) {
       const sm = await smallTargets(p2);
       check('insights (320px): every tap target is at least 44px', sm.length === 0, sm.slice(0, 6).join(', '));
@@ -410,12 +584,20 @@ async function insightsPhone(browser) {
 
 // ---------- 5. Ad spend ----------
 
+/** "Ads and results" is closed until he opens it. */
+async function openAds(page) {
+  if (!(await page.locator(T('p1-ads-results')).evaluate((el) => el.open))) await page.click(`${T('p1-ads-results')} summary`);
+  await until(page, () => document.querySelector('[data-testid="p1-ads-results"]').open);
+  await sleep(150);
+}
+
 async function adSpend(browser) {
   const ctx = await newContext(browser, { scheme: 'dark' });
   const page = await ctx.newPage();
   const bag = [];
   watch(page, bag)('ad spend');
   await gotoDash(page, '#/insights');
+  await openAds(page);
   const label = () => text(page, T('p1-month-label'));
   const val = (id) => text(page, `${T(id)} .in-cost__value`);
 
@@ -456,6 +638,7 @@ async function adSpend(browser) {
 
   // Back to October: add Google spend, watch the three costs move, then undo.
   await gotoDash(page, '#/insights');
+  await openAds(page);
   await page.fill(T('p1-ad-input-google'), '100');
   await page.click(T('p1-ad-save'));
   await until(page, () => /£390/.test(document.querySelector('[data-testid="p1-ad-spend"]').textContent));
@@ -463,7 +646,8 @@ async function adSpend(browser) {
   check('ads: Google enquiries now count, so cost per enquiry becomes £26', pounds(await val('p1-cost-enquiry')) === 26, await val('p1-cost-enquiry'));
   check('ads: the channel table lists Google with its spend', /£100/.test(await text(page, T('p1-ad-channels'))), await text(page, T('p1-ad-channels')));
   await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForSelector(T('p1-ads'));
+  await page.waitForSelector(T('p1-ads'), { state: 'attached' });
+  await openAds(page);
   check('ads: after a reload the spend is still there', pounds(await text(page, T('p1-ad-spend'))) === 390 && (await page.inputValue(T('p1-ad-input-google'))) === '100');
   check('ads: the SAMPLE tag stays on the month while sample entries remain', /SAMPLE/i.test(await label()));
 
@@ -503,8 +687,9 @@ async function owedAndMotion(browser) {
   const bag = [];
   watch(page, bag)('owed');
   await gotoDash(page, '#/insights');
-  const before = pounds(await text(page, `${T('insights-collected')} .ui-stat__value`));
-  const owedBefore = pounds(await text(page, `${T('insights-owed')} .ui-stat__value`));
+  const before = pounds(await text(page, T('insights-collected-value')));
+  const owedBefore = pounds(await text(page, T('insights-owed-total')));
+  const owedRowsBefore = await count(page, `${T('owed-list')} > li`);
   const first = await page.locator('[data-testid^="owed-mark-paid-"]').first().getAttribute('data-testid');
   const id = first.replace('owed-mark-paid-', '');
   const amount = pounds(await text(page, `${T(`owed-row-${id}`)} .in-owed__amount`));
@@ -514,10 +699,10 @@ async function owedAndMotion(browser) {
   await page.click(T('paid-submit'));
   await page.waitForSelector(T('paid-submit'), { state: 'detached', timeout: 3000 }).catch(() => {});
   await until(page, (b) => !document.querySelector(`[data-testid="owed-row-${b}"]`), id);
-  const after = pounds(await text(page, `${T('insights-collected')} .ui-stat__value`));
-  const owedAfter = pounds(await text(page, `${T('insights-owed')} .ui-stat__value`));
+  const after = pounds(await text(page, T('insights-collected-value')));
+  const owedAfter = pounds(await text(page, T('insights-owed-total')));
   check('owed: marking a job paid moves its money from Owed to Collected', after === before + amount && owedAfter === owedBefore - amount, `${before}+${amount}=${after}; ${owedBefore}-${amount}=${owedAfter}`);
-  check('owed: the row leaves the list', (await count(page, `${T('owed-list')} > li`)) === 3);
+  check('owed: the row leaves the list', (await count(page, `${T('owed-list')} > li`)) === owedRowsBefore - 1);
   await ctx.close();
 
   // Reduced motion: the bars do not animate.
@@ -527,7 +712,7 @@ async function owedAndMotion(browser) {
   const dur = await rpage.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.in-bar__fill')).animationDuration));
   check('motion: with reduced motion the chart bars do not animate', dur < 0.01, String(dur));
   await gotoDash(rpage, '#/pipeline');
-  const tdur = await rpage.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pl-card__action-arrow')).transitionDuration));
+  const tdur = await rpage.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pl-card__chev')).transitionDuration));
   check('motion: with reduced motion the pipeline cards do not slide', tdur < 0.01, String(tdur));
   await rctx.close();
   check('owed: clean console and requests', bag.length === 0, bag.slice(0, 3).join(' || '));
@@ -541,7 +726,7 @@ async function owedAndMotion(browser) {
     BASE = await startServer();
     browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
     const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
-    const parts = { pipelinePhone, pipelineWide, pipelineLive, insightsPhone, adSpend, owedAndMotion };
+    const parts = { pipelinePhone, pipelineWide, pipelineSla, pipelineLive, insightsPhone, adSpend, owedAndMotion };
     for (const [name, fn] of Object.entries(parts)) if (!only || only.includes(name)) await fn(browser);
   } catch (err) {
     check('the test run itself did not crash', false, String((err && err.stack) || err));

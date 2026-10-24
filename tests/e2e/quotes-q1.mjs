@@ -117,8 +117,23 @@ const visible = (page, sel) => page.locator(sel).first().isVisible().catch(() =>
 const count = (page, sel) => page.locator(sel).count();
 const hashOf = (page) => page.evaluate(() => location.hash);
 const quote = (page, id) => page.evaluate((qid) => JSON.parse(JSON.stringify(window.__q.store.getState().quotes[qid] || null)), id);
+/** The quote id inside a v4 customer link (quote.html#d=...), or inside an older #q=<id> link; '' when it cannot be read. */
+const linkQuoteId = (page, link) => page.evaluate(async (l) => {
+  const m = /quote\.html#(.*)$/.exec(l || '');
+  if (!m) return '';
+  const q = /(?:^|&)q=([^&]+)/.exec(m[1]);
+  const d = /(?:^|&)d=([^&]+)/.exec(m[1]);
+  if (q) return decodeURIComponent(q[1]);
+  if (!d) return '';
+  const { parseQuoteLink } = await import('/js/core/handoff.js');
+  const out = parseQuoteLink(d[1]);
+  return out && out.ok ? out.data.quoteId : '';
+}, link);
+/** The quote total on screen: the card beside the quote on a wide screen, the sticky bar on a phone. */
+const grand = async (page) => ((await page.locator(T('q1-total')).count()) ? text(page, T('q1-total')) : text(page, T('q1-bar-total')));
 const quoteIds = (page) => page.evaluate(() => Object.keys(window.__q.store.getState().quotes));
-const totalOf = (q) => (q ? q.lines.reduce((t, l) => t + l.qty * l.unitPrice, 0) : null);
+// A possible extra (optional line) is never part of a quote's total.
+const totalOf = (q) => (q ? q.lines.filter((l) => l.optional !== true).reduce((t, l) => t + l.qty * l.unitPrice, 0) : null);
 const messagesOf = (page, kind) => page.evaluate((k) => JSON.parse(JSON.stringify(window.__q.store.getState().messages.filter((m) => m.kind === k))), kind);
 const waitFor = async (page, fn, arg, ms = 4000) => { try { await page.waitForFunction(fn, arg, { timeout: ms }); return true; } catch (e) { return false; } };
 const waitQuote = async (page, id, pred, ms = 4000) => {
@@ -129,9 +144,19 @@ const waitQuote = async (page, id, pred, ms = 4000) => {
   }
   return false;
 };
+/** A quote that is out opens as a short summary: the builder sits behind "Edit quote" (open it) and Send again, new version, copy and preview sit in the "..." menu. */
+const openEdit = async (page) => {
+  if (await visible(page, T('q1-lines')) || await visible(page, T('q1-lines-readonly'))) return;
+  await page.click(`${T('q1-edit')} summary`);
+  await sleep(200);
+};
+const act = async (page, id) => {
+  if (!(await visible(page, T(id)))) { await page.click(T('q1-more')); await page.waitForSelector(T('q1-menu-sheet'), { timeout: 3000 }); await sleep(250); }
+  await page.click(T(id));
+};
 const toastWith = (page, t) => page.locator(T('toast')).filter({ hasText: t });
 const toastAction = (page, t) => toastWith(page, t).locator(T('toast-action')).first();
-const money = (n) => `£${n}`;
+const money = (n) => `£${Number(n).toLocaleString('en-GB')}`;
 const call = (page, fn, ...args) => page.evaluate(({ fn: name, args: a }) => {
   const res = window.__q.store[name](...a);
   return JSON.parse(JSON.stringify(res === undefined ? null : res));
@@ -281,25 +306,29 @@ async function builderChecks(browser) {
   check('builder: header shows the customer, the quote id and Draft', (await text(page, T('view-title'))) === 'Oisin Carville'
     && /Q-EL-1023/.test(await text(page, '.ui-page-header__eyebrow')) && /Draft/.test(await text(page, T('q1-status'))));
   check('builder: sample prices are labelled', await visible(page, T('q1-sample-tag')));
+  const cust = await page.evaluate(() => { const c = document.querySelector('[data-testid="q1-customer"]').getBoundingClientRect(); return Math.round(c.height); });
+  check('builder: the customer card is one line (name, postcode, what they answered) until opened', cust <= 96 && /Oisin/.test(await text(page, T('q1-customer'))) && /BT5 4AX/.test(await text(page, T('q1-customer'))) && (await count(page, T('q1-enquiry-link'))) === 0, String(cust));
+  await page.click(T('q1-customer-toggle'));
+  await sleep(150);
   check('builder: customer card links to the enquiry and shows their answers', (await page.getAttribute(T('q1-enquiry-link'), 'href')) === '#/bookings/bk_seed_17'
     && await visible(page, T('enquiry-chips')) && /neighbour/.test(await text(page, T('q1-customer-note'))));
   check('builder: Ohme is the chosen charger (its own price list line)', (await page.isChecked(`${T('q1-brand-ohme')} input`)) && await visible(page, T('q1-line-charger_ohme')));
-  check('builder: total starts at £1394 in the card and the bar', (await text(page, T('q1-total'))) === '£1394' && (await text(page, T('q1-bar-total'))) === '£1394');
+  check('builder: on a phone the one total is the sticky bar (£1,394), with one sample badge and no second total card', (await count(page, T('q1-totals'))) === 0 && (await text(page, T('q1-bar-total'))) === '£1,394' && (await count(page, T('q1-sample-tag'))) === 1);
 
   // switch charger
   await page.click(T('q1-brand-zappi'));
   await sleep(150);
   check('builder: switching to Zappi swaps the charger line and its price', (await visible(page, T('q1-line-charger_zappi'))) && !(await visible(page, T('q1-line-charger_ohme')))
-    && (await text(page, T('q1-total'))) === '£1514', await text(page, T('q1-total')));
+    && (await grand(page)) === '£1,514', await grand(page));
 
   // tap to add, quantity, price
   await page.click(T('q1-add-cable_extra'));
   await sleep(200);
-  check('builder: tapping an item adds a line with its sample price', await visible(page, T('q1-line-cable_extra')) && (await text(page, T('q1-line-total-cable_extra'))) === '£12' && (await text(page, T('q1-total'))) === '£1526');
+  check('builder: tapping an item adds a line with its sample price', await visible(page, T('q1-line-cable_extra')) && (await text(page, T('q1-line-total-cable_extra'))) === '£12' && (await grand(page)) === '£1,526');
   await page.click(T('q1-qty-plus-cable_extra'));
   await page.click(T('q1-qty-plus-cable_extra'));
   await sleep(150);
-  check('builder: the quantity stepper works and the line total follows', (await page.inputValue(T('q1-qty-cable_extra'))) === '3' && (await text(page, T('q1-line-total-cable_extra'))) === '£36' && (await text(page, T('q1-total'))) === '£1550');
+  check('builder: the quantity stepper works and the line total follows', (await page.inputValue(T('q1-qty-cable_extra'))) === '3' && (await text(page, T('q1-line-total-cable_extra'))) === '£36' && (await grand(page)) === '£1,550');
   await page.fill(T('q1-qty-cable_extra'), '10');
   await page.locator(T('q1-qty-cable_extra')).blur();
   await sleep(150);
@@ -311,15 +340,15 @@ async function builderChecks(browser) {
   await page.fill(T('q1-price-circuit'), '200');
   await page.locator(T('q1-price-circuit')).blur();
   await sleep(150);
-  check('builder: the unit price is editable and the total follows', (await text(page, T('q1-line-total-circuit'))) === '£200' && (await text(page, T('q1-total'))) === '£1546', await text(page, T('q1-total')));
+  check('builder: the unit price is editable and the total follows', (await text(page, T('q1-line-total-circuit'))) === '£200' && (await grand(page)) === '£1,546', await grand(page));
 
   // remove with undo
   await page.click(T('q1-remove-testing'));
   await sleep(200);
-  check('builder: removing a line updates the total and offers Undo', !(await visible(page, T('q1-line-testing'))) && (await text(page, T('q1-total'))) === '£1461' && await visible(page, T('q1-add-testing')));
+  check('builder: removing a line updates the total and offers Undo', !(await visible(page, T('q1-line-testing'))) && (await grand(page)) === '£1,461' && await visible(page, T('q1-add-testing')));
   await toastAction(page, 'Removed').click();
   await sleep(200);
-  check('builder: Undo puts the line back', (await visible(page, T('q1-line-testing'))) && (await text(page, T('q1-total'))) === '£1546');
+  check('builder: Undo puts the line back', (await visible(page, T('q1-line-testing'))) && (await grand(page)) === '£1,546');
 
   // custom lines
   await page.click(T('q1-add-custom'));
@@ -330,7 +359,7 @@ async function builderChecks(browser) {
   await page.fill(T('q1-custom-price'), '60');
   await page.click(T('q1-custom-save'));
   await sleep(250);
-  check('builder: a custom line is added', (await visible(page, T('q1-line-custom-0'))) && (await text(page, T('q1-line-total-custom-0'))) === '£60' && (await text(page, T('q1-total'))) === '£1606', await text(page, T('q1-total')));
+  check('builder: a custom line is added', (await visible(page, T('q1-line-custom-0'))) && (await text(page, T('q1-line-total-custom-0'))) === '£60' && (await grand(page)) === '£1,606', await grand(page));
   await page.click(T('q1-add-custom'));
   await page.waitForSelector(T('q1-custom-sheet'));
   await page.fill(T('q1-custom-label'), 'Loyalty discount');
@@ -338,7 +367,27 @@ async function builderChecks(browser) {
   await page.fill(T('q1-custom-price'), '50');
   await page.click(T('q1-custom-save'));
   await sleep(250);
-  check('builder: a discount line takes money off', (await text(page, T('q1-line-total-custom-1'))) === '-£50' && (await text(page, T('q1-total'))) === '£1556', await text(page, T('q1-total')));
+  check('builder: a discount line takes money off', (await text(page, T('q1-line-total-custom-1'))) === '-£50' && (await grand(page)) === '£1,556', await grand(page));
+  // possible extras: listed on the quote, marked, and never added into the total
+  await page.click(T('q1-add-consumer_unit'));
+  await sleep(200);
+  check('builder: the consumer unit upgrade is a possible extra: listed and marked, and the total does not move',
+    (await visible(page, T('q1-line-consumer_unit'))) && /Possible extra/.test(await text(page, T('q1-extra-consumer_unit'))) && (await grand(page)) === '£1,556', await grand(page));
+  await page.click(T('q1-remove-consumer_unit'));
+  await sleep(200);
+  check('builder: removing the extra leaves the total as it was', !(await visible(page, T('q1-line-consumer_unit'))) && (await grand(page)) === '£1,556', await grand(page));
+  await page.click(T('q1-add-custom'));
+  await page.waitForSelector(T('q1-custom-sheet'));
+  await page.fill(T('q1-custom-label'), 'Extra socket if needed');
+  await page.fill(T('q1-custom-price'), '75');
+  check('builder: the custom line sheet has a "Possible extra" switch, off to start with', (await page.getAttribute(T('q1-custom-optional'), 'aria-checked')) === 'false');
+  await page.click(T('q1-custom-optional'));
+  await page.click(T('q1-custom-save'));
+  await sleep(250);
+  check('builder: a custom possible extra is added without changing the total', (await visible(page, T('q1-line-custom-2'))) && /Possible extra/.test(await text(page, T('q1-extra-custom-2'))) && (await grand(page)) === '£1,556', await grand(page));
+  await page.click(T('q1-remove-custom-2'));
+  await sleep(200);
+  check('builder: and it can be removed again', !(await visible(page, T('q1-line-custom-2'))) && (await grand(page)) === '£1,556');
   await page.click(T('q1-edit-custom-0'));
   await page.waitForSelector(T('q1-custom-sheet'));
   check('builder: a custom line can be edited (the sheet opens with its values)', (await page.inputValue(T('q1-custom-label'))) === 'Extra outdoor socket');
@@ -350,23 +399,27 @@ async function builderChecks(browser) {
   // notes and valid until
   await page.fill(T('q1-notes'), 'Cable route agreed on the survey.');
   check('builder: the standard terms can be restored', await visible(page, T('q1-notes-reset')));
+  check('builder: valid-until offers 14, 30 and 60 days plus Custom, and the date picker is hidden until Custom', (await count(page, T('q1-valid-14'))) === 1 && (await count(page, T('q1-valid-30'))) === 1 && (await count(page, T('q1-valid-60'))) === 1 && (await count(page, T('q1-valid-custom'))) === 1 && (await count(page, T('q1-valid-date'))) === 0);
   await page.click(T('q1-valid-60'));
   await sleep(150);
-  check('builder: valid-until presets set the date', (await page.inputValue(T('q1-valid-date'))) === '2026-12-22', await page.inputValue(T('q1-valid-date')));
+  check('builder: the 60 day preset shows its date in one line', /22 December/.test(await text(page, T('q1-valid-text'))) && (await page.locator(`${T('q1-valid-60')}[aria-checked="true"]`).count()) === 1, await text(page, T('q1-valid-text')));
+  await page.click(T('q1-valid-custom'));
+  await sleep(150);
+  check('builder: Custom opens the date picker, holding the chosen date', (await page.inputValue(T('q1-valid-date'))) === '2026-12-22', await page.inputValue(T('q1-valid-date')));
 
   // autosave
   check('builder: shows it is saving', /Saving|saved/i.test(await text(page, T('q1-saved'))));
   const saved = await waitQuote(page, ID, (q) => q.notes === 'Cable route agreed on the survey.' && q.validUntil === '2026-12-22' && q.brand === 'ZAPPI' && q.lines.length === 7);
   check('builder: edits autosave to the store', saved, JSON.stringify(await quote(page, ID)).slice(0, 200));
   const q = await quote(page, ID);
-  check('builder: the saved quote total matches the screen', totalOf(q) === 1556 && (await text(page, T('q1-bar-total'))) === '£1556', `${totalOf(q)}`);
+  check('builder: the saved quote total matches the screen', totalOf(q) === 1556 && (await text(page, T('q1-bar-total'))) === '£1,556', `${totalOf(q)}`);
   await sleep(400);
   check('builder: the page says it is saved', /Draft saved/.test(await text(page, T('q1-saved'))), await text(page, T('q1-saved')));
   await shot(page, 'builder-draft-dark-375');
 
   // reload keeps everything
   await reload(page);
-  check('builder: survives a reload', (await text(page, T('q1-total'))) === '£1556' && (await page.inputValue(T('q1-notes'))) === 'Cable route agreed on the survey.' && (await page.isChecked(`${T('q1-brand-zappi')} input`)));
+  check('builder: survives a reload', (await grand(page)) === '£1,556' && (await page.inputValue(T('q1-notes'))) === 'Cable route agreed on the survey.' && (await page.isChecked(`${T('q1-brand-zappi')} input`)));
 
   // a quick edit followed by leaving at once is still saved
   await page.fill(T('q1-notes'), 'Last minute change.');
@@ -405,25 +458,29 @@ async function sendChecks(browser) {
   const stored = await quote(page, ID);
   check('send: unsaved edits are saved before the sheet opens', stored.lines.some((l) => /Groundwork/.test(l.label)), JSON.stringify(stored.lines.map((l) => l.label)));
   const preview = await text(page, T('q1-send-preview'));
-  check('send: the sheet previews the message with the total and the quote link', /£1459/.test(preview) && /quote\.html#q=Q-EL-1023/.test(preview), preview);
+  const previewHref = (await page.getAttribute(`${T('q1-send-preview')} a.ui-bubble__link`, 'href').catch(() => '')) || '';
+  check('send: the sheet previews the message with the total and a short "Quote link" (the real quote URL stays on the anchor)', /£1,459/.test(preview) && /Quote link/.test(preview) && !/https?:|localhost/.test(preview) && (await linkQuoteId(page, previewHref)) === 'Q-EL-1023', `${preview} | ${previewHref.slice(0, 120)}`);
+  check('send: the sheet says the link opens on any phone and where accept and decline are kept', /opens on any phone/.test(await text(page, T('q1-send-xdevice'))) && /saved on the phone they were tapped on/.test(await text(page, T('q1-send-xdevice'))), await text(page, T('q1-send-xdevice')));
   check('send: WhatsApp, email and copy link are offered', (await visible(page, T('q1-send-whatsapp'))) && (await visible(page, T('q1-send-email'))) && (await visible(page, T('q1-send-link'))));
   await shot(page, 'send-sheet-dark-375');
 
   const [popup] = await Promise.all([ctx.waitForEvent('page', { timeout: 5000 }), page.click(T('q1-send-whatsapp'))]);
   await popup.waitForURL(/wa\.me/, { timeout: 5000 }).catch(() => {});
   const url = popup.url();
-  check('send: WhatsApp opens a wa.me link with the quote link in the text', /^https:\/\/wa\.me\/\d+\?text=/.test(url) && decodeURIComponent(url).includes('quote.html#q=Q-EL-1023'), url.slice(0, 140));
+  check('send: WhatsApp opens a wa.me link with the quote link in the text', /^https:\/\/wa\.me\/\d+\?text=/.test(url) && (await linkQuoteId(page, decodeURIComponent(url).replace(/^.*?(https?:\/\/\S*quote\.html#\S+).*$/s, '$1'))) === 'Q-EL-1023', url.slice(0, 140));
   await popup.close();
   await sleep(300);
   const sent = await quote(page, ID);
   const msgs = await messagesOf(page, 'customer_quote_sent');
   check('send: the quote is marked sent via WhatsApp', sent.status === 'sent' && sent.sentVia === 'whatsapp' && !!sent.sentAt, JSON.stringify([sent.status, sent.sentVia]));
-  check('send: a simulated customer_quote_sent message was logged with the link', msgs.some((m) => m.bookingId === 'bk_seed_17' && m.simulated === true && m.body.includes('quote.html#q=Q-EL-1023')));
+  check('send: a simulated customer_quote_sent message was logged with the link', msgs.some((m) => m.bookingId === 'bk_seed_17' && m.simulated === true && m.body.includes('quote.html#')) && (await linkQuoteId(page, (msgs.find((m) => m.bookingId === 'bk_seed_17').body.match(/https?:\/\/\S*quote\.html#\S+/) || [''])[0])) === 'Q-EL-1023');
   check('send: the toast says it is simulated', (await toastWith(page, 'simulated').count()) >= 1, await text(page, T('toast')));
   check('send: the screen now shows the Sent status card with the timeline', (await text(page, T('q1-headline'))).includes('Waiting for Oisin') && /Sent by WhatsApp \(simulated\)/.test(await text(page, T('q1-timeline'))) && /Sent/.test(await text(page, T('q1-status'))));
   check('send: a sent quote offers nudge, "said yes" and "said no"', (await visible(page, T('q1-chase'))) && (await visible(page, T('q1-accept-phone'))) && (await visible(page, T('q1-decline-phone'))));
+  const yn = await page.evaluate(() => ['q1-accept-phone', 'q1-decline-phone'].map((id) => { const r = document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));
+  check('send: "They said yes" and "They said no" are two equal buttons, 48px tall', Math.abs(yn[0][0] - yn[1][0]) <= 1 && yn[0][1] >= 48 && yn[1][1] >= 48, JSON.stringify(yn));
   const nudge = await page.getAttribute(T('q1-chase'), 'href');
-  check('send: the nudge is a wa.me link with the quote link', /^https:\/\/wa\.me\//.test(nudge) && decodeURIComponent(nudge).includes('quote.html#q=Q-EL-1023'));
+  check('send: the nudge is a wa.me link with the quote link', /^https:\/\/wa\.me\//.test(nudge) && (await linkQuoteId(page, (decodeURIComponent(nudge).match(/https?:\/\/\S*quote\.html#\S+/) || [''])[0])) === 'Q-EL-1023');
   await shot(page, 'builder-sent-dark-375');
 
   // undo
@@ -442,6 +499,10 @@ async function sendChecks(browser) {
   check('send: the email toast says nothing was really sent', (await toastWith(page, 'Nothing was really sent').count()) >= 1, await text(page, T('toast')));
 
   // preview as the customer: the named tab, and it must not count as them opening it
+  check('send: a sent quote opens as a summary with one primary, "Nudge on WhatsApp", and the builder collapsed under "Edit quote"',
+    (await visible(page, T('q1-summary'))) && /Nudge on WhatsApp/.test(await text(page, T('q1-chase'))) && !(await visible(page, T('q1-lines'))) && (await visible(page, T('q1-edit'))) && /Edit quote/.test(await text(page, T('q1-edit'))) && !(await visible(page, T('q1-send'))));
+  await page.click(T('q1-more'));
+  await page.waitForSelector(T('q1-menu-sheet'));
   const prevHref = await page.getAttribute(T('q1-preview'), 'href');
   check('send: Preview as customer links to quote.html#q=<id>&preview=1 in the named tab', /^quote\.html.*#q=Q-EL-1023&preview=1$/.test(prevHref) && (await page.getAttribute(T('q1-preview'), 'target')) === 'vm-quote', prevHref);
   const [pv] = await Promise.all([ctx.waitForEvent('page', { timeout: 5000 }), page.click(T('q1-preview'))]);
@@ -452,18 +513,19 @@ async function sendChecks(browser) {
 
 
   // resend by link, copy link
-  await page.click(T('q1-send'));
+  await act(page, 'q1-send');
   await page.waitForSelector(T('q1-send-sheet'));
   await page.click(T('q1-send-link'));
   await sleep(500);
   const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''));
-  check('send: copy link puts the customer link on the clipboard', /quote\.html#q=Q-EL-1023$/.test(clip), clip);
+  check('send: copy link puts the customer link on the clipboard', /quote\.html#d=[A-Za-z0-9_-]+$/.test(clip) && (await linkQuoteId(page, clip)) === 'Q-EL-1023', clip.slice(0, 120));
   check('send: a resend keeps it sent via link', (await quote(page, ID)).sentVia === 'link');
-  await page.click(T('q1-copy-link'));
+  await act(page, 'q1-copy-link');
   await sleep(300);
   check('send: Copy customer link confirms', (await toastWith(page, 'Link copied').count()) >= 1);
 
-  // sent quotes stay editable and the change reaches the store
+  // sent quotes stay editable (behind "Edit quote") and the change reaches the store
+  await openEdit(page);
   await page.fill(T('q1-price-install_standard'), '480');
   await page.locator(T('q1-price-install_standard')).blur();
   const edited = await waitQuote(page, ID, (q) => q.lines.some((l) => l.label.startsWith('Standard installation') && l.unitPrice === 480));
@@ -477,7 +539,7 @@ async function sendChecks(browser) {
     localStorage.setItem('vm_state_v1', JSON.stringify(raw));
   });
   await reload(page);
-  await page.click(T('q1-send'));
+  await act(page, 'q1-send');
   await page.waitForSelector(T('q1-send-sheet'));
   const emailDisabled = await page.locator(T('q1-send-email')).isDisabled();
   check('send: with no email address the email option is disabled and says so', emailDisabled && /No email address/.test(await text(page, T('q1-send-email'))), await text(page, T('q1-send-email')));
@@ -537,6 +599,7 @@ async function statusChecks(browser) {
   check('accepted: one new booking was made', (await page.evaluate(() => window.__q.store.getState().bookings.length)) === before + 1);
   check('accepted: the day chosen is the install day', install && install.start.slice(0, 10) === dayId.replace('q1-accept-day-', ''), `${install && install.start} vs ${dayId}`);
   check('accepted: the screen shows the install card and a button to open it', (await visible(page, T('q1-install-card'))) && (await page.getAttribute(T('q1-open-install'), 'href')) === `#/bookings/${a.installBookingId}`);
+  await openEdit(page);
   check('accepted: it is read only and has no delete', (await visible(page, T('q1-lines-readonly'))) && !(await visible(page, T('q1-delete'))) && !(await visible(page, T('q1-duplicate'))));
   await shot(page, 'builder-accepted-dark-375');
   await page.click(T('q1-open-install'));
@@ -545,12 +608,14 @@ async function statusChecks(browser) {
 
   // viewed: locked, new version
   await goto(page, '#/quotes/Q-EL-1020', T('q1-builder'));
-  check('viewed: an opened quote says so and is locked (read-only lines)', (await text(page, T('q1-headline'))).includes('has opened it') && (await visible(page, T('q1-lines-readonly'))) && !(await visible(page, T('q1-lines'))));
+  check('viewed: an opened quote says so, offers a nudge, and its full quote is tucked away', (await text(page, T('q1-headline'))).includes('has opened it') && (await visible(page, T('q1-chase'))) && !(await visible(page, T('q1-lines-readonly'))));
+  await openEdit(page);
+  check('viewed: the full quote is locked (read-only lines) once opened', (await visible(page, T('q1-lines-readonly'))) && !(await visible(page, T('q1-lines'))));
   check('viewed: the brand shows as text, not a picker', await visible(page, T('q1-brand-readonly')) && !(await visible(page, T('q1-brands'))));
   const locked = await call(page, 'updateQuote', 'Q-EL-1020', { notes: 'x' });
   check('viewed: the store agrees it is frozen', locked.ok === false && locked.reason === 'bad_transition');
   const dupFrom = await quote(page, 'Q-EL-1020');
-  await page.click(T('q1-duplicate'));
+  await act(page, 'q1-duplicate');
   await sleep(500);
   const dup = await quote(page, 'Q-EL-1020-2');
   check('viewed: "Make a new version" creates an editable draft with the same lines', !!dup && dup.status === 'draft' && dup.lines.length === dupFrom.lines.length && totalOf(dup) === totalOf(dupFrom) && (await hashOf(page)) === '#/quotes/Q-EL-1020-2', await hashOf(page));
@@ -672,11 +737,11 @@ async function robustChecks(browser) {
   const bag2 = [];
   watch(page2, bag2)('robust tab 2');
   await open(page2, `#/quotes/${ID}`, { wait: T('q1-builder') });
-  const totalA = await text(page, T('q1-total'));
+  const totalA = await grand(page);
   await page2.click(T('q1-add-enclosure'));
   await waitQuote(page2, ID, (q) => q.lines.some((l) => /enclosure/i.test(l.label)));
-  const adopted = await waitFor(page, (want) => document.querySelector('[data-testid="q1-total"]').textContent.replace(/\s+/g, ' ').trim() === want, `£${parseInt(totalA.slice(1), 10) + 95}`, 5000);
-  check('two tabs: a change in one tab shows in the other', adopted, `${totalA} -> ${await text(page, T('q1-total'))}`);
+  const adopted = await waitFor(page, (want) => document.querySelector('[data-testid="q1-total"], [data-testid="q1-bar-total"]').textContent.replace(/\s+/g, ' ').trim() === want, `£${(parseInt(totalA.slice(1).replace(/,/g, ''), 10) + 95).toLocaleString('en-GB')}`, 5000);
+  check('two tabs: a change in one tab shows in the other', adopted, `${totalA} -> ${await grand(page)}`);
   await page2.close();
 
   // the list follows the store
@@ -782,6 +847,135 @@ async function layoutChecks(browser) {
   }
 }
 const tag0 = (scheme, w) => `${scheme} ${w}px`;
+// ---------- 7. round 2 (T08, T14): a quote he can read, a calmer builder, a link he can open on his phone ----------
+
+async function readableChecks(browser) {
+  const ctx = await newContext(browser);
+  const page = await ctx.newPage();
+  const bag = [];
+  watch(page, bag)('readable');
+
+  // A quote that is out: every line name wraps (no ellipsis), "Show all N lines" is a clear row, one sample badge, no coloured stripe.
+  await open(page, '#/quotes/Q-EL-1019', { wait: T('q1-builder') });
+  const sent = await page.evaluate(() => {
+    const labels = [...document.querySelectorAll('[data-testid="q1-summary-items"] .q1-sum__label')];
+    const card = document.querySelector('[data-testid="q1-status-card"]');
+    const cs = getComputedStyle(card);
+    return {
+      rows: labels.length,
+      cut: labels.filter((l) => { const c = getComputedStyle(l); return c.textOverflow === 'ellipsis' || c.whiteSpace === 'nowrap' || l.scrollWidth > l.clientWidth + 1 || /…|\.\.\./.test(l.textContent); }).length,
+      wrapped: labels.some((l) => l.getBoundingClientRect().height > 30),
+      stripe: cs.borderLeftWidth !== cs.borderTopWidth,
+      toggleH: Math.round(document.querySelector('[data-testid="q1-summary-more"]').getBoundingClientRect().height)
+    };
+  });
+  check('sent quote: three lines show, none is cut with "..." and long names wrap', sent.rows === 3 && sent.cut === 0 && sent.wrapped, JSON.stringify(sent));
+  check('sent quote: "Show all 5 lines" is a clear row (at least 44px) and the old "and 2 more lines" is gone', /Show all 5 lines/.test(await text(page, T('q1-summary-more'))) && sent.toggleH >= 44 && !/and 2 more lines/.test(await text(page, T('q1-summary'))), await text(page, T('q1-summary-more')));
+  check('sent quote: there is one SAMPLE PRICES badge, on the total', (await count(page, T('q1-sample-tag'))) === 1 && /Sample prices/i.test(await text(page, `${T('q1-summary')} ${T('q1-sample-tag')}`)));
+  check('sent quote: the status card has no coloured stripe (a stripe is for urgency)', !sent.stripe, JSON.stringify(sent));
+  await page.click(T('q1-summary-more'));
+  await sleep(150);
+  check('sent quote: tapping it lists all five lines, and it can be put away again', (await count(page, `${T('q1-summary-items')} li`)) === 5 && /Show fewer/.test(await text(page, T('q1-summary-more'))));
+  await page.click(T('q1-summary-more'));
+
+  // A quote with a possible extra (the consumer unit upgrade): the total leaves it out and its line says so.
+  await open(page, '#/quotes/Q-EL-1024', { wait: T('q1-builder') });
+  await page.click(T('q1-summary-more'));
+  await sleep(150);
+  const extraRows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="q1-summary-items"] li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim()));
+  check('sent quote with a possible extra: the total is the fixed lines only (£1,514)', (await text(page, T('q1-bar-total'))) === '£1,514' && /£1,514/.test(await text(page, T('q1-summary'))), await text(page, T('q1-bar-total')));
+  check('sent quote with a possible extra: its line says it is not in the total, and it still shows its own price', extraRows.some((r) => /Consumer unit upgrade \(if required\)\s*Possible extra\. Not in the total\.\s*£420/.test(r)), JSON.stringify(extraRows));
+  await open(page, '#/quotes/Q-EL-1019', { wait: T('q1-builder') });
+
+  // T14: the link he can open on his phone.
+  check('sent quote: there is an "Open on my phone" action', await visible(page, T('q1-open-phone')));
+  await page.click(T('q1-open-phone'));
+  await page.waitForSelector(T('q1-phone-sheet'));
+  await sleep(500);
+  const qr = await page.evaluate(async () => {
+    const href = document.querySelector('[data-testid="q1-phone-link"]').href;
+    const svg = document.querySelector('[data-testid="q1-phone-qr"]');
+    const { qrSvgMarkup } = await import('/js/ui/qr.js');
+    const markup = await qrSvgMarkup(href, { level: 'L', margin: 4 });
+    const want = /d="([^"]+)"/.exec(markup)[1];
+    const have = svg && svg.querySelector('path') ? svg.querySelector('path').getAttribute('d') : '';
+    const r = svg ? svg.getBoundingClientRect() : { width: 0 };
+    return { href, same: want === have && have.length > 100, width: Math.round(r.width) };
+  });
+  check('phone link: a QR code of the very same link is shown, big enough to scan', qr.same && qr.width >= 200, JSON.stringify({ same: qr.same, width: qr.width }));
+  check('phone link: it says what the link does on another phone', /opens on any phone/.test(await text(page, T('q1-phone-sheet'))) && /Quote total £1,586/.test(await text(page, T('q1-phone-total'))));
+  const small = await page.evaluate(() => [...document.querySelectorAll('[data-testid="q1-phone-sheet"] a, [data-testid="q1-phone-sheet"] button')].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.width < 43.5 || r.height < 43.5); }).map((el) => `${el.textContent.trim().slice(0, 20)} ${Math.round(el.getBoundingClientRect().width)}x${Math.round(el.getBoundingClientRect().height)}`));
+  check('phone link: its buttons are at least 44px', small.length === 0, small.join(', '));
+  // Another browser profile (no copy of his data) opens that link and sees the right total.
+  const other = await newContext(browser);
+  const op = await other.newPage();
+  const obag = [];
+  watch(op, obag)('other phone');
+  await op.goto(qr.href, { waitUntil: 'networkidle' });
+  await op.waitForSelector(T('q2-total'), { timeout: 8000 }).catch(() => {});
+  check('phone link: opened on another browser profile it shows the quote with the right total (£1,586)', /1,586/.test(await text(op, T('q2-total'))), await text(op, 'body').then((t) => t.slice(0, 160)));
+  check('phone link: the other profile is clean (no console or request problems beyond his photos, which the sandbox cannot reach)', obag.filter((m) => !/imgix|ERR_TUNNEL|Failed to load resource/.test(m)).length === 0, obag.slice(0, 3).join(' || '));
+  await other.close();
+  await page.keyboard.press('Escape');
+  await sleep(300);
+
+  // The menu has it too.
+  await page.click(T('q1-more'));
+  await page.waitForSelector(T('q1-menu-sheet'));
+  check('sent quote: the "..." menu also offers Open on my phone', await visible(page, T('q1-open-phone-menu')));
+  await page.keyboard.press('Escape');
+
+  // A viewed quote reads the same way.
+  await open(page, '#/quotes/Q-EL-1020', { wait: T('q1-builder') });
+  const viewed = await page.evaluate(() => [...document.querySelectorAll('[data-testid="q1-summary-items"] .q1-sum__label')].filter((l) => { const c = getComputedStyle(l); return c.textOverflow === 'ellipsis' || c.whiteSpace === 'nowrap' || l.scrollWidth > l.clientWidth + 1 || /…|\.\.\./.test(l.textContent); }).length);
+  check('viewed quote: no line name is cut', viewed === 0 && (await count(page, `${T('q1-summary-items')} li`)) >= 1);
+
+  // The builder on a phone: one total, the word "sample" at most twice, one-off lines as slim rows, a short page.
+  await open(page, '#/quotes/Q-EL-1023', { wait: T('q1-builder') });
+  await sleep(400);
+  const b = await page.evaluate(() => {
+    const main = document.querySelector('#main');
+    const rows = ['charger_ohme', 'install_standard', 'circuit', 'testing'].map((id) => { const el = document.querySelector(`[data-testid="q1-line-${id}"]`); return el ? Math.round(el.getBoundingClientRect().height) : 0; });
+    const sample = (main.innerText.match(/sample/gi) || []).length;
+    const ta = document.querySelector('[data-testid="q1-notes"]');
+    return {
+      height: document.documentElement.scrollHeight, sample, rows,
+      steppers: ['charger_ohme', 'install_standard', 'circuit', 'testing'].filter((id) => document.querySelector(`[data-testid="q1-qty-plus-${id}"]`)).length,
+      totals: document.querySelectorAll('[data-testid="q1-totals"], [data-testid="q1-total"]').length,
+      bar: !!document.querySelector('[data-testid="q1-bar-total"]'),
+      taValue: ta.value, taPlaceholder: ta.placeholder
+    };
+  });
+  check('builder: the whole page is about 2,300px or less on a phone', b.height <= 2320, String(b.height));
+  check('builder: the word "sample" shows at most twice (the badge and the terms notice)', b.sample <= 2 && b.sample >= 1, String(b.sample));
+  check('builder: one-off lines (charger, installation, circuit, testing) are slim rows, 64px or less', b.rows.every((h) => h > 0 && h <= 64), JSON.stringify(b.rows));
+  check('builder: a one-off line has no quantity stepper', b.steppers === 0, String(b.steppers));
+  check('builder: a single total, the sticky bar, and no second total card', b.totals === 0 && b.bar);
+  check('builder: the sample terms are ghost text (the box is empty, the placeholder is the plain sentence) with a one-line notice', b.taValue === '' && !/sample/i.test(b.taPlaceholder) && b.taPlaceholder.length > 10 && /Using sample terms/.test(await text(page, T('q1-notes-sample'))), JSON.stringify({ v: b.taValue, p: b.taPlaceholder }));
+  const stored = await quote(page, 'Q-EL-1023');
+  check('builder: the sample terms are still what is stored, so the customer page strips them as before', /Sample terms/.test(stored.notes));
+  await page.click(T('q1-add-cable_extra'));
+  check('builder: a per-metre line keeps its stepper', await visible(page, T('q1-qty-plus-cable_extra')));
+  await page.fill(T('q1-notes'), 'My own terms.');
+  check('builder: typing your own terms hides the sample notice and offers to go back', (await count(page, T('q1-notes-sample'))) === 0 && await visible(page, T('q1-notes-reset')));
+  const addIcons = await page.evaluate(() => { const el = document.querySelector('[data-testid="q1-add-enclosure"] .q1-add__plus'); const cs = getComputedStyle(el); return { border: cs.borderTopColor, bg: cs.backgroundColor, color: cs.color }; });
+  check('builder: the add buttons are neutral outline icons, not red', !/^rgb\(2[0-9]{2}, ?[0-9]{1,2}, ?[0-9]{1,2}\)$/.test(addIcons.border) && addIcons.bg === 'rgba(0, 0, 0, 0)', JSON.stringify(addIcons));
+  check('readable: clean console and requests', bag.length === 0, bag.slice(0, 3).join(' || '));
+  await ctx.close();
+
+  // The send sheet carries the cross-device note.
+  const c2 = await newContext(browser);
+  const p2 = await c2.newPage();
+  const b2 = [];
+  watch(p2, b2)('send note');
+  await open(p2, '#/quotes/Q-EL-1023', { wait: T('q1-builder') });
+  await p2.click(T('q1-send'));
+  await p2.waitForSelector(T('q1-send-sheet'));
+  check('send sheet: one line says the link opens on any phone and where accept and decline are kept', /The link carries the quote, so it opens on any phone\. In this prototype, accept and decline are saved on the phone they were tapped on\./.test(await text(p2, T('q1-send-xdevice'))), await text(p2, T('q1-send-xdevice')));
+  await c2.close();
+}
+const tag1 = 0;
+
 
 // ---------- run ----------
 
@@ -792,7 +986,7 @@ try {
   browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
   const steps = [['list', () => listChecks(browser)], ['builder', () => builderChecks(browser)], ['send', () => sendChecks(browser)],
     ['statuses', () => statusChecks(browser)], ['new quote and picker', () => newChecks(browser)], ['robustness', () => robustChecks(browser)],
-    ['layout, targets and axe', () => layoutChecks(browser)]];
+    ['layout, targets and axe', () => layoutChecks(browser)], ['readable quotes and phone link', () => readableChecks(browser)]];
   const only = (process.env.ONLY || '').split(',').map((x) => x.trim()).filter(Boolean);
   for (const [name, run] of steps) {
     if (only.length && !only.some((o) => name.startsWith(o))) continue;

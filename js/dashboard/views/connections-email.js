@@ -72,7 +72,9 @@ function emailSample(state, id) {
 
 /** One styled email, the way a customer's inbox would show it. Always drawn on "paper" so it reads the same in dark and light. */
 function EmailCard({ from, to, subject, body, button, logo, brand, testid }) {
-  const paragraphs = String(body || '').split('\n').filter((line) => line.trim() !== '');
+  // The button already carries the link, so the web address is not printed in the text as well ("here: https://..." becomes "below.").
+  const clean = (line) => (button ? line.replace(/\s*here:?\s*https?:\/\/\S+/g, ' below.').replace(/\s*https?:\/\/\S+/g, '').replace(/\s{2,}/g, ' ').replace(/\.\./g, '.') : line);
+  const paragraphs = String(body || '').split('\n').map(clean).filter((line) => line.trim() !== '');
   return html`<article class="k2-email" aria-label=${`Preview of the email: ${subject}`} data-testid=${testid}>
     <dl class="k2-email__meta">
       <div class="k2-email__row"><dt>From</dt><dd data-testid=${`${testid}-from`}><span class="k2-email__name">${from.name}</span><span class="k2-email__addr">${from.address}</span></dd></div>
@@ -99,7 +101,7 @@ function EmailPreview({ sendFrom, testid = 'k2-email-preview' }) {
     <${Segmented} ariaLabel="Which email to preview" options=${SAMPLE_OPTIONS} value=${which} onChange=${setWhich} />
     <${EmailCard} testid="k2-email-card" from=${{ name: brand.name, address: sendFrom }} to=${{ name: sample.toName, address: sample.toEmail }} subject=${sample.subject}
       body=${sample.body} button=${sample.button} logo=${logo} brand=${brand} />
-    <p class="k2-note">${sample.real ? 'The wording is your real message template, filled in for a sample customer.' : 'The wording is your real message template. Placeholders in curly brackets are filled in for each customer.'}</p>
+    <p class="k2-note" data-testid="k2-email-sample-note">Sample wording. You will edit it before anything goes out.</p>
   </div>`;
 }
 
@@ -250,7 +252,7 @@ function EmailWizard({ em, onDone }) {
   };
 
   return html`<${Wizard} title="Set-up" steps=${steps} step=${step} onStepChange=${goStep} onFinish=${finish} finishLabel="Finish"
-    onCancel=${() => navigate(routeHref('connections'))} testid="k2-email-wizard" />`;
+    aside=${html`<${SimBanner} compact />`} onCancel=${() => navigate(routeHref('connections'))} testid="k2-email-wizard" />`;
 }
 
 function EmailDashboard({ em }) {
@@ -313,8 +315,8 @@ export default function EmailView() {
   useEffect(() => { settleConnections(); }, []);
   const wizard = em.status !== 'connected' || setup;
   return html`<div class="db-page k2-page" data-testid="k2-email-root">
-    <${ConnHeader} title=${wizard ? 'Connect Gmail' : 'Gmail'} subtitle="Confirmations and quotes by email, from your own address." />
-    <${SimBanner} />
+    <${ConnHeader} title=${wizard ? 'Connect Gmail' : 'Gmail'} subtitle=${wizard ? undefined : 'Confirmations and quotes by email, from your own address.'} />
+    ${wizard ? null : html`<${SimBanner} compact />`}
     ${wizard ? html`<${EmailWizard} em=${em} onDone=${() => setSetup(false)} />` : html`<${EmailDashboard} em=${em} />`}
   </div>`;
 }

@@ -1,7 +1,8 @@
-// js/landing/app.js: customer landing page entry for 180 Electrical: names the tab, captures campaign tags, composes the sections, opens the enquiry funnel from the hash.
+// js/landing/app.js: customer landing page entry for 180 Electrical: names the tab, captures campaign tags, composes the sections (hero, why, Meet Daniel, work, steps, quote, running costs, area, FAQ, final), opens the enquiry funnel from the hash.
 // Owner: L3 (landing page for 180 Electrical; first built by C2)
 import { html, useEffect, useErrorBoundary } from '../vendor/preact-htm.js';
 import { bootApp, useBrand } from '../ui/index.js';
+import { initIdeasMode } from '../ui/ideas.js';
 import { makeDefaultSettings } from '../core/config.js';
 import { getState } from '../core/store.js';
 import { captureUtm } from '../core/utm.js';
@@ -9,7 +10,7 @@ import { closeBooking, useBookRoute } from '../booking/nav.js';
 import { BookingSheet } from '../booking/booking-sheet.js';
 import { LandingHeader } from './header.js';
 import { Hero } from './hero.js';
-import { About, AreaSection, Faq, FinalCta, HowItWorks, Pricing, TrustBar, WhyCards } from './sections.js';
+import { About, AreaSection, Faq, FinalCta, HowItWorks, Pricing, WhyCards } from './sections.js';
 import { Gallery } from './gallery.js';
 import { Calculator } from './calculator.js';
 import { Footer } from './footer.js';
@@ -18,6 +19,10 @@ import { initReveal } from './fx.js';
 
 // Cross-page links target this name, so "View customer site" in the dashboard re-uses this tab (16.1). Do not rename.
 window.name = 'vm-site';
+
+// "Show: With ideas | Only my content" (localStorage ec_clean): applied to <html data-clean> as early as this module can, BEFORE bootApp renders the first
+// frame, so an idea block never flashes for someone who chose "Only my content". Guarded: a storage problem must never stop the page.
+try { initIdeasMode(); } catch (err) { console.error('The ideas switch could not start', err); }
 
 // Campaign tags (?utm_source=, ?utm_medium=, ?utm_campaign=, or ?src=) are kept for the funnel's submit (js/core/utm.js).
 // A problem there must never stop the page from showing, so it is guarded.
@@ -52,13 +57,12 @@ function LandingPage() {
     <${LandingHeader} />
     <main id="main" class="lp-main" tabindex="-1">
       <${Hero} />
-      <${TrustBar} />
       <${WhyCards} />
-      <${Calculator} />
       <${About} />
       <${Gallery} />
       <${HowItWorks} />
       <${Pricing} />
+      <${Calculator} />
       <${AreaSection} />
       <${Faq} />
       <${FinalCta} />

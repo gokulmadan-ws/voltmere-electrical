@@ -307,3 +307,12 @@ Elevation: dark cards now carry a hairline top highlight plus a soft drop (`--sh
 ## 5. Page layout helpers (unchanged names, refined look)
 
 `db-page`, `db-section`, `db-section__title`, `db-stack`, `db-row`, `db-grid`, `db-list`, `db-list__item`, `db-sticky-actions`, `db-master-detail`, `db-two-col` are unchanged. New: `db-stick-bottom` is the CSS variable `--db-stick-bottom` (see Wizard) that any sticky footer should use as its `bottom`; `db-view` is the shell's transition wrapper (never style it). `db-list > * + *` draws the dividers, so rows may be `li` or `div` or `a`.
+
+## Round 2 additions (T02, T10, T11)
+
+- Selected is neutral everywhere (T02): grey fill, 2px ink ring, ink text, and a leading check on chips. `--cta` fill is for the one primary button and the logo; `--danger` stays the only urgent colour. The dashboard-wide overrides for view-owned selectable widgets are at the end of `css/dashboard.css`.
+- `startEdgeFade()` (`js/ui/edge-fade.js`, started by the dashboard shell) fades sideways chip rows (`.ui-seg`, `.ui-tabs__list`, `.st-jump`, `.pl-strip`, or `data-edge-fade`) and, at rest, cuts the fade where the next chip begins so no label is cut mid-word.
+- Icons: Messages uses `message-square-text`; `message-circle` is drawn as the `whatsapp` glyph (chat bubble with a handset) by `Icon`, so WhatsApp and Reply never share a shape with Messages.
+- Header: "View site" is a labelled pill (icon only under 360px). Tab bar: Today and Bookings both show a numeric badge, outside the pill.
+- `Wizard` on phones (below 768px): the app header is hidden, the page title block is folded away (its `<h1>` stays for screen readers and is shown as the caption of the top row), and one sticky top row carries back, "Step n of m", a small "Simulated" tag, progress and close (`<testid>-top-back`, `<testid>-close`). The step title is one line at 28px, stepping down to 20px where it would not fit. The footer is one 69px bar.
+- Owner-facing half-day times print the whole span (`bookingWhen` 'Tue 3 Nov, 1–5pm', `bookingWindowLabel` '1–5pm'); `bookingWhenArrival` keeps the customer wording ('morning, 8–10am') for messages and the quote page. Owner alerts carry a `title` ('New enquiry: Sinead D, BT42', `alertHeading`).

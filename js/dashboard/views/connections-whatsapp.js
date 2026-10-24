@@ -7,13 +7,14 @@ import {
 } from '../../ui/index.js';
 import { failureMessage } from '../../ui/util.js';
 import {
-  connectWhatsApp, disconnect, sendTestEvent, setConnection, settleConnections, submitWhatsAppTemplates
+  connectWhatsApp, disconnect, fastForwardWhatsAppTemplates, sendTestEvent, setConnection, settleConnections, submitWhatsAppTemplates
 } from '../../core/store.js';
 import { selectConnectionsSummary, selectImageUrl } from '../../core/selectors.js';
 import { normaliseWhatsAppNumber } from '../../core/connections.js';
 import { KIND_LABELS, WHATSAPP_DEMO_CODE, WHATSAPP_TEMPLATE_KINDS, DEFAULT_TEMPLATES } from '../../core/config.js';
 import { fmtDayShort, stampDay, stampTime } from '../../core/dates.js';
 import { routeHref, navigate } from '../router.js';
+import { PracticeBadge } from './connections.js';
 
 export const title = 'WhatsApp';
 export const css = ['css/connections-wizards.css'];
@@ -125,8 +126,10 @@ export function ConnectedHero({ icon, media, title: heading, lines = [], status,
       </div>
     </div>
     <div class="k2-hero__foot">
-      <${ConnectionBadge} status=${status} label=${label} data-testid=${badgeTestid} />
-      ${since ? html`<span class="k2-hero__since">Connected ${since} (simulated)</span>` : null}
+      ${status === 'connected'
+        ? html`<${PracticeBadge} label=${label || 'Connected'} tag=" · practice mode" data-testid=${badgeTestid} />`
+        : html`<${ConnectionBadge} status=${status} label=${label} data-testid=${badgeTestid} />`}
+      ${since ? html`<span class="k2-hero__since">Set up ${since}, in practice mode</span>` : null}
     </div>
   <//>`;
 }
@@ -219,7 +222,7 @@ const OWNER_KINDS = WHATSAPP_TEMPLATE_KINDS.filter((k) => k.startsWith('owner_')
 const CUSTOMER_KINDS = WHATSAPP_TEMPLATE_KINDS.filter((k) => !k.startsWith('owner_'));
 const TEMPLATE_BADGE = {
   approved: { status: 'connected', label: 'Approved' },
-  pending: { status: 'pending', label: 'Awaiting approval' },
+  pending: { status: 'pending', label: 'Pending, usually 1–2 days' },
   none: { status: 'off', label: 'Not sent yet' }
 };
 
@@ -254,7 +257,7 @@ export function Logo({ src, size = 64, wide, class: cls = '' }) {
     loading="lazy" decoding="async" referrerpolicy="no-referrer" onError=${fallback} />`;
 }
 
-/** One message template: plain name, approval badge, and the exact text with {placeholders} marked. */
+/** The template text with *bold* parts and {placeholders} marked. */
 function TemplateText({ text }) {
   const parts = String(text).split(/(\*[^*\n]+\*|\{[A-Za-z0-9_]+\})/g);
   return parts.map((part, i) => {
@@ -264,16 +267,36 @@ function TemplateText({ text }) {
   });
 }
 
-function TemplateRow({ kind, status, text }) {
+/** One aggregate status for a whole group of templates, so 24 rows do not each carry the same pill. */
+function groupBadge(kinds, templates) {
+  const count = (status) => kinds.filter((k) => ((templates || {})[k] || 'none') === status).length;
+  const approved = count('approved');
+  const pending = count('pending');
+  const none = count('none');
+  const total = kinds.length;
+  if (approved === total) return { status: 'connected', label: 'All approved', uniform: true };
+  if (none === total) return { status: 'off', label: 'Not sent yet', uniform: true };
+  if (pending === total) return { status: 'pending', label: 'Pending, usually 1–2 days', uniform: true };
+  if (pending > 0) return { status: 'pending', label: `${approved} approved, ${pending} waiting`, uniform: false };
+  return { status: 'pending', label: `${approved} approved, ${none} not sent`, uniform: false };
+}
+
+/**
+ * One message template: plain name and the exact text with {placeholders} marked. The row's own status pill shows in the row only when the
+ * group is mixed (so it tells you something); otherwise the group carries it and the row shows it once opened.
+ */
+function TemplateRow({ kind, status, text, inRow }) {
   const info = TPL_INFO[kind] || [KIND_LABELS[kind] || kind, ''];
   const badge = TEMPLATE_BADGE[status] || TEMPLATE_BADGE.none;
+  const pill = html`<${ConnectionBadge} compact status=${badge.status} label=${badge.label} data-testid=${`k2-wa-tpl-badge-${kind}`} />`;
   return html`<details class="k2-tpl" data-testid=${`k2-wa-tpl-${kind}`}>
-    <summary class="k2-tpl__sum">
+    <summary class=${`k2-tpl__sum${inRow ? '' : ' k2-tpl__sum--plain'}`}>
       <span class="k2-tpl__name">${info[0]}</span>
-      <${ConnectionBadge} compact status=${badge.status} label=${badge.label} data-testid=${`k2-wa-tpl-badge-${kind}`} />
+      ${inRow ? pill : null}
       <${Icon} name="chevron-down" size=${18} class="k2-tpl__chev" />
     </summary>
     <div class="k2-tpl__body">
+      ${inRow ? null : html`<p class="k2-tpl__state">${pill}</p>`}
       ${info[1] ? html`<p class="k2-tpl__when">${info[1]}</p>` : null}
       <p class="k2-tpl__text" data-testid=${`k2-wa-tpl-text-${kind}`}><${TemplateText} text=${text} /></p>
     </div>
@@ -281,14 +304,16 @@ function TemplateRow({ kind, status, text }) {
 }
 
 function TemplateGroup({ heading, kinds, templates, texts, testid, open }) {
+  const agg = groupBadge(kinds, templates);
   return html`<details class="k2-tplgroup" open=${open ? true : undefined} data-testid=${testid}>
     <summary class="k2-tplgroup__sum">
       <span class="k2-tplgroup__title">${heading}</span>
       <span class="k2-tplgroup__count">${kinds.length}</span>
+      <${ConnectionBadge} compact status=${agg.status} label=${agg.label} data-testid=${`${testid}-badge`} />
       <${Icon} name="chevron-down" size=${20} class="k2-tplgroup__chev" />
     </summary>
     <div class="k2-tpllist">
-      ${kinds.map((kind) => html`<${TemplateRow} key=${kind} kind=${kind} status=${(templates || {})[kind] || 'none'} text=${textFor(texts, kind)} />`)}
+      ${kinds.map((kind) => html`<${TemplateRow} key=${kind} kind=${kind} status=${(templates || {})[kind] || 'none'} text=${textFor(texts, kind)} inRow=${!agg.uniform} />`)}
     </div>
   </details>`;
 }
@@ -301,11 +326,17 @@ function TemplatesPanel({ wa, texts, open }) {
   const none = countOf(wa.templates, 'none');
   const submit = () => {
     const res = submitWhatsAppTemplates();
-    if (res.ok) toast({ message: `${none} message templates sent for approval (simulated).`, icon: 'send' });
+    if (res.ok) toast({ message: `${none} message templates sent for approval (practice mode).`, detail: 'With Meta they stay pending for a day or two.', icon: 'send' });
+    else failToast(res);
+  };
+  // Prototype only: skip the day or two so the approved state can be seen.
+  const fastForward = () => {
+    const res = fastForwardWhatsAppTemplates();
+    if (res && res.ok) toast({ message: `All ${total} messages approved (practice mode).`, icon: 'circle-check' });
     else failToast(res);
   };
   let line = `None of the ${total} messages has been sent for approval yet.`;
-  if (pending > 0) line = `Waiting for approval: ${pending} of ${total}. This takes a few seconds in the prototype. With Meta it is usually minutes, sometimes up to a day.`;
+  if (pending > 0) line = `Waiting for approval: ${pending} of ${total}. Meta usually takes 1 to 2 days to check each message, and nothing can be sent with a template until it is approved.`;
   else if (approved === total) line = `All ${total} messages approved (simulated).`;
   else if (none > 0 && approved + pending > 0) line = `${approved} approved, ${none} not sent yet.`;
   return html`<div class="k2-tpls" data-testid="k2-wa-templates">
@@ -314,6 +345,10 @@ function TemplatesPanel({ wa, texts, open }) {
         data-testid="k2-wa-templates-meter" />
       <p class="k2-tpls__line" role="status" aria-live="polite" data-testid="k2-wa-templates-status">${line}</p>
       ${none > 0 ? html`<${Button} variant="primary" icon="send" onClick=${submit} data-testid="k2-wa-templates-submit">Submit for approval<//>` : null}
+      ${pending > 0 ? html`<div class="k2-ff" data-testid="k2-wa-ff">
+        <${Button} variant="secondary" size="sm" icon="zap" onClick=${fastForward} data-testid="k2-wa-templates-fastforward">Prototype: fast-forward<//>
+        <p class="k2-ff__note">Skips the 1 to 2 day wait, so you can see what it looks like once Meta has approved them.</p>
+      </div>` : null}
     <//>
     <${TemplateGroup} heading="Alerts to you" kinds=${OWNER_KINDS} templates=${wa.templates} texts=${texts} open=${open} testid="k2-wa-group-owner" />
     <${TemplateGroup} heading="Messages to your customers" kinds=${CUSTOMER_KINDS} templates=${wa.templates} texts=${texts} open=${open} testid="k2-wa-group-customer" />
@@ -452,8 +487,8 @@ const REAL_BUILD_WA = [
   'Meta charges per template message, priced by country and type of message. Expect pence per message and check Meta\'s current price list.'
 ];
 
-function WaRealBuild() {
-  return html`<${RealBuildNote} items=${REAL_BUILD_WA}>
+function WaRealBuild({ open }) {
+  return html`<${RealBuildNote} items=${REAL_BUILD_WA} defaultOpen=${open || undefined} title=${open ? 'What a real WhatsApp Business number needs' : undefined}>
     <p class="k2-realbuild__time" data-testid="k2-wa-timescale"><strong>Typical timescale:</strong> about one to two weeks to get a business verified, a number registered and the templates approved, then build and test time on top.</p>
   <//>`;
 }
@@ -500,14 +535,15 @@ function WaWizard({ wa, onDone }) {
         return true;
       },
       content: html`<div class="k2-stack">
+        <${Field} label="WhatsApp number" id="k2-wa-number" hint=${connected ? 'To use a different number, disconnect first.' : 'Use a number that is not on WhatsApp today, like a new SIM or a landline. Your own mobile is most likely on it already, and would have to be moved first.'}>
+          <${Input} id="k2-wa-number" type="tel" inputmode="tel" autocomplete="tel" value=${numberText} disabled=${connected} error=${numberBad}
+            onInput=${(e) => { setNumberText(e.target.value); setNumberBad(false); }} data-testid="k2-wa-number" />
+        <//>
         <${Explain} icon="message-circle" title="What is WhatsApp Business?" testid="k2-wa-explain">
           <p>It is WhatsApp set up for a business. Customers see your business name and logo instead of a random number, and you can send confirmations, quotes and reminders from one number.</p>
           <${TickList} items=${['Your own business profile: name, logo and a short description.', 'An alert on your phone the moment an enquiry comes in.', 'Quotes and updates sent in the chat your customers already use.']} />
         <//>
-        <${Field} label="WhatsApp number" id="k2-wa-number" hint=${connected ? 'To use a different number, disconnect first.' : 'A UK mobile such as 07885 496800 works. The next step pretends to send it a code.'}>
-          <${Input} id="k2-wa-number" type="tel" inputmode="tel" autocomplete="tel" value=${numberText} disabled=${connected} error=${numberBad}
-            onInput=${(e) => { setNumberText(e.target.value); setNumberBad(false); }} data-testid="k2-wa-number" />
-        <//>
+        <${WaRealBuild} open />
       </div>`
     },
     {
@@ -557,14 +593,14 @@ function WaWizard({ wa, onDone }) {
   const finish = () => {
     stepMemory.clear(STEP_KEY);
     onDone();
-    toast({ message: 'WhatsApp is set up (simulated).', icon: 'circle-check' });
+    toast({ message: 'WhatsApp is set up in practice mode.', icon: 'circle-check' });
     window.scrollTo(0, 0);
     setTimeout(() => focusTitle(), 60);
     return true;
   };
 
   return html`<${Wizard} title="Set-up" steps=${steps} step=${step} onStepChange=${goStep} onFinish=${finish} finishLabel="Finish"
-    onCancel=${() => navigate(routeHref('connections'))} testid="k2-wa-wizard" />`;
+    aside=${html`<${SimBanner} compact />`} onCancel=${() => navigate(routeHref('connections'))} testid="k2-wa-wizard" />`;
 }
 
 function WaDashboard({ wa }) {
@@ -647,8 +683,8 @@ export default function WhatsAppView() {
   }, []);
   const wizard = wa.status !== 'connected' || setup;
   return html`<div class="db-page k2-page" data-testid="k2-wa-root">
-    <${ConnHeader} title=${wizard ? 'Connect WhatsApp' : 'WhatsApp Business'} subtitle="Alerts to you, quotes and updates to your customers." />
-    <${SimBanner} />
+    <${ConnHeader} title=${wizard ? 'Connect WhatsApp' : 'WhatsApp Business'} subtitle=${wizard ? undefined : 'Alerts to you, quotes and updates to your customers.'} />
+    ${wizard ? null : html`<${SimBanner} compact />`}
     ${wizard ? html`<${WaWizard} wa=${wa} onDone=${() => setSetup(false)} />` : html`<${WaDashboard} wa=${wa} />`}
   </div>`;
 }

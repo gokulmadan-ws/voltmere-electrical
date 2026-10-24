@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { makeDefaultSettings, TEMPLATE_KINDS, SITE_BASE_URL } from '../../js/core/config.js';
 import { setClock } from '../../js/core/clock.js';
 import {
-  DEFAULT_TEMPLATES, PLACEHOLDERS, KIND_LABELS, renderTemplate, buildContext, buildMessage, reminderSendAt, messageIsScheduled,
+  DEFAULT_TEMPLATES, PLACEHOLDERS, KIND_LABELS, renderTemplate, buildContext, buildMessage, reminderSendAt, messageIsScheduled, alertHeading,
   bubbleActions, waLink, waShareLink, telLink, smsLink, mailtoLink, mapsLink
 } from '../../js/core/messages.js';
 
@@ -99,7 +99,7 @@ test('customer_confirmed matches the worked example of 10.3 word for word', () =
   const msg = buildMessage('customer_confirmed', sampleBooking(), stateOf());
   assert.equal(
     msg.body,
-    "Hi Aoife, it's Daniel from 180 Electrical. You're booked in: EICR safety report (House, 2–3 bed), Mon 26 Oct, morning, arriving between 8 and 10am, at 14 Larkfield Gardens. Fixed price £195, pay after the job. I'll message when I'm 30 minutes away. Need to change it? Reply here or call 07885 496800. Ref EL-1043"
+    "Hi Aoife, it's Daniel from 180 Electrical. You're booked in: EICR safety report (House, 2–3 bed), Mon 26 Oct, morning, arriving between 8 and 10am, at 14 Larkfield Gardens. Fixed price £195. I'll message when I'm 30 minutes away. Need to change it? Reply here or call 07885 496800. Ref EL-1043"
   );
 });
 
@@ -135,12 +135,12 @@ test('placeholder values: when, whenLong, serviceWhen, line1, address, receivedR
   assert.equal(single.serviceWhen, 'Fault finding and repairs on Sat 24 Oct, 8–10am');
   assert.equal(single.dateShort, 'Sat 24 Oct');
   assert.equal(single.arrive, 'between 8 and 10am');
-  assert.equal(single.priceLine, "From £75, pay after the job. I'll confirm before any extra work.");
+  assert.equal(single.priceLine, 'From £75.');
   const half = buildContext(sampleBooking(), state);
   assert.equal(half.when, 'Mon 26 Oct, morning, 8–10am');
   assert.equal(half.whenLong, 'Mon 26 Oct, morning, arriving between 8 and 10am');
   assert.equal(half.serviceFull, 'EICR safety report (House, 2–3 bed)');
-  assert.equal(half.priceLine, 'Fixed price £195, pay after the job.');
+  assert.equal(half.priceLine, 'Fixed price £195.');
   assert.equal(half.certLine, 'Your certificate follows today.');
   assert.equal(half.customerFirst, 'Aoife');
   assert.equal(half.address, '14 Larkfield Gardens, BT9 6QP');
@@ -159,7 +159,7 @@ test('placeholder values: when, whenLong, serviceWhen, line1, address, receivedR
   assert.equal(quote.finalLine, 'No charge for the visit.');
   assert.equal(quote.certLine, 'Your written quote follows shortly.');
   const evJob = buildContext(sampleBooking({ serviceId: 'ev', serviceName: 'EV charger installation', variantId: null, variantLabel: '', quotedPrice: 899 }), state);
-  assert.equal(evJob.priceLine, 'The price is as per your agreed quote, payable after the install.', 'quote-led: no "From" price for the installation');
+  assert.equal(evJob.priceLine, 'The price is as per your agreed quote.', 'quote-led: no "From" price and no payment terms for the installation');
   assert.equal(evJob.price, '£899', 'the amount the owner agreed is shown once there is one');
   assert.equal(buildContext(sampleBooking({ serviceId: 'ev', serviceName: 'EV charger installation', variantId: null, variantLabel: '', quotedPrice: 0 }), state).price, 'Quoted for your home');
   assert.equal(evJob.certLine, 'Your installation certificate follows today.');
@@ -224,7 +224,7 @@ test('declined and cancelled messages: serviceWhen, reasonLine and nextFree', ()
 
 test('completed message: paid and unpaid wording', () => {
   const unpaid = buildMessage('customer_completed', sampleBooking({ status: 'done', finalPrice: 195 }), stateOf());
-  assert.equal(unpaid.body, "Hi Aoife, it's Daniel from 180 Electrical. All done at 14 Larkfield Gardens, thanks. The total is £195, payable by card, bank transfer or cash. Your certificate follows today. Ref EL-1043");
+  assert.equal(unpaid.body, "Hi Aoife, it's Daniel from 180 Electrical. All done at 14 Larkfield Gardens, thanks. The total is £195. Your certificate follows today. Ref EL-1043");
   const paid = buildMessage('customer_completed', sampleBooking({ status: 'done', finalPrice: 210, paid: true, paidMethod: 'cash' }), stateOf());
   assert.ok(paid.body.includes('Paid with thanks, £210.'));
 });
@@ -408,16 +408,17 @@ test('owner alert status line for an enquiry: pencilled, unscheduled, outside No
   assert.equal(status({ durationMin: 0, tentative: false }).whenLine, 'Survey: time to be arranged');
 });
 
-test('customer_received for an enquiry: pencilled in for {when}, provisional, and Daniel in touch within 24 hours', () => {
+test('customer_received for an enquiry: the earliest visit Daniel could offer, and Daniel confirming within 24 hours (one status, no pencilled or provisional)', () => {
   const msg = buildMessage('customer_received', enquiry(), stateOf());
   assert.equal(msg.to, 'customer');
   assert.equal(
     msg.body,
-    'Hi Sinead, thanks for getting in touch with 180 Electrical. Your free survey visit is pencilled in for Sat 24 Oct, 8–10am. This is provisional, so please do not plan around it yet. Daniel will be in touch within 24 hours to confirm it. Ref EL-1043. Need us sooner? Call 07885 496800.'
+    "Hi Sinead, thanks for getting in touch with 180 Electrical. Earliest visit Daniel could offer: Sat 24 Oct, 8–10am. Daniel will confirm within 24 hours. Ref EL-1043. Need us sooner? Call 07885 496800."
   );
+  assert.ok(!msg.body.includes('plan around') && !/provisional|pencilled/.test(msg.body), 'the old, self-contradicting pencilled-in wording is gone');
   // no window could be pencilled in: the same 24 hour promise, no invented time
   const none = buildMessage('customer_received', enquiry({ tentative: false, durationMin: 0, start: '2026-10-23T20:30' }), stateOf());
-  assert.ok(none.body.includes('Daniel will be in touch within 24 hours to arrange your free survey visit.'));
+  assert.ok(none.body.includes('Daniel will be in touch within 24 hours to discuss your installation.'));
   assert.ok(!none.body.includes('pencilled'));
   // outside Northern Ireland: the travel check is added, the promise stays
   const far = buildMessage('customer_received', enquiry({ address: { line1: '', postcode: 'DG9 8AB' } }), stateOf());
@@ -426,7 +427,7 @@ test('customer_received for an enquiry: pencilled in for {when}, provisional, an
   // the owner's first name and the promise come from settings, not from the template
   const settings = makeDefaultSettings();
   settings.business.ownerFirstName = 'Lee';
-  assert.ok(buildMessage('customer_received', enquiry(), stateOf({ settings })).body.includes('Lee will be in touch within 24 hours'));
+  assert.ok(buildMessage('customer_received', enquiry(), stateOf({ settings })).body.includes('Lee will confirm within 24 hours.'));
   // other services keep a plain request-received text
   const plain = buildMessage('customer_received', sampleBooking({ status: 'new', address: { line1: 'Mill Cottage', postcode: 'DG9 8AB' } }), stateOf());
   assert.ok(plain.body.includes('We have your request for EICR safety report (House, 2–3 bed), Mon 26 Oct, morning, 8–10am. We just need to check travel to DG9 8AB. Daniel will confirm shortly.'));
@@ -448,4 +449,15 @@ test('enquiry wording elsewhere: serviceWhen, the confirmation with a postcode-o
   const unscheduled = buildContext(enquiry({ durationMin: 0, tentative: false, start: '2026-10-23T20:30' }), stateOf());
   assert.equal(unscheduled.when, 'a time to be arranged');
   assert.equal(unscheduled.serviceWhen, 'the free survey visit');
+});
+
+test('alertHeading names the enquiry: first name, surname initial, outward code (T10)', () => {
+  const enquiry = sampleBooking({ serviceId: 'ev_quote', customer: { name: 'Sinead Doherty', phone: '07700 900344', email: '' }, address: { line1: '', postcode: 'BT42 6JN' } });
+  assert.equal(alertHeading(enquiry), 'New enquiry: Sinead D, BT42');
+  const booking = sampleBooking({ serviceId: 'fault', customer: { name: 'Niamh Gallagher', phone: '07700 900275', email: '' }, address: { line1: '3 x', postcode: 'BT23 5HT' } });
+  assert.equal(alertHeading(booking), 'New booking: Niamh G, BT23');
+  const bare = sampleBooking({ serviceId: 'ev_quote', customer: { name: 'Cher', phone: '', email: '' }, address: { line1: '', postcode: '' } });
+  assert.equal(alertHeading(bare), 'New enquiry: Cher');
+  // buildMessage keeps the v2 shape: the heading is added by the store and the seed, not here
+  assert.ok(!('title' in buildMessage('owner_new_booking', enquiry, stateOf())));
 });

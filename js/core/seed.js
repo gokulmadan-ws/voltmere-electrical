@@ -3,7 +3,7 @@
 import { KIND_LABELS, WINDOWS, makeChargerItem, makeDefaultSettings, normaliseAnswers } from './config.js';
 import { addDays, addMinutes, makeStamp, stampDay, toStamp, weekdayOf } from './dates.js';
 import { bookingWindowIds } from './availability.js';
-import { buildMessage, reminderSendAt } from './messages.js';
+import { alertHeading, buildMessage, reminderSendAt } from './messages.js';
 import { postcodeZone } from './format.js';
 import { quotedPriceFor } from './selectors.js';
 import { quoteTotal } from './quotes.js';
@@ -72,22 +72,25 @@ export const SIM_POOL = [
 // against them still holds. v3 adds where each enquiry came from (`utm`), how fast it was answered (`reply`) and ties two installs to the
 // quotes that made them (S03 and S09, see JOURNEYS). ref: 'T' today, 'P<k>' k-th previous open day, 'O<k>' k-th next open day.
 // status 'today' means: done once its window has ended, else confirmed. `noLine1`: a website enquiry only gave its postcode.
+// `label` (T10): 180 Electrical only sells home EV chargers, so the seven original jobs that were not EV work (fault finding, sockets, an EICR) keep
+// their service id, price and place (every selector, the pipeline and the diary maths are unchanged) but read as the EV jobs they are in the diary,
+// the calendar, Insights and messages: a survey or an install. `createdDaysAgo`: a future job that was booked on an earlier day, not "5 minutes ago".
 const LEGACY = [
-  { n: 1, day: 'P17', win: 0, blocks: 1, service: 'fault', cust: 'aoife', status: 'done', final: 75, paid: 'card', source: 'website', notes: 'Fuse box keeps tripping in the evening. Checking it before a charger goes in.' },
-  { n: 2, day: 'P14', win: 2, blocks: 2, service: 'eicr', variant: 'flat', cust: 'padraig', addr: 0, status: 'done', final: 150, paid: 'bank', source: 'phone', notes: 'Landlord. Flat above the shop, new tenant moving in.' },
+  { n: 1, day: 'P17', win: 0, blocks: 1, service: 'fault', label: 'EV charger survey', cust: 'aoife', status: 'done', final: 75, paid: 'card', source: 'website', notes: 'Fuse box keeps tripping in the evening, so the supply gets checked before a charger goes in. Wall by the front door.' },
+  { n: 2, day: 'P14', win: 2, blocks: 2, service: 'eicr', variant: 'flat', label: 'EV charger installation (landlord)', cust: 'padraig', addr: 0, status: 'done', final: 150, paid: 'bank', source: 'phone', notes: 'Landlord. Charger bay for the flat above the shop, new tenant moving in.' },
   { n: 3, day: 'P11', win: 0, blocks: 2, service: 'ev', cust: 'niamh', status: 'done', paid: 'card', source: 'website', notes: 'Charger on the front wall, short cable run from the fuse box.', answers: { parking: 'driveway', vehicle: 'have', timing: 'asap', permission: 'yes' }, journey: 'd1' },
-  { n: 4, day: 'P6', win: 1, blocks: 1, service: 'sockets', cust: 'roisin', status: 'done', final: 170, paid: null, source: 'whatsapp', notes: 'Two sockets in the kitchen and one outside.' },
-  { n: 5, day: 'T', win: 0, blocks: 1, service: 'sockets', cust: 'declan', status: 'today', final: 85, paid: 'cash', source: 'website', notes: 'Extra sockets in the back bedroom.' },
-  { n: 6, day: 'T', win: 1, blocks: 1, service: 'fault', cust: 'orla', status: 'today', final: 75, paid: null, source: 'phone', notes: 'Home charger keeps tripping the breaker.' },
+  { n: 4, day: 'P6', win: 1, blocks: 1, service: 'sockets', label: 'EV charger install visit', cust: 'roisin', status: 'done', final: 170, paid: null, source: 'whatsapp', notes: 'Isolator by the meter box and a weatherproof outdoor socket for the charger cable.' },
+  { n: 5, day: 'T', win: 0, blocks: 1, service: 'sockets', label: 'EV charger install visit', cust: 'declan', status: 'today', final: 85, paid: 'cash', source: 'website', notes: 'Second visit: wall box connected and tested, app set up on his phone.' },
+  { n: 6, day: 'T', win: 1, blocks: 1, service: 'fault', label: 'EV charger survey', cust: 'orla', status: 'today', final: 75, paid: null, source: 'phone', notes: 'Second charger for the new car. Her first one keeps tripping the breaker, so the supply gets checked first.' },
   { n: 7, day: 'O5', win: 1, blocks: 1, service: 'ev_quote', cust: 'sinead', status: 'new', source: 'website', noLine1: true, ageMin: 12, notes: 'Kia EV6 arriving in a couple of weeks. Thinking about a Zappi.', answers: { parking: 'driveway', vehicle: 'ordered', timing: 'asap', permission: 'yes', marketingOptIn: false }, lead: 'facebook' },
   { n: 8, day: 'O1', win: 1, blocks: 1, service: 'ev_quote', cust: 'eoin', status: 'confirmed', source: 'website', noLine1: true, notes: 'New electric car arrives next month. Driveway at the side of the house.', answers: { parking: 'driveway', vehicle: 'ordered', timing: 'month', permission: 'yes', marketingOptIn: true }, lead: 'facebook', reply: 95, photosRequest: true },
-  { n: 9, day: 'O2', win: 2, blocks: 2, service: 'ev', cust: 'padraig', addr: 1, status: 'confirmed', source: 'phone', notes: 'Landlord. Charger for his own house, after the flat safety report.', answers: { parking: 'garage', vehicle: 'have', timing: 'one_to_three', permission: 'yes' }, journey: 'i3' },
-  { n: 10, day: 'O3', win: 0, blocks: 1, service: 'fault', cust: 'niamh', status: 'confirmed', source: 'website', notes: 'Outside light by the charger has stopped working.' },
+  { n: 9, day: 'O2', win: 2, blocks: 2, service: 'ev', cust: 'padraig', addr: 1, status: 'confirmed', source: 'phone', notes: 'Landlord. Charger for his own house, same set-up as the flat.', answers: { parking: 'garage', vehicle: 'have', timing: 'one_to_three', permission: 'yes' }, journey: 'i3' },
+  { n: 10, day: 'O3', win: 0, blocks: 1, service: 'fault', label: 'EV charger survey', cust: 'niamh', status: 'confirmed', source: 'website', createdDaysAgo: 3, notes: 'Survey for a second charger bay. Also asked about the outside light by the first charger.' },
   { n: 11, day: 'O3', win: 1, blocks: 1, service: 'ev_quote', cust: 'conor', status: 'new', source: 'website', noLine1: true, notes: 'Asked if you travel over for a quote. Check before confirming.', answers: { parking: 'driveway', vehicle: 'choosing', timing: 'one_to_three', permission: 'unsure', marketingOptIn: false }, lead: 'google', ageMin: 30 * 60 },
-  { n: 12, day: 'O3', win: 2, blocks: 1, service: 'ev_quote', cust: 'roisin', status: 'confirmed', source: 'whatsapp', notes: 'Rents her flat. The landlord needs to agree first.', answers: { parking: 'allocated', vehicle: 'have', timing: 'month', permission: 'landlord' }, lead: 'instagram' },
-  { n: 13, day: 'O3', win: 3, blocks: 1, service: 'sockets', cust: 'declan', status: 'confirmed', source: 'website', notes: 'Two double sockets in the lounge.' },
+  { n: 12, day: 'O3', win: 2, blocks: 1, service: 'ev_quote', cust: 'roisin', status: 'confirmed', source: 'whatsapp', createdDaysAgo: 2, notes: 'Rents her flat. The landlord needs to agree first.', answers: { parking: 'allocated', vehicle: 'have', timing: 'month', permission: 'landlord' }, lead: 'instagram' },
+  { n: 13, day: 'O3', win: 3, blocks: 1, service: 'sockets', label: 'EV charger install visit', cust: 'declan', status: 'confirmed', source: 'website', createdDaysAgo: 1, notes: 'Second visit: socket and isolator for the garage charger.' },
   { n: 14, day: 'O5', win: 0, blocks: 1, service: 'ev_quote', cust: 'ciaran', status: 'confirmed', source: 'referral', notes: 'Neighbour had a charger fitted. Garage is detached.', answers: { parking: 'garage', vehicle: 'choosing', timing: 'one_to_three', permission: 'yes' } },
-  { n: 15, day: 'O6', win: 1, blocks: 1, service: 'ev_quote', cust: 'bronagh', status: 'cancelled', source: 'website', noLine1: true, notes: '', answers: { parking: 'street', vehicle: 'choosing', timing: 'researching', permission: 'unsure', marketingOptIn: false }, lead: 'facebook' }
+  { n: 15, day: 'O6', win: 1, blocks: 1, service: 'ev_quote', cust: 'bronagh', status: 'cancelled', source: 'website', createdDaysAgo: 2, noLine1: true, notes: '', answers: { parking: 'street', vehicle: 'choosing', timing: 'researching', permission: 'unsure', marketingOptIn: false }, lead: 'facebook' }
 ];
 
 // ---------- the 18 further enquiries (one journey each) ----------
@@ -114,7 +117,7 @@ const JOURNEYS = [
   // install day booked
   { n: 23, key: 'i1', cust: 'ailbhe', stage: 'install', src: 'facebook', reply: 20, sv: ['P12', 0], acc: 3, brand: 'ZAPPI', extras: [['groundwork', 3]], inst: ['O8', 0], instN: 36, noLine1: true, notes: 'Charger by the garage, cable has to cross the grass.', answers: A('driveway', 'have', 'asap', 'yes') },
   { n: 24, key: 'i2', cust: 'darragh', stage: 'install', src: 'facebook', reply: 100, sv: ['P10', 2], acc: 3, brand: 'OHME', extras: [], inst: ['O10', 2], instN: 37, noLine1: true, notes: 'Terraced house, parks right outside.', answers: A('driveway', 'ordered', 'month', 'yes') },
-  { n: 25, key: 'i3', cust: 'padraig', addr: 1, stage: 'install', src: 'phone', sv: ['P9', 3], acc: 3, brand: 'ZAPPI', extras: [['consumer_unit', 1]], install: 9, notes: 'Landlord. Charger for his own house, after the flat safety report.', answers: A('garage', 'have', 'one_to_three', 'yes', null) },
+  { n: 25, key: 'i3', cust: 'padraig', addr: 1, stage: 'install', src: 'phone', sv: ['P9', 3], acc: 3, brand: 'ZAPPI', extras: [], install: 9, notes: 'Landlord. Charger for his own house, after the flat safety report.', answers: A('garage', 'have', 'one_to_three', 'yes', null) },
   // installed (four paid, two still owed)
   { n: 26, key: 'd1', cust: 'niamh', stage: 'done', src: 'facebook', reply: 55, sv: ['P18', 1], acc: 2, brand: 'SYNC', extras: [], install: 3, noLine1: true, notes: 'Charger on the front wall, short cable run from the fuse box.', answers: A('driveway', 'have', 'asap', 'yes', null) },
   { n: 27, key: 'd2', cust: 'ronan', stage: 'done', src: 'facebook', reply: 410, sv: ['P38', 1], acc: 3, brand: 'OHME', extras: [['cable_extra', 5]], inst: ['P29', 2], instN: 38, paid: 'bank', paidDays: 2, adj: 36, noLine1: true, notes: 'New EV delivered last week.', answers: A('driveway', 'have', 'asap', 'yes') },
@@ -138,6 +141,8 @@ const UTM = {
 // ones; the two enquiries that "need you" are made a given number of minutes ago (`ageMin`).
 function legacyCreatedAt(spec, startDay, today, nowStampStr) {
   if (spec.ageMin !== undefined) return addMinutes(nowStampStr, -spec.ageMin);
+  // Booked on an earlier day, at a varied hour (T10: not every future job was "made 5 minutes ago", so the Messages list has a real history).
+  if (spec.createdDaysAgo !== undefined) return makeStamp(addDays(today, -spec.createdDaysAgo), ENQUIRY_TIMES[spec.n % ENQUIRY_TIMES.length]);
   if (startDay <= today) return makeStamp(addDays(startDay, -2), '09:00');
   const early = addMinutes(nowStampStr, -5);
   const threeDays = makeStamp(addDays(startDay, -3), '09:00');
@@ -202,11 +207,12 @@ function place(spec, today, taken) {
   return null;
 }
 
-// The quote lines of a seeded quote, from the catalogue in settings (so a renamed or repriced catalogue is honoured).
+// The quote lines of a seeded quote, from the catalogue in settings (so a renamed or repriced catalogue is honoured). A catalogue item flagged
+// `optional` (the consumer unit upgrade) becomes a possible extra: listed on the quote but never inside its fixed total.
 function seedLines(settings, brand, extras) {
   const items = settings.quoteItems || [];
   const find = (id) => items.find((i) => i.id === id);
-  const line = (item, qty = 1) => ({ id: '', label: item.label, detail: item.detail || '', qty, unitPrice: item.unitPrice });
+  const line = (item, qty = 1) => ({ id: '', label: item.label, detail: item.detail || '', qty, unitPrice: item.unitPrice, optional: item.optional === true });
   const charger = items.find((i) => i.kind === 'charger' && i.brand === brand) || makeChargerItem(brand);
   const wanted = [[charger, 1], ...['install_standard', 'circuit'].map((id) => [find(id), 1]), ...extras.map(([id, qty]) => [find(id), qty]), [find('testing'), 1]];
   return wanted.filter(([item]) => item).map(([item, qty], i) => ({ ...line(item, qty), id: `ln_${i + 1}` }));
@@ -290,9 +296,9 @@ export function buildSeed(now, settings, existing = { bookings: [], blocks: [] }
       ref: `EL-${1027 + spec.n}`,
       createdAt,
       serviceId: svc.id,
-      serviceName: svc.name,
+      serviceName: spec.label || svc.name,
       variantId: variant ? variant.id : null,
-      variantLabel: variant ? variant.label : '',
+      variantLabel: variant && !spec.label ? variant.label : '',
       start,
       durationMin,
       status,
@@ -530,6 +536,7 @@ export function buildSeed(now, settings, existing = { bookings: [], blocks: [] }
   const add = (booking, role, kind, at, extra = {}) => {
     const m = buildMessage(kind, booking, partial, { at, sendAt: null, ...extra });
     m.seed = true;
+    if (kind === 'owner_new_booking') m.title = alertHeading(booking); // 'New enquiry: Sinead D, BT42': which enquiry this alert is for
     pending.push({ role, booking, message: m });
   };
   const tenDaysAgo = addMinutes(nowStampStr, -10 * 24 * 60);

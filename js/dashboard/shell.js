@@ -2,8 +2,8 @@
 // Owner: B3 (was WP2; brand lockup for 180 Electrical by role B2; V3 shell polish by B3)
 import { html, h, useEffect, useErrorBoundary, useLayoutEffect, useReducer, useRef, useState } from '../vendor/preact-htm.js';
 import {
-  BrandMark, Button, Card, Icon, IconButton, PrototypeNotice, Skeleton, ThemeToggle,
-  cx, focusTitle, loadCss, pageHref, pageTarget, useStore
+  BrandMark, Button, Card, Icon, IconButton, PrototypeNotice, Skeleton, StorageNote, ThemeToggle,
+  cx, focusTitle, loadCss, pageHref, pageTarget, startEdgeFade, useStore
 } from '../ui/index.js';
 import { selectBrand, selectNeedsYou, selectUnseenBookings, selectUnreadMessageCount } from '../core/selectors.js';
 import { routeMeta } from './routes.js';
@@ -13,14 +13,14 @@ import { setBaseTitle } from './watcher.js';
 // Selectors live outside the components so useStore gets stable functions (8.8).
 const selectShortName = (state) => selectBrand(state).shortName;
 const selectNeedsCount = (state) => selectNeedsYou(state).length;
-const selectHasUnseen = (state) => selectUnseenBookings(state).length > 0;
+const selectUnseenCount = (state) => selectUnseenBookings(state).length;
 const selectUnread = (state) => selectUnreadMessageCount(state);
 
 const TABS = [
   { id: 'today', label: 'Today', icon: 'zap' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar-days' },
   { id: 'bookings', label: 'Bookings', icon: 'inbox' },
-  { id: 'insights', label: 'Insights', icon: 'pound-sterling' },
+  { id: 'insights', label: 'Money', icon: 'pound-sterling' },
   { id: 'more', label: 'More', icon: 'ellipsis' }
 ];
 
@@ -33,8 +33,8 @@ const SIDEBAR_MAIN = [
   { id: 'pipeline', label: 'Pipeline', icon: 'list-checks', names: ['pipeline'] },
   { id: 'quotes', label: 'Quotes', icon: 'file-text', names: ['quotes', 'quote-detail'] },
   { id: 'customers', label: 'Customers', icon: 'users', names: ['customers'] },
-  { id: 'insights', label: 'Insights', icon: 'pound-sterling', names: ['insights'] },
-  { id: 'messages', label: 'Messages', icon: 'message-circle', names: ['messages'] }
+  { id: 'insights', label: 'Money', icon: 'pound-sterling', names: ['insights'] },
+  { id: 'messages', label: 'Messages', icon: 'message-square-text', names: ['messages'] }
 ];
 const SIDEBAR_BUSINESS = [
   { id: 'connections', label: 'Connections', icon: 'plug-zap', names: ['connections', 'connections-domain', 'connections-webhook', 'connections-tracking', 'connections-whatsapp', 'connections-calendar', 'connections-email'] },
@@ -46,7 +46,10 @@ const SIDEBAR_LOW = [
   { id: 'about', label: "What's real", icon: 'shield-check', names: ['about'] }
 ];
 
-const FAB_ROUTES = ['today', 'calendar', 'bookings'];
+// Today has none: its cards are already the actions, and the button sat over the WhatsApp and Call buttons.
+const FAB_ROUTES = ['calendar', 'bookings'];
+// These views show their own "this browser is not saving" note (connections.js), so the shell does not repeat it there.
+const OWN_STORAGE_NOTE = ['connections', 'connections-domain', 'connections-webhook', 'connections-tracking'];
 
 const reducedMotion = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
@@ -78,15 +81,17 @@ function Header() {
         <${BrandMark} size=${36} />
         <span class="db-brand__text">
           <span class="db-header__name">${shortName}</span>
-          <span class="db-brand__sub">Owner dashboard</span>
+          <span class="db-brand__sub"><span class="db-brand__sub-pre">Owner </span>dashboard</span>
         </span>
       </a>
       <div class="db-header__actions">
-        <${IconButton} icon="message-circle" label=${unread > 0 ? `Messages, ${unread} new` : 'Messages'} href=${routeHref('messages')}
+        <${IconButton} icon="message-square-text" label=${unread > 0 ? `Messages, ${unread} new` : 'Messages'} href=${routeHref('messages')}
           badge=${unread} badgeTestid="db-messages-badge" data-testid="db-messages-button" />
         <${ThemeToggle} />
-        <${IconButton} icon="external-link" label="View customer site" href=${pageHref('index.html')}
-          target=${pageTarget('index.html')} data-testid="db-site-link" />
+        <a class="db-site-link" href=${pageHref('index.html')} target=${pageTarget('index.html')} aria-label="View customer site" data-testid="db-site-link">
+          <span class="db-site-link__text">View site</span>
+          <${Icon} name="external-link" size=${22} class="db-site-link__icon" />
+        </a>
       </div>
     </div>
   </header>`;
@@ -96,7 +101,7 @@ function Header() {
 
 function TabBar({ activeTab }) {
   const needs = useStore(selectNeedsCount);
-  const hasUnseen = useStore(selectHasUnseen);
+  const unseen = useStore(selectUnseenCount);
   const active = TABS.findIndex((t) => t.id === activeTab);
   // Tapping the tab you are already on scrolls to the top (and does not add a history entry).
   const onTab = (href, isActive) => (e) => {
@@ -117,7 +122,7 @@ function TabBar({ activeTab }) {
               <span class="db-tab__pill">
                 <${Icon} name=${tab.icon} size=${24} />
                 ${tab.id === 'today' && needs > 0 ? html`<span class="db-tab__badge" data-testid="tab-badge-today" aria-hidden="true">${needs}</span><span class="u-sr-only">${`${needs} need you`}</span>` : null}
-                ${tab.id === 'bookings' && hasUnseen ? html`<span class="db-tab__badge db-tab__badge--dot" data-testid="tab-badge-bookings" aria-hidden="true"></span><span class="u-sr-only">New bookings</span>` : null}
+                ${tab.id === 'bookings' && unseen > 0 ? html`<span class="db-tab__badge" data-testid="tab-badge-bookings" aria-hidden="true">${unseen}</span><span class="u-sr-only">${`${unseen} new ${unseen === 1 ? 'booking' : 'bookings'}`}</span>` : null}
               </span>
               <span class="db-tab__label">${tab.label}</span>
             </a>
@@ -296,12 +301,15 @@ export function Shell() {
   const nav = immersive ? 'immersive' : (showFab ? 'fab' : 'tabs');
   // CSS hook: where toasts and sticky bars sit depends on what is at the bottom of the screen (dashboard.css).
   useLayoutEffect(() => { document.documentElement.dataset.dbNav = nav; }, [nav]);
+  // Sideways chip rows (segments, tabs, jump chips) fade at the edge they continue past (T11, js/ui/edge-fade.js).
+  useEffect(() => startEdgeFade(), []);
   // Strip, header and content are SIBLINGS under one page-tall container: a wrapper around strip + header would unstick the header.
   return html`<div class=${cx('db-shell', immersive && 'db-shell--immersive', showFab && 'db-shell--fab')}>
     <${PrototypeNotice} variant="strip" page="dashboard" />
     <${Header} />
     <${Sidebar} route=${route} />
     <main class="db-main" id="main">
+      ${OWN_STORAGE_NOTE.includes(route.name) ? null : html`<div class="db-page db-page--note"><${StorageNote} where="dashboard" /></div>`}
       <${ViewHost} route=${route} />
       ${showFab ? html`<${Fab} />` : null}
     </main>

@@ -55,6 +55,18 @@ export function AnswerChips({ booking, class: cls }) {
   </ul>`;
 }
 
+/**
+ * One grey line for a card or row: "Private driveway · car ordered · ASAP". Permission only shows when it is not a plain yes
+ * ("needs landlord OK"). Returns '' when the booking has no answers.
+ */
+export function answerSummaryLine(b) {
+  const a = answersOf(b);
+  if (!a) return '';
+  const keys = ['parking', 'vehicle', 'timing'].concat(a.permission && a.permission !== 'yes' ? ['permission'] : []);
+  return keys.filter((k) => a[k]).map((k) => shortAnswer(k, a[k])).filter(Boolean)
+    .map((t, i) => (i === 0 || t === 'ASAP' ? t : t.charAt(0).toLowerCase() + t.slice(1))).join(' · ');
+}
+
 /** Plain-text version of the chips (screen readers, titles). */
 export function answerSummaryText(b) {
   const a = answersOf(b);
@@ -65,8 +77,9 @@ export function answerSummaryText(b) {
 /**
  * The status pill for a booking. A new website enquiry reads "New enquiry" and a pencilled-in survey visit gets a second
  * "Pencilled in" pill; everything else is the kit's StatusPill unchanged (`rest` goes on the main pill).
+ * `single` keeps only the main pill (Today's cards and the Bookings rows show one status chip; "pencilled in" is said in words).
  */
-export function BookingPill({ booking: b, compact, urgentTestid, ...rest }) {
+export function BookingPill({ booking: b, compact, urgentTestid, single, ...rest }) {
   const quotedNew = isQuotedInstall(b) && b.status === 'new';
   if (!isEnquiry(b) && !quotedNew) return html`<${StatusPill} status=${b.status} paid=${b.paid} urgent=${b.urgent} urgentTestid=${urgentTestid} compact=${compact} ...${rest} />`;
   if (b.status !== 'new') return html`<${StatusPill} status=${b.status} paid=${true} compact=${compact} ...${rest} />`;
@@ -78,7 +91,7 @@ export function BookingPill({ booking: b, compact, urgentTestid, ...rest }) {
     : html`<span class=${cx('ui-pill', 'ui-pill--new', compact && 'ui-pill--compact')} ...${rest}>
         <${Icon} name="bell" size=${16} /><span class="ui-pill__label">New enquiry</span>
       </span>`;
-  if (!pencil) return main;
+  if (!pencil || single) return main;
   return html`<span class="ui-pill-group">${main}
     <span class=${cx('ui-pill', 'ui-pill--on-the-way', 'en-pencil', compact && 'ui-pill--compact')} data-testid="pencilled-pill">
       <${Icon} name="clock" size=${16} /><span class="ui-pill__label">Pencilled in</span>

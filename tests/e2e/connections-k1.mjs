@@ -185,6 +185,25 @@ async function sweep(browser) {
 
 // ---------- 2. hub ----------
 
+/** The three hub buttons share a baseline at 1280, whatever the text above them holds. */
+async function hubWideChecks(browser) {
+  const ctx = await browser.newContext({ ...CTX, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, colorScheme: 'dark' });
+  await ctx.addInitScript(() => { try { localStorage.setItem('vm_theme', 'dark'); } catch (e) { /* ignore */ } });
+  const page = await ctx.newPage();
+  const bag = [];
+  watch(page, bag)('hub 1280');
+  await open(page, '/connections', { root: 'k1-hub' });
+  const rows = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('[data-testid^="k1-card-"]')];
+    const byTop = new Map();
+    for (const c of cards) { const top = Math.round(c.getBoundingClientRect().top); if (!byTop.has(top)) byTop.set(top, []); byTop.get(top).push(c); }
+    return [...byTop.values()].map((row) => ({ n: row.length, buttons: row.map((c) => Math.round(c.querySelector('.k1-card__cta').getBoundingClientRect().bottom)), cards: row.map((c) => Math.round(c.getBoundingClientRect().bottom)) }));
+  });
+  check('hub (1280px): three cards a row, and the buttons in a row share one baseline (and so do the cards)', rows.length === 2 && rows.every((r) => r.n === 3 && new Set(r.buttons).size === 1 && new Set(r.cards).size === 1), JSON.stringify(rows));
+  check('hub (1280px): clean console and requests', bag.length === 0, bag.slice(0, 3).join(' || '));
+  await ctx.close();
+}
+
 async function hubChecks(browser) {
   const ctx = await newContext(browser);
   const page = await ctx.newPage();
@@ -194,25 +213,28 @@ async function hubChecks(browser) {
   await open(page, '/connections', { root: 'k1-hub' });
 
   check('hub: title reads "Connect your business"', (await text(page, T('view-title'))) === 'Connect your business', await text(page, T('view-title')));
-  check('hub: progress reads "1 of 6 set up" (only the webhook is on by default)', (await text(page, T('k1-progress-text'))) === '1 of 6 set up', await text(page, T('k1-progress-text')));
+  check('hub: a fresh hub reads "0 of 6 tried out" (the webhook is on, but nothing has come through it yet)', (await text(page, T('k1-progress-text'))) === '0 of 6 tried out', await text(page, T('k1-progress-text')));
   const ring = await page.locator(T('k1-progress')).evaluate((el) => ({ now: el.getAttribute('aria-valuenow'), max: el.getAttribute('aria-valuemax'), text: el.getAttribute('aria-valuetext'), role: el.getAttribute('role') }));
-  check('hub: the ring is a labelled meter 1 of 6', ring.role === 'meter' && ring.now === '1' && ring.max === '6' && ring.text === '1 of 6 set up', JSON.stringify(ring));
+  check('hub: the ring is a labelled meter, 0 of 6 tried out', ring.role === 'meter' && ring.now === '0' && ring.max === '6' && ring.text === '0 of 6 tried out', JSON.stringify(ring));
   const order = await page.locator('[data-testid^="k1-card-"]').evaluateAll((els) => els.map((e) => e.dataset.testid.replace('k1-card-', '')));
-  check('hub: six cards in the order domain, whatsapp, calendar, email, webhook, tracking', order.join(',') === 'domain,whatsapp,calendar,email,webhook,tracking', order.join(','));
+  check('hub: six cards in the order webhook, whatsapp, domain, calendar, email, tracking', order.join(',') === 'webhook,whatsapp,domain,calendar,email,tracking', order.join(','));
   const hrefs = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-testid^="k1-cta-"]')].map((a) => [a.dataset.testid.replace('k1-cta-', ''), a.getAttribute('href')])));
   check('hub: every card button goes to its own screen', hrefs.domain === '#/connections/domain' && hrefs.whatsapp === '#/connections/whatsapp' && hrefs.calendar === '#/connections/calendar'
     && hrefs.email === '#/connections/email' && hrefs.webhook === '#/connections/webhook' && hrefs.tracking === '#/connections/tracking', JSON.stringify(hrefs));
-  check('hub: webhook card says On, the rest Not set up', (await text(page, T('k1-badge-webhook'))) === 'On' && (await text(page, T('k1-badge-domain'))) === 'Not set up' && (await text(page, T('k1-badge-whatsapp'))) === 'Not set up');
+  check('hub: the webhook card is amber "Waiting for your first enquiry" (not green "On"), the rest Not set up', (await text(page, T('k1-badge-webhook'))) === 'Waiting for your first enquiry' && (await page.locator(T('k1-card-webhook')).getAttribute('data-status')) === 'pending' && (await text(page, T('k1-badge-domain'))) === 'Not set up' && (await text(page, T('k1-badge-whatsapp'))) === 'Not set up');
+  check('hub: the cards are in plain words ("Keep your Facebook funnel", "WhatsApp alert to my phone")', /Keep your Facebook funnel/.test(await text(page, T('k1-card-webhook'))) && /WhatsApp alert to my phone/.test(await text(page, T('k1-card-whatsapp'))));
   check('hub: each card has a one-line value proposition',
-    /own web address/.test(await text(page, T('k1-card-domain'))) && /WhatsApp the second an enquiry lands/.test(await text(page, T('k1-card-whatsapp'))));
-  check('hub: the hero suggests WhatsApp next and links to it', /Up next: WhatsApp/.test(await text(page, T('k1-next-text'))) && (await page.locator(T('k1-hero-cta')).getAttribute('href')) === '#/connections/whatsapp');
+    /own web address/.test(await text(page, T('k1-card-domain'))) && /WhatsApp message on your own phone the second an enquiry lands/.test(await text(page, T('k1-card-whatsapp'))));
+  check('hub: the hero suggests the funnel first and links to it', /Up next: Keep your Facebook funnel/.test(await text(page, T('k1-next-text'))) && (await page.locator(T('k1-hero-cta')).getAttribute('href')) === '#/connections/webhook');
+  const stripes = await page.evaluate(() => [...document.querySelectorAll('.ui-sim, .ui-sim--compact, .k1-hero, .k1-card, .k1-practice')].filter((el) => getComputedStyle(el).backgroundImage.includes('repeating')).length);
+  check('hub: Practice mode is one neutral dashed outline, no hazard stripes anywhere', stripes === 0 && /Practice mode/.test(await text(page, T('sim-banner'))) && (await page.locator(T('sim-banner')).evaluate((el) => getComputedStyle(el).borderTopStyle)) === 'dashed', String(stripes));
 
   // Live updates: a change in the store (this tab) moves the ring and the card.
   await call(page, 'connectGoogle', 'calendar', { account: 'daniel@gmail.example' });
   await call(page, 'connectGoogle', 'email', { account: 'daniel@gmail.example' });
-  await page.waitForFunction(() => /3 of 6/.test(document.querySelector('[data-testid="k1-progress-text"]').textContent), null, { timeout: 3000 }).catch(() => {});
-  check('hub: connecting Calendar and Gmail moves the progress to 3 of 6', (await text(page, T('k1-progress-text'))) === '3 of 6 set up', await text(page, T('k1-progress-text')));
-  check('hub: a connected card says Connected and shows its detail', (await page.locator(T('k1-card-calendar')).getAttribute('data-status')) === 'connected' && /daniel@gmail\.example/.test(await text(page, T('k1-detail-calendar'))), await text(page, T('k1-card-calendar')));
+  await page.waitForFunction(() => /2 of 6/.test(document.querySelector('[data-testid="k1-progress-text"]').textContent), null, { timeout: 3000 }).catch(() => {});
+  check('hub: connecting Calendar and Gmail moves the progress to 2 of 6 tried out', (await text(page, T('k1-progress-text'))) === '2 of 6 tried out', await text(page, T('k1-progress-text')));
+  check('hub: a card that is done in practice says "Tried out" in a dashed pill (not a green Connected) and shows its detail', (await page.locator(T('k1-card-calendar')).getAttribute('data-status')) === 'connected' && (await text(page, T('k1-badge-calendar'))) === 'Tried out' && (await page.locator(T('k1-badge-calendar')).evaluate((el) => getComputedStyle(el).borderTopStyle)) === 'dashed' && /daniel@gmail\.example/.test(await text(page, T('k1-detail-calendar'))), await text(page, T('k1-card-calendar')));
   check('hub: the button on a connected card says Manage', /Manage calendar/.test(await text(page, T('k1-cta-calendar'))), await text(page, T('k1-cta-calendar')));
 
   // A second tab: a change made there shows up here.
@@ -220,8 +242,8 @@ async function hubChecks(browser) {
   watch(second, bag)('hub tab 2');
   await open(second, '/connections', { root: 'k1-hub' });
   await call(second, 'setConnection', 'tracking', { metaPixelId: '123456789012345' });
-  await page.waitForFunction(() => /4 of 6/.test(document.querySelector('[data-testid="k1-progress-text"]').textContent), null, { timeout: 4000 }).catch(() => {});
-  check('hub: a change made in a second tab shows up in the first (4 of 6)', (await text(page, T('k1-progress-text'))) === '4 of 6 set up', await text(page, T('k1-progress-text')));
+  await page.waitForFunction(() => /3 of 6/.test(document.querySelector('[data-testid="k1-progress-text"]').textContent), null, { timeout: 4000 }).catch(() => {});
+  check('hub: a change made in a second tab shows up in the first (3 of 6 tried out)', (await text(page, T('k1-progress-text'))) === '3 of 6 tried out', await text(page, T('k1-progress-text')));
   check('hub: the tracking card shows the saved pixel', /123456789012345/.test(await text(page, T('k1-detail-tracking'))), await text(page, T('k1-detail-tracking')));
   await second.close();
 
@@ -231,9 +253,14 @@ async function hubChecks(browser) {
   await call(page, 'checkDomain');
   await call(page, 'connectWhatsApp', { number: '07885 496800', code: '482913' });
   await call(page, 'submitWhatsAppTemplates');
+  await sleep(500);
+  check('hub: templates that wait for Meta, and a webhook that waits for its first enquiry, do not count yet (4 of 6)', (await text(page, T('k1-progress-text'))) === '4 of 6 tried out', await text(page, T('k1-progress-text')));
+  await call(page, 'fastForwardWhatsAppTemplates');
+  await call(page, 'sendTestEvent', 'webhook');
   await page.waitForFunction(() => /6 of 6/.test(document.querySelector('[data-testid="k1-progress-text"]').textContent), null, { timeout: 8000 }).catch(() => {});
-  check('hub: with everything set up the progress reads 6 of 6', (await text(page, T('k1-progress-text'))) === '6 of 6 set up', await text(page, T('k1-progress-text')));
-  check('hub: the finished hero still says it is simulated', /simulated/i.test(await text(page, T('k1-hero'))) && !(await exists(page, T('k1-hero-cta'))), await text(page, T('k1-hero')));
+  check('hub: once all six have been tried the ring reads 6 of 6 tried out', (await text(page, T('k1-progress-text'))) === '6 of 6 tried out', await text(page, T('k1-progress-text')));
+  check('hub: the finished card says "All 6 set up in this demo" and that nothing is really connected, in ink not green', /All 6 set up in this demo/.test(await text(page, T('k1-hero'))) && /Nothing is really connected/.test(await text(page, T('k1-hero'))) && !(await exists(page, T('k1-hero-cta'))) && (await page.locator(T('k1-hero')).evaluate((el) => getComputedStyle(el).borderTopColor)) !== (await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--ok').trim())), await text(page, T('k1-hero')));
+  check('hub: every card is a dashed Tried out pill now, and there are no green Connected pills', (await page.locator('[data-testid^="k1-badge-"].k1-practice').count()) === 6 && (await page.locator('.ui-conn--connected').count()) === 0);
   const bad = await axeBad(page);
   check('hub (all connected): axe finds nothing serious or critical', bad.length === 0, bad.slice(0, 3).join(' || '));
 
@@ -273,6 +300,15 @@ async function domainChecks(browser) {
   await page.fill(T('k1-domain-input'), 'daniel@180electrical.co.uk');
   await page.click(T(`${WIZ}-next`));
   check('domain: an email address is recognised as one', /looks like an email address/.test(await text(page, T('k1-domain-error'))), await text(page, T('k1-domain-error')));
+  // The error is written once (inline, with its icon), not again in the wizard's own alert, and the field wears ONE 2px ring.
+  await sleep(200);
+  const ringInfo = await page.evaluate(() => {
+    const el = document.activeElement;
+    const cs = getComputedStyle(el);
+    return { tag: el.getAttribute('data-testid'), outline: cs.outlineStyle, border: cs.borderTopWidth, invalid: el.getAttribute('aria-invalid') };
+  });
+  check('domain: an invalid address shows its error once (inline text and icon), not again in a wizard alert', (await page.locator('[data-testid="k1-domain-error"]').count()) === 1 && (await page.locator(`${T('k1-domain-error')} svg`).count()) >= 1 && (await page.locator(T(`${WIZ}-error`)).count()) === 0 && (await page.locator('.ui-wizard__error-text').count()) === 0);
+  check('domain: the invalid field is focused with a single 2px ring (a 2px border, no second outline)', ringInfo.tag === 'k1-domain-input' && ringInfo.invalid === 'true' && ringInfo.border === '2px' && ringInfo.outline === 'none', JSON.stringify(ringInfo));
   await page.fill(T('k1-domain-input'), 'https://Book.Test-Site.co.uk/page?x=1');
   check('domain: a pasted link is cleaned up and previewed', /We will use book\.test-site\.co\.uk/.test(await text(page, T(`${WIZ}-step-address`))), await text(page, T(`${WIZ}-step-address`)));
   const bad1 = await axeBad(page);
@@ -446,8 +482,24 @@ async function webhookChecks(browser) {
   await open(page, '/connections/webhook', { root: 'k1-webhook' });
   const before = await conns(page);
 
-  check('webhook: explains in plain English how the existing funnel keeps running', /funnel keeps running/i.test(await text(page, T('k1-how'))) && /webhook/i.test(await text(page, T('k1-how'))));
-  check('webhook: it is on by default and says no events yet', (await text(page, T('k1-hook-badge'))) === 'On' && /No events yet/.test(await text(page, T('k1-last-event'))));
+  check('webhook: the page is called "Keep your Facebook funnel" and says the agency keeps running it', (await text(page, T('view-title'))) === 'Keep your Facebook funnel' && /agency keeps running the funnel/i.test(await text(page, T('k1-webhook'))));
+  check('webhook: it opens with the "Send these instructions to my agency" button, before any technical word', /Send these instructions to my agency/.test(await text(page, T('k1-agency-send'))) && (await page.evaluate(() => { const b = document.querySelector('[data-testid="k1-agency-send"]').getBoundingClientRect().top; const t = document.querySelector('[data-testid="k1-tech"]').getBoundingClientRect().top; return b < t && b < 520; })));
+  check('webhook: there are no "How it works" paragraphs and no developer words in view', !(await exists(page, T('k1-how'))) && !/Signing secret|Rotate|answers\.parking|JSON/.test(await page.evaluate(() => [...document.querySelectorAll('[data-testid="k1-webhook"] *')].filter((el) => !el.closest('[data-testid="k1-tech"]') && !el.closest('[data-testid="real-build-note"]') && el.children.length === 0 && el.offsetParent !== null).map((el) => el.textContent).join(' '))));
+  check('webhook: it starts amber "Waiting for your first enquiry" and says none yet', (await text(page, T('k1-hook-badge'))) === 'Waiting for your first enquiry' && /None yet/.test(await text(page, T('k1-last-event'))));
+  check('webhook: the technical details are folded away until opened', !(await page.locator(T('k1-tech')).evaluate((el) => el.open)) && !(await page.locator(T('k1-webhook-url')).isVisible()));
+  check('webhook: a tip says to put utm_source in the ad link', /utm_source/.test(await text(page, T('k1-utm-tip'))));
+  // the message to his agency
+  await page.click(T('k1-agency-send'));
+  await page.waitForSelector(T('k1-agency-sheet'));
+  const pre = await text(page, T('k1-agency-preview'));
+  check('webhook: the sheet previews a plain-English message with the address, the secret key, a sample enquiry and the utm_source tip', pre.includes(before.webhook.url) && pre.includes(before.webhook.secret) && /"event": "enquiry\.created"/.test(pre) && /utm_source=facebook/.test(pre) && /keep the funnel exactly as it is/i.test(pre), pre.slice(0, 160));
+  const waLink = await page.getAttribute(T('k1-agency-whatsapp'), 'href');
+  const mailLink = await page.getAttribute(T('k1-agency-email'), 'href');
+  check('webhook: WhatsApp opens wa.me with that message and email opens mailto with it', /^https:\/\/wa\.me\/\?text=/.test(waLink) && decodeURIComponent(waLink).includes(before.webhook.url) && /^mailto:\?subject=/.test(mailLink) && decodeURIComponent(mailLink).includes(before.webhook.secret), `${waLink.slice(0, 60)} | ${mailLink.slice(0, 60)}`);
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  await page.click(`${T('k1-tech')} summary`);
+  await page.waitForFunction(() => document.querySelector('[data-testid="k1-tech"]').open);
   check('webhook: the URL field holds the store URL', (await value(page, T('k1-webhook-url-value'))) === before.webhook.url && /^https:\/\/hooks\.example\//.test(before.webhook.url));
   check('webhook: the secret is masked until revealed', (await page.locator(T('k1-webhook-secret-value')).getAttribute('type')) === 'password');
   await page.click(T('k1-webhook-secret-reveal'));
@@ -476,7 +528,7 @@ async function webhookChecks(browser) {
   await sleep(250);
   const rotated = (await conns(page)).webhook.secret;
   check('webhook: rotating makes a new whsec_ secret', rotated !== before.webhook.secret && /^whsec_[a-z0-9]{24}$/.test(rotated), rotated);
-  const rotToast = toastWith(page, 'New secret created');
+  const rotToast = toastWith(page, 'New secret key created');
   check('webhook: the rotate toast offers Undo', (await rotToast.count()) === 1 && /Undo/.test(await rotToast.innerText()));
   await rotToast.locator(T('toast-action')).click();
   await sleep(250);
@@ -490,16 +542,17 @@ async function webhookChecks(browser) {
   await page.click(T('k1-test-send'));
   await page.waitForSelector(T('k1-test-error'), { timeout: 3000 }).catch(() => {});
   check('webhook: a test while paused says it is paused and creates nothing', /paused/i.test(await text(page, T('k1-test-error'))) && (await bookingCount(page)) === n0, await text(page, T('k1-test-error')));
-  const offToast = toastWith(page, 'Webhook is paused');
+  const offToast = toastWith(page, 'Funnel enquiries are paused');
   await offToast.locator(T('toast-action')).click().catch(() => {});
   await sleep(250);
-  check('webhook: Undo on the pause toast switches it back on', (await conns(page)).webhook.enabled === true && (await text(page, T('k1-hook-badge'))) === 'On');
+  check('webhook: Undo on the pause toast switches it back on (still waiting for its first enquiry)', (await conns(page)).webhook.enabled === true && (await text(page, T('k1-hook-badge'))) === 'Waiting for your first enquiry');
 
   // send a test enquiry
   await page.click(T('k1-test-send'));
   await page.waitForSelector(T('k1-test-result'), { timeout: 4000 }).catch(() => {});
   check('webhook: the test enquiry confirms with the customer, postcode and reference', /Test enquiry received/.test(await text(page, T('k1-test-result'))) && /\(EL-\d+\)/.test(await text(page, T('k1-test-result'))), await text(page, T('k1-test-result')));
-  check('webhook: the test is labelled simulated', /Simulated/.test(await text(page, T('k1-test-result'))));
+  check('webhook: the test is labelled as practice mode', /Practice mode/.test(await text(page, T('k1-test-result'))));
+  check('webhook: after a test enquiry the badge turns to On and the hub counts it as tried out', (await text(page, T('k1-hook-badge'))) === 'On' && (await page.evaluate(async () => { const s = await import('/js/core/selectors.js'); const st = await import('/js/core/store.js'); return s.selectConnectionsSummary(st.getState()).find((r) => r.key === 'webhook').status; })) === 'connected');
   check('webhook: one enquiry was created with the webhook as its source', (await bookingCount(page)) === n0 + 1);
   const made = await page.evaluate(async () => { const b = (await import('/js/core/store.js')).getState().bookings.filter((x) => x.utm && x.utm.medium === 'webhook'); return b.map((x) => ({ id: x.id, src: x.utm.source, camp: x.utm.campaign, status: x.status, service: x.serviceId })); });
   check('webhook: it is an enquiry (ev_quote) tagged medium webhook', made.length === 1 && made[0].service === 'ev_quote' && made[0].camp === 'test_event', JSON.stringify(made));
@@ -613,7 +666,7 @@ async function trackingChecks(browser) {
 
   // the hub reflects it
   await open(page, '/connections', { root: 'k1-hub' });
-  check('hub: the tracking card now reads Tags set with the pixel', /Tags set/.test(await text(page, T('k1-badge-tracking'))) && /123456789012345/.test(await text(page, T('k1-detail-tracking'))), await text(page, T('k1-card-tracking')));
+  check('hub: the tracking card now reads Tried out with the pixel in its detail', /Tried out/.test(await text(page, T('k1-badge-tracking'))) && /123456789012345/.test(await text(page, T('k1-detail-tracking'))), await text(page, T('k1-card-tracking')));
 
   // full disk
   await open(page, '/connections/tracking', { root: 'k1-tracking' });
@@ -676,7 +729,7 @@ try {
   BASE = await startServer();
   console.log(`connections K1 e2e against ${BASE}${AXE ? '' : ' (axe-core not found: accessibility checks skipped)'}`);
   browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
-  const steps = [['layout sweep', sweep], ['hub', hubChecks], ['domain wizard', domainChecks], ['domain edge cases', domainEdgeChecks],
+  const steps = [['layout sweep', sweep], ['hub', hubChecks], ['hub wide', hubWideChecks], ['domain wizard', domainChecks], ['domain edge cases', domainEdgeChecks],
     ['webhook', webhookChecks], ['tracking', trackingChecks], ['reduced motion and blocked storage', resilience]];
   for (const [name, run] of steps) {
     try { await run(browser); } catch (e) { check(`${name}: ran to the end`, false, String((e && e.message) || e).split('\n').slice(0, 3).join(' ')); }
