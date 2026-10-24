@@ -1,0 +1,11 @@
+{
+  "name": "voltmere-electrical",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prototype: electrician booking site and owner dashboard. Sample data only. Static site, no build step.",
+  "scripts": {
+    "serve": "python3 -m http.server 4100",
+    "test": "TZ=Europe/London node --test \"tests/unit/*.test.mjs\""
+  }
+}

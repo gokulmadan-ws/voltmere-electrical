@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- index.html: customer landing page entry (head boilerplate, #app, boot module). Owner: WP3 -->
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Voltmere Electrical: Local electrician. Booked in 60 seconds.</title>
+  <meta name="description" content="Book Voltmere Electrical online in 60 seconds. Real availability, clear prices, a certificate with every job. Prototype with sample data.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#FBF8F2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1020" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="modulepreload" href="js/vendor/preact-htm.js">
+  <link rel="modulepreload" href="js/ui/index.js">
+  <link rel="modulepreload" href="js/core/store.js">
+  <link rel="modulepreload" href="js/landing/app.js">
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/landing.css">
+  <link rel="stylesheet" href="css/booking.css">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('vm_theme');
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.setAttribute('data-theme', t);
+          var c = t === 'dark' ? '#0B1020' : '#FBF8F2';
+          var m = document.querySelectorAll('meta[name="theme-color"]');
+          for (var i = 0; i < m.length; i++) m[i].setAttribute('content', c);
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>This prototype needs JavaScript to run. Please enable it, or call 07700 900412.</noscript>
+  <script type="module" src="js/landing/app.js"></script>
+</body>
+</html>

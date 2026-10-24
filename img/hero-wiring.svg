@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 900" preserveAspectRatio="xMaxYMin slice" aria-hidden="true" focusable="false">
+  <!-- img/hero-wiring.svg: dotted wiring grid, a few circuit traces and one oversized pale bolt (hero panel background). Owner: WP3.
+       Colours are the keyword "white" at low opacity so it sits on the navy panel in both themes; no hex colours. -->
+  <defs>
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.6" fill="white" fill-opacity="0.1"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="900" fill="url(#dots)"/>
+  <g fill="none" stroke="white" stroke-opacity="0.08" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 640 H196 L252 696 H420 L476 640 H800"/>
+    <path d="M0 232 H112 L168 176 H336 L392 232 H470"/>
+    <path d="M560 0 V92 L604 136 V330"/>
+  </g>
+  <g fill="white" fill-opacity="0.1">
+    <circle cx="196" cy="640" r="5"/>
+    <circle cx="476" cy="640" r="5"/>
+    <circle cx="168" cy="176" r="5"/>
+    <circle cx="470" cy="232" r="5"/>
+    <circle cx="604" cy="330" r="5"/>
+  </g>
+  <path transform="translate(380 20) scale(13)" d="M36.5 10 18 35.5h12.2L26.8 54 46 27.5H33.6z" fill="white" fill-opacity="0.06" stroke="white" stroke-opacity="0.06" stroke-width="3" stroke-linejoin="round"/>
+</svg>

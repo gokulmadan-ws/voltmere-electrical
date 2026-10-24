@@ -1,0 +1,15 @@
+{
+  "name": "Voltmere Electrical",
+  "short_name": "Voltmere",
+  "description": "Prototype booking site and owner dashboard for a local electrician. Sample data.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "browser",
+  "background_color": "#FBF8F2",
+  "theme_color": "#FBF8F2",
+  "icons": [
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "img/logo-mark.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

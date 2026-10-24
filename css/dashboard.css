@@ -1,0 +1,221 @@
+/* css/dashboard.css: dashboard shell (db-*): header, tab bar, sidebar, FAB, and the page helpers every view uses.
+   Owner: WP2. Views load their own css/<name>.css on top of this. */
+
+/* Column width of the page content: full width on phones, centred 720px on tablets, 1080px beside the sidebar. */
+:root {
+  --db-col: none;
+  --toast-bottom: calc(var(--h-tabbar) + var(--h-fab) + 28px); /* clears the tab bar AND the FAB (12.3) */
+}
+@media (min-width: 768px) { :root { --db-col: 720px; } }
+@media (min-width: 1100px) { :root { --db-col: 1080px; --toast-bottom: 24px; } }
+/* An immersive screen has a sticky action bar at the bottom: keep toasts above it (below 1100 the default already clears it). */
+@media (min-width: 1100px) { body:has(#app .db-sticky-actions) { --toast-bottom: 96px; } }
+
+/* ================= Shell ================= */
+/* Strip, header and content are siblings in one page-tall box so the sticky header keeps sticking (5.1 item 16). */
+.db-shell {
+  /* space under a view so nothing hides behind the tab bar (+ the FAB where there is one) */
+  --db-page-pb: calc(var(--h-tabbar) + var(--safe-bottom) + var(--space-5));
+  min-height: 100vh; min-height: 100dvh;
+}
+.db-shell--fab { --db-page-pb: calc(var(--h-tabbar) + var(--h-fab) + var(--safe-bottom) + var(--space-6)); }
+.db-shell--immersive { --db-page-pb: var(--space-5); }
+.db-main { display: block; min-width: 0; }
+
+/* ================= Header ================= */
+.db-header {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  padding-top: var(--safe-top);
+  background: var(--bg); border-bottom: 1.5px solid var(--line);
+}
+.db-header__inner {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  min-height: var(--h-header); max-width: var(--db-col); margin-inline: auto;
+  padding-left: max(var(--gutter), var(--safe-left)); padding-right: max(calc(var(--gutter) - 6px), var(--safe-right));
+}
+.db-header__brand {
+  display: inline-flex; align-items: center; gap: 10px; flex: 0 1 auto; min-width: 0; min-height: var(--tap);
+  color: var(--text); text-decoration: none;
+}
+.db-header__name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); line-height: 1.2;
+}
+.db-header__actions { display: flex; align-items: center; flex: none; gap: 2px; }
+
+/* ================= Bottom tab bar (below 1100px) ================= */
+.db-tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-tabbar);
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+  background: var(--surface); border-top: 1.5px solid var(--line); box-shadow: var(--shadow-bar);
+}
+.db-tabbar__list {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  height: var(--h-tabbar); max-width: 560px; margin: 0 auto; padding: 0; list-style: none;
+}
+.db-tabbar__item { display: block; min-width: 0; }
+.db-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  height: 100%; min-width: 0;
+  color: var(--text-2); text-decoration: none;
+  font-size: var(--fs-12); font-weight: var(--fw-semibold); line-height: 1.2;
+}
+.db-tab__pill {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  width: 56px; height: 30px; border-radius: var(--r-pill);
+  transition: background-color var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.db-tab:active .db-tab__pill { transform: scale(0.92); }
+.db-tab__label { max-width: 100%; white-space: nowrap; }
+.db-tab.is-active { color: var(--text); font-weight: var(--fw-bold); }
+.db-tab.is-active .db-tab__pill { background: var(--cta); color: var(--cta-ink); }
+.db-tab__badge {
+  position: absolute; top: -5px; right: 2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--r-pill);
+  background: var(--danger); color: var(--danger-ink); box-shadow: 0 0 0 2px var(--surface);
+  font-size: var(--fs-12); font-weight: var(--fw-heavy); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.db-tab__badge--dot { top: -2px; right: 10px; min-width: 10px; width: 10px; height: 10px; padding: 0; }
+
+/* ================= Floating "New booking" button ================= */
+.db-fab {
+  --btn-edge: var(--cta-press);
+  position: fixed; z-index: var(--z-fab);
+  right: max(var(--gutter), var(--safe-right));
+  bottom: calc(var(--h-tabbar) + var(--safe-bottom) + var(--space-4));
+  display: flex; align-items: center; justify-content: center;
+  width: var(--h-fab); height: var(--h-fab); border-radius: 50%;
+  border: 1.5px solid var(--btn-edge); background: var(--cta); color: var(--cta-ink);
+  box-shadow: 0 3px 0 var(--btn-edge), var(--shadow-2);
+  text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .db-fab { --btn-edge: color-mix(in srgb, var(--cta-press) 68%, var(--cta-ink)); }
+}
+.db-fab:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--btn-edge), var(--shadow-2); }
+@media (min-width: 768px) {
+  /* aligned to the right edge of the centred column */
+  .db-fab { right: max(var(--gutter), calc((100vw - var(--db-col)) / 2 + var(--gutter))); }
+}
+
+/* The on-screen keyboard covers the bottom: bars and the FAB would float over it (5.1 item 15). */
+html.is-keyboard-open .db-tabbar,
+html.is-keyboard-open .db-fab,
+html.is-keyboard-open #app .db-sticky-actions { display: none; }
+
+/* ================= Sidebar (1100px and up) ================= */
+.db-sidebar { display: none; }
+.db-sidebar__nav { display: flex; flex-direction: column; gap: var(--space-4); height: 100%; padding: var(--space-4) var(--space-3); overflow-y: auto; overscroll-behavior: contain; }
+.db-sidebar__brand {
+  display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 var(--space-3);
+  color: var(--text); text-decoration: none;
+}
+.db-sidebar__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-tight); }
+.db-nav { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.db-nav--low { margin-top: auto; }
+.db-nav__item {
+  display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); padding: 0 var(--space-3);
+  border-radius: var(--r-md); color: var(--text-2); text-decoration: none;
+  font-size: var(--fs-16); font-weight: var(--fw-semibold);
+}
+.db-nav__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-nav__item:active { background: var(--surface-2); }
+@media (hover: hover) { .db-nav__item:hover { background: var(--surface-2); color: var(--text); } }
+.db-nav__item.is-active { background: var(--cta-soft); color: var(--text); font-weight: var(--fw-bold); box-shadow: inset 3px 0 0 var(--cta-text); }
+.db-nav__badge {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--r-pill);
+  background: var(--danger); color: var(--danger-ink);
+  font-size: var(--fs-12); font-weight: var(--fw-heavy); line-height: 1; font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 1100px) {
+  .db-shell {
+    display: grid; align-items: start;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    /* the sidebar runs the full height (strip row included) so its bottom links are never cut off */
+    grid-template-areas: "sidebar strip" "sidebar header" "sidebar main";
+  }
+  .db-shell > .ui-notice--strip { grid-area: strip; }
+  .db-header { grid-area: header; }
+  .db-main { grid-area: main; }
+  .db-sidebar {
+    grid-area: sidebar; display: block; align-self: start;
+    position: sticky; top: 0; z-index: var(--z-raised);
+    height: 100vh; height: 100dvh;
+    background: var(--surface); border-right: 1.5px solid var(--line);
+  }
+  .db-header__brand { display: none; }
+  .db-header__inner { justify-content: flex-end; }
+  .db-tabbar, .db-fab { display: none; }
+  .db-shell { --db-page-pb: var(--space-7); }
+}
+
+/* ================= Page helpers (12.2): every view uses these instead of inventing layout ================= */
+.db-page {
+  width: 100%; min-width: 0; max-width: var(--db-col); margin-inline: auto;
+  padding: var(--space-4) max(var(--gutter), var(--safe-right)) var(--db-page-pb) max(var(--gutter), var(--safe-left));
+}
+.db-section { min-width: 0; margin-top: var(--space-5); }
+.db-section:first-child { margin-top: 0; }
+.db-section__title {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-body); font-size: var(--fs-17); font-weight: var(--fw-bold); letter-spacing: 0; line-height: 1.3;
+}
+.db-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.db-stack > * { min-width: 0; }
+.db-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-width: 0; }
+.db-row > * { min-width: 0; }
+.db-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.db-grid > * { min-width: 0; }
+@media (min-width: 768px) { .db-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .db-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.db-list {
+  margin: 0; padding: 0; list-style: none; overflow: hidden;
+  border: 1.5px solid var(--line); border-radius: var(--r-lg);
+  background: var(--surface); box-shadow: var(--shadow-1);
+}
+.db-list__item {
+  display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: 56px;
+  padding: var(--space-3) var(--space-4);
+  color: inherit; text-decoration: none;
+}
+.db-list__item + .db-list__item { border-top: 1px solid var(--line); }
+a.db-list__item, button.db-list__item { width: 100%; border: 0; border-radius: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+a.db-list__item:active, button.db-list__item:active { background: var(--surface-2); }
+
+/* Sticky action bar at the bottom of an immersive screen (booking detail). Full-bleed inside the page gutters. */
+.db-sticky-actions {
+  position: sticky; bottom: 0; z-index: var(--z-sticky);
+  display: flex; align-items: center; gap: var(--space-3);
+  margin: var(--space-5) calc(max(var(--gutter), var(--safe-right)) * -1) calc(var(--db-page-pb) * -1) calc(max(var(--gutter), var(--safe-left)) * -1);
+  padding: var(--space-3) max(var(--gutter), var(--safe-right)) calc(var(--space-3) + var(--safe-bottom)) max(var(--gutter), var(--safe-left));
+  border-top: 1.5px solid var(--line); background: var(--surface); box-shadow: var(--shadow-bar);
+}
+.db-sticky-actions > * { min-width: 0; }
+
+/* CONTRACT-GAP: 12.2 names db-master-detail and --has-detail but not the two panes; they are __list and __detail. */
+/* Master-detail: below 1100 only one pane shows; --has-detail flips which. From 1100: list 420px, detail beside it. */
+.db-master-detail__detail { display: none; }
+.db-master-detail--has-detail .db-master-detail__list { display: none; }
+.db-master-detail--has-detail .db-master-detail__detail { display: block; }
+.db-master-detail__list, .db-master-detail__detail { min-width: 0; }
+@media (min-width: 1100px) {
+  .db-master-detail { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+  .db-master-detail .db-master-detail__list,
+  .db-master-detail .db-master-detail__detail { display: block; }
+}
+
+/* Two columns from 1100 (Today); stacked below. */
+.db-two-col { display: flex; flex-direction: column; gap: var(--space-4); }
+.db-two-col > * { min-width: 0; }
+@media (min-width: 1100px) {
+  .db-two-col { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+}
+
+.db-error__text { margin: 0 0 var(--space-3); font-weight: var(--fw-semibold); }

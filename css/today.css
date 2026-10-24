@@ -1,0 +1,147 @@
+/* css/today.css: the Today screen (td-*). Colours come from tokens.css only.
+   Owner: WP4 */
+
+.td-col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.td-col > * { min-width: 0; margin-top: 0; }
+.td-section.db-section { margin-top: 0; }
+
+.td-quiet { margin: 0; padding: var(--space-3) 0; color: var(--text-2); font-size: var(--fs-15); }
+
+.td-card-title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-body); font-size: var(--fs-17); font-weight: var(--fw-bold); letter-spacing: 0; line-height: 1.3;
+}
+
+/* Two buttons: stacked on a phone, side by side once there is room. */
+.td-btnrow { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+.td-btnrow > * { width: 100%; padding-inline: var(--space-3); }
+@media (min-width: 480px) {
+  .td-btnrow { flex-direction: row; }
+  .td-btnrow > * { flex: 1 1 0; width: auto; }
+}
+
+/* ================= Needs you ================= */
+.td-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 26px; padding: 0 8px; border-radius: var(--r-pill);
+  background: var(--danger); color: var(--danger-ink);
+  font-size: var(--fs-14); font-weight: var(--fw-heavy); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.td-needs { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.td-need {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  border-left: 4px solid var(--status-new-fg);
+}
+.td-need--urgent { border-color: var(--danger); }
+/* The shared unseen bar would sit against the 4px edge; on this card it becomes a dot (the pill carries the word). */
+.td-need.is-unseen::before {
+  top: 16px; right: 16px; bottom: auto; left: auto;
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.td-need__top { display: flex; align-items: center; gap: var(--space-2); padding-right: var(--space-5); }
+.td-need__link { color: inherit; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.td-need__who { margin: 0; font-size: var(--fs-17); color: var(--text-2); overflow-wrap: anywhere; }
+.td-need__who strong { color: var(--text); }
+.td-need__what { display: flex; flex-direction: column; gap: 2px; }
+.td-need__line { margin: 0; font-size: var(--fs-16); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
+.td-need__note { margin: 0; color: var(--text-2); font-size: var(--fs-15); overflow-wrap: anywhere; }
+.td-need__flag {
+  display: flex; align-items: flex-start; gap: 6px; margin: 0;
+  color: var(--cta-text); font-size: var(--fs-14); font-weight: var(--fw-semibold); line-height: 1.35;
+}
+.td-need__flag svg { margin-top: 1px; }
+.td-need__top + .td-need__who { margin-top: 2px; }
+
+/* ================= Next up ================= */
+.td-next { display: flex; flex-direction: column; gap: var(--space-2); border-top: 4px solid var(--cta); }
+.td-next--empty { border-top-color: var(--line); }
+.td-next__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.td-next__eyebrow {
+  margin: 0; color: var(--cta-text);
+  font-family: var(--font-body); font-size: var(--fs-12); font-weight: var(--fw-heavy); letter-spacing: var(--tracking-caps); text-transform: uppercase;
+}
+.td-next__count {
+  padding: 3px 10px; border-radius: var(--r-pill);
+  background: var(--cta-soft); color: var(--cta-text);
+  font-size: var(--fs-14); font-weight: var(--fw-bold); line-height: 1.3; text-align: right;
+}
+.td-next__window {
+  margin: 0;
+  font-family: var(--font-display); font-size: 28px; font-weight: var(--fw-heavy); line-height: 1.1;
+  letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.td-next__service { margin: 0; font-size: var(--fs-17); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
+.td-next__variant { color: var(--text-2); font-weight: var(--fw-regular); }
+.td-next__who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
+.td-next__name { font-size: var(--fs-17); font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.td-next__addr {
+  display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap);
+  color: var(--text); text-decoration: none; overflow-wrap: anywhere;
+}
+.td-next__addr svg { color: var(--text-2); }
+.td-next__addr span { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.td-next__note {
+  margin: 0; color: var(--text-2); font-size: var(--fs-15);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.td-next__price {
+  margin: 0; font-family: var(--font-display); font-size: var(--fs-20); font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums;
+}
+.td-next__tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: var(--space-2); }
+.td-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-width: 0; min-height: 60px; padding: 6px 2px;
+  border: 1.5px solid var(--line); border-radius: var(--r-md);
+  background: var(--surface-2); color: var(--text); text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+.td-tile:active { transform: translateY(1px); background: var(--line); }
+@media (hover: hover) { .td-tile:hover { background: var(--line); } }
+.td-tile__label { max-width: 100%; font-size: var(--fs-12); font-weight: var(--fw-semibold); line-height: 1.2; white-space: nowrap; }
+.td-next__actions { margin-top: var(--space-2); min-width: 0; }
+
+/* ================= Availability ================= */
+.td-avail .ui-banner { margin-top: var(--space-2); }
+
+/* ================= Stats ================= */
+.td-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); min-width: 0; }
+.td-stats > * { min-width: 0; }
+.td-stats__wide { grid-column: 1 / -1; }
+
+/* ================= Diary and tomorrow ================= */
+.td-diary { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.td-row {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 72px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--line); border-radius: var(--r-md);
+  background: var(--surface); color: var(--text); text-decoration: none; box-shadow: var(--shadow-1);
+}
+a.td-row:active { background: var(--surface-2); }
+.td-row__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.td-row__when { min-width: 0; font-size: var(--fs-16); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.td-row__svc { font-size: var(--fs-15); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
+.td-row__meta { color: var(--text-2); font-size: var(--fs-14); overflow-wrap: anywhere; }
+.td-row--free, .td-row--blocked {
+  flex-direction: row; align-items: center; gap: var(--space-3); min-height: 56px;
+  background: transparent; box-shadow: none; color: var(--text-2);
+}
+.td-row--free { border-style: dashed; border-color: var(--field-border); }
+a.td-row--free:active { background: var(--surface-2); }
+.td-row--blocked { background: var(--surface-2); border-color: var(--line); }
+.td-row--free .td-row__when, .td-row--blocked .td-row__when { flex: none; color: var(--text); }
+.td-row__free { min-width: 0; font-size: var(--fs-15); font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
+.td-row--free .td-row__free { color: var(--link); }
+.td-lunch {
+  display: flex; align-items: center; gap: var(--space-3); min-height: 24px;
+  color: var(--text-3); font-size: var(--fs-12); font-weight: var(--fw-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase;
+}
+.td-lunch::before, .td-lunch::after { content: ''; flex: 1 1 0; border-top: 1px solid var(--line); }
+.td-tomorrow__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); }
+
+/* ================= Share ================= */
+.td-share__text { margin: 0; color: var(--text-2); font-size: var(--fs-15); }
+.td-share__url {
+  margin: var(--space-2) 0 0; padding: 8px 12px; border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--text-2); font-size: var(--fs-14); overflow-wrap: anywhere;
+}

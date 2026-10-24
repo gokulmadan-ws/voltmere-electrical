@@ -1,0 +1,208 @@
+/* css/tokens.css: every design token, light and dark. The only file allowed to hold hex colours
+   (plus the two brand SVGs in img/). Re-skin the whole site by editing this file.
+   Owner: WP2
+
+   Rules (contract 4.3): light values on :root; the dark block appears TWICE, byte-identical (once
+   under prefers-color-scheme with :root:not([data-theme="light"]), once under :root[data-theme="dark"]);
+   body gets its background and colour explicitly. Do not change a colour without re-running the
+   contrast check (tests/qa/contrast.mjs). */
+
+:root {
+  color-scheme: light;
+  /* surfaces */
+  --bg: #FBF8F2;            /* page, "paper" */
+  --surface: #FFFFFF;       /* cards, sheets, inputs */
+  --surface-2: #F3EEE4;     /* sunken areas, "sand" */
+  --line: #E3DCCD;          /* hairlines, dividers */
+  --field-border: #7D7766;  /* input and control borders (4.4:1 on white, 4.2:1 on --bg; UI needs 3:1) */
+  --scrim: rgba(11, 16, 32, 0.55);
+  /* text */
+  --text: #14213D;          /* 15:1 on --bg */
+  --text-2: #465065;        /* 7.6:1 */
+  --text-3: #5A647C;        /* 5.6:1 on --bg, 5.1:1 on --surface-2 */
+  --link: #1E4FD8;
+  --focus: #1E4FD8;         /* 3px ring, 2px offset */
+  --focus-on-panel: #FFD15C; /* the same ring on navy panels (hero, final CTA, footer): 10:1 on --panel; --focus is only 2.4:1 there */
+  /* brand: spark amber (primary action) */
+  --cta: #FFB400;
+  --cta-ink: #14213D;       /* text on --cta, 9:1 */
+  --cta-press: #F2A200;
+  --cta-soft: #FFF1C7;      /* tinted backgrounds */
+  --cta-text: #8A5A00;      /* amber used as TEXT on --bg */
+  /* navy panels (hero, final CTA, footer) */
+  --panel: #14213D;
+  --panel-2: #1D2E57;
+  --panel-text: #FFF8E8;
+  --panel-muted: #C3CDE3;   /* 10:1 on --panel */
+  /* semantic */
+  --danger: #C8281E;        /* solid emergency / destructive */
+  --danger-ink: #FFFFFF;    /* text on --danger, 5.6:1 */
+  --danger-tint: #FDE6E3;
+  --danger-text: #A3180D;   /* 6.5:1 on --danger-tint */
+  --ok: #1B7F45;            /* icons, dots (4.4:1 on sand) */
+  --ok-text: #146C3A;
+  --ok-tint: #D9F5E3;
+  /* booking status: one pair per status (bg / fg) */
+  --status-new-bg: #E3ECFF;        --status-new-fg: #1E4FD8;
+  --status-confirmed-bg: #D9F5E3;  --status-confirmed-fg: #146C3A;
+  --status-on-the-way-bg: #FFEBC2; --status-on-the-way-fg: #8A4B00;
+  --status-done-bg: #E6EAF0;       --status-done-fg: #3B4658;
+  --status-cancelled-bg: #FDE3E8;  --status-cancelled-fg: #9B1C3A;
+  --status-urgent-bg: #C8281E;     --status-urgent-fg: #FFFFFF;
+  /* availability dots (customer and owner calendars) */
+  --dot-free: #1B7F45;
+  --dot-few: #B87400;
+  --dot-full: #857F6E;
+  /* simulated WhatsApp-style chat */
+  --chat-bg: #EFE8D8;
+  --bubble-out-bg: #DDF6D2;  --bubble-out-fg: #14213D;   /* to customers */
+  --bubble-in-bg: #FFFFFF;   --bubble-in-fg: #14213D;    /* owner alerts */
+  /* elevation */
+  --shadow-1: 0 1px 2px rgba(20, 33, 61, 0.08), 0 2px 8px rgba(20, 33, 61, 0.06);
+  --shadow-2: 0 8px 28px -8px rgba(20, 33, 61, 0.28);
+  --shadow-bar: 0 -2px 12px rgba(20, 33, 61, 0.08);
+}
+
+/* Dark ("van at night": no pure black, no pure white). Auto: follows the OS unless the user forced light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0B1020;
+    --surface: #141B2F;
+    --surface-2: #1B2440;
+    --line: #2A3453;
+    --field-border: #6B7597;
+    --scrim: rgba(0, 0, 0, 0.65);
+    --text: #F3F1EA;
+    --text-2: #AEB6C8;
+    --text-3: #8D97B0;
+    --link: #8FB0FF;
+    --focus: #FFD15C;
+    --focus-on-panel: #FFD15C;
+    --cta: #FFC233;
+    --cta-ink: #14213D;
+    --cta-press: #FFD15C;
+    --cta-soft: #3A2D07;
+    --cta-text: #FFC233;
+    --panel: #16213E;
+    --panel-2: #1D2B52;
+    --panel-text: #FFF8E8;
+    --panel-muted: #B9C4DC;
+    --danger: #FF6B5E;
+    --danger-ink: #2A0A07;
+    --danger-tint: #3A1512;
+    --danger-text: #FF9D91;
+    --ok: #4ADE80;
+    --ok-text: #6EE7A0;
+    --ok-tint: #0F3220;
+    --status-new-bg: #1B2A55;        --status-new-fg: #9DB8FF;
+    --status-confirmed-bg: #0F3220;  --status-confirmed-fg: #6EE7A0;
+    --status-on-the-way-bg: #3D2C06; --status-on-the-way-fg: #FFD166;
+    --status-done-bg: #232C3D;       --status-done-fg: #C3CCDA;
+    --status-cancelled-bg: #3E1521;  --status-cancelled-fg: #FFA3B5;
+    --status-urgent-bg: #FF6B5E;     --status-urgent-fg: #2A0A07;
+    --dot-free: #4ADE80;
+    --dot-few: #FFC233;
+    --dot-full: #7A84A6;
+    --chat-bg: #0B141A;
+    --bubble-out-bg: #12453B;  --bubble-out-fg: #E8F5EE;
+    --bubble-in-bg: #1B2440;   --bubble-in-fg: #F3F1EA;
+    --shadow-1: none;
+    --shadow-2: 0 0 0 1px var(--line);
+    --shadow-bar: 0 -1px 0 var(--line);
+  }
+}
+
+/* Dark, forced by the user (ThemeToggle). Identical to the block above. */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0B1020;
+    --surface: #141B2F;
+    --surface-2: #1B2440;
+    --line: #2A3453;
+    --field-border: #6B7597;
+    --scrim: rgba(0, 0, 0, 0.65);
+    --text: #F3F1EA;
+    --text-2: #AEB6C8;
+    --text-3: #8D97B0;
+    --link: #8FB0FF;
+    --focus: #FFD15C;
+    --focus-on-panel: #FFD15C;
+    --cta: #FFC233;
+    --cta-ink: #14213D;
+    --cta-press: #FFD15C;
+    --cta-soft: #3A2D07;
+    --cta-text: #FFC233;
+    --panel: #16213E;
+    --panel-2: #1D2B52;
+    --panel-text: #FFF8E8;
+    --panel-muted: #B9C4DC;
+    --danger: #FF6B5E;
+    --danger-ink: #2A0A07;
+    --danger-tint: #3A1512;
+    --danger-text: #FF9D91;
+    --ok: #4ADE80;
+    --ok-text: #6EE7A0;
+    --ok-tint: #0F3220;
+    --status-new-bg: #1B2A55;        --status-new-fg: #9DB8FF;
+    --status-confirmed-bg: #0F3220;  --status-confirmed-fg: #6EE7A0;
+    --status-on-the-way-bg: #3D2C06; --status-on-the-way-fg: #FFD166;
+    --status-done-bg: #232C3D;       --status-done-fg: #C3CCDA;
+    --status-cancelled-bg: #3E1521;  --status-cancelled-fg: #FFA3B5;
+    --status-urgent-bg: #FF6B5E;     --status-urgent-fg: #2A0A07;
+    --dot-free: #4ADE80;
+    --dot-few: #FFC233;
+    --dot-full: #7A84A6;
+    --chat-bg: #0B141A;
+    --bubble-out-bg: #12453B;  --bubble-out-fg: #E8F5EE;
+    --bubble-in-bg: #1B2440;   --bubble-in-fg: #F3F1EA;
+    --shadow-1: none;
+    --shadow-2: 0 0 0 1px var(--line);
+    --shadow-bar: 0 -1px 0 var(--line);
+}
+
+/* Non-colour tokens: same in both themes. */
+:root {
+  /* type */
+  --font-display: 'Bricolage Grotesque', ui-rounded, 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-12: 0.75rem;   /* captions, chips, tab labels. NEVER smaller. */
+  --fs-14: 0.875rem;  /* meta, helper text */
+  --fs-15: 0.9375rem; /* dashboard dense rows */
+  --fs-16: 1rem;      /* body, ALL inputs (16px stops iOS zoom) */
+  --fs-17: 1.0625rem; /* card titles, button labels */
+  --fs-20: 1.25rem;
+  --fs-26: 1.625rem;
+  --fs-h1: clamp(2rem, 8.8vw, 3.5rem);     /* about 33px at 375, 56px from 640 */
+  --fs-h2: clamp(1.625rem, 5vw, 2.25rem);  /* 26px at 375, 36px from 720 */
+  --lh-tight: 1.05;  --lh-snug: 1.25;  --lh-body: 1.5;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700; --fw-heavy: 800;
+  --tracking-tight: -0.02em;  --tracking-caps: 0.06em;
+  /* spacing, 4px grid */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+  /* radii */
+  --r-sm: 8px;  --r-md: 12px;  /* inputs, buttons */  --r-lg: 16px;  /* cards */
+  --r-xl: 24px; /* sheet top */ --r-2xl: 28px; /* hero bottom */ --r-pill: 999px;
+  /* sizes */
+  --tap: 44px;  --h-input: 52px;  --h-btn: 48px;  --h-btn-lg: 56px;
+  --h-strip: 28px;  --h-header: 56px;  --h-tabbar: 64px;  --h-stickybar: 64px;  --h-fab: 56px;
+  --container: 1120px;  --gutter: 16px;  /* base.css raises --gutter to 24px at 768 and 32px at 1100 */
+  --sidebar-w: 240px;   /* there is no rail token: the rail was cut (2.3) */
+  /* safe areas (viewport-fit=cover is set on both pages) */
+  --safe-top: env(safe-area-inset-top, 0px);    --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px); --safe-left: env(safe-area-inset-left, 0px);
+  /* z-index layers (use only these) */
+  --z-base: 0;  --z-raised: 10;  --z-sticky: 20;  --z-tabbar: 30;  --z-fab: 35;
+  --z-scrim: 100;  --z-sheet: 110;  --z-toast: 200;
+  /* motion */
+  --dur-fast: 120ms;  --dur-base: 200ms;  --dur-sheet: 280ms;  --dur-flip: 450ms;  --dur-highlight: 1200ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* The page paints its own colours explicitly (rule c): never rely on the browser default. */
+body {
+  background: var(--bg);
+  color: var(--text);
+}
