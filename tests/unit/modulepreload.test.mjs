@@ -68,8 +68,8 @@ test('index.html: the early hero and logo preloads are the URLs the page asks fo
   assert.equal(sizes, '(min-width: 1024px) 65vw, 100vw');
   assert.equal(attr(hero, 'imagesizes'), '(min-width: 1024px) 65vw, 100vw');
   assert.equal(attr(hero, 'fetchpriority'), 'high');
-  // js/landing/media.js LogoImg: photoSrc('logo', 360)
-  assert.equal(attr(logo, 'href'), imageUrl('logo', { width: 360 }));
+  // js/landing/media.js LogoImg: photoSrc('logo', 960)
+  assert.equal(attr(logo, 'href'), imageUrl('logo', { width: 960 }));
   for (const tag of [...links, ...html.matchAll(/<link rel="preconnect"[^>]*>/g)].map((m) => (typeof m === 'string' ? m : m[0]))) {
     assert.match(tag, /https:\/\/(images\.unsplash\.com|perspective\.imgix\.net)/);
   }

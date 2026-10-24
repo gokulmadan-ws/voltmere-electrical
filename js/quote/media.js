@@ -15,7 +15,7 @@ export const LOGO_FALLBACK = 'img/logo-180.png';
  * `decorative` gives it an empty alt (the link around it already carries the name).
  */
 export function QuoteLogo({ name, images, eager = true, decorative = false, testid = 'q2-logo-img', class: cls }) {
-  const remote = imageUrl('logo', { width: 360, images });
+  const remote = imageUrl('logo', { width: 960, images });
   const [failedUrl, setFailedUrl] = useState('');
   const src = !remote || failedUrl === remote ? LOGO_FALLBACK : remote;
   return html`

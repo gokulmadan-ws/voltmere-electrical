@@ -103,7 +103,7 @@ export function Photo({ img, ratio = '4 / 3', widths = [480, 800, 1200], sizes =
  */
 export function LogoImg({ name, eager = false, decorative = false, class: cls }) {
   useStore(selectImages);
-  const remote = photoSrc('logo', 360);
+  const remote = photoSrc('logo', 960);
   const [broken, setBroken] = useState(false);
   const [seen, setSeen] = useState(remote);
   if (seen !== remote) { setSeen(remote); setBroken(false); }
